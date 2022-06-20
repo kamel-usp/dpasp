@@ -1,5 +1,8 @@
 import re
 
+import clingo
+from clingo.symbol import Function
+
 """
 Creates a new unique fact for probabilistic rules. To do this, we update a counter `unique_fact.i`
 in a way equivalent to C's `static` variables.
@@ -19,6 +22,8 @@ class ProbFact:
   def __init__(self, p: str, f: str):
     self.p = p
     self.f = f
+    # Construct a clingo.symbol.Function from this fact.
+    self.cl_f = clingo.parse_term(f[:-1]) # remove the dot at the end.
 
   def __str__(self) -> str: return f"{self.p}::{self.f}"
   def __repr__(self) -> str: return self.__str__()
@@ -31,8 +36,44 @@ returns a rule and a PF.
 def ProbRule(p: float, r: str): return r, ProbFact(p, unique_fact())
 
 """
-A Probabilistic Logic Program (PLP) is a tuple `<P,PF>`, where `P` is a logic program and `PF` are
-probabilistic facts.
+A query is a meta-command within a PLP to signal the solver to produce and output a probabilistic
+query. A query follows the same syntax as PASOCS [1], that is, the query (not necessarily in this
+order)
+
+```
+#query(q1, ..., qk, -p1, ..., -pm | e1, ..., en, -v1, ..., -vt)
+```
+
+is equivalent to asking the probability
+
+```
+P({q1, ..., qk} = true, {p1, ..., pm} = false | {e1, ..., en} = true, {v1, ..., vt} = false).
+```
+
+[1] - PASOCS: A Parallel Approximate Solver for Probabilistic Logic Programs under the Credal
+Semantics. Tuckey et al, 2021. URL: https://arxiv.org/abs/2105.10908.
+"""
+class Query:
+  """
+  Constructs a query from query (`Q`) and evidence (`E`) assignments.
+
+  We use the notation `iter` as a type hinting to mean `Q` and `E` are iterables.
+  """
+  def __init__(self, Q: iter, E: iter = None):
+    self.Q = [clingo.parse_term(q) for q in Q]
+    self.E = [clingo.parse_term(e) for e in E] if E is not None else None
+
+  def __str__(self):
+    qs = f"ℙ({', '.join(q.name if q.positive else '-' + q.name for q in self.Q)}"
+    if self.E is not None:
+      return qs + f" | {', '.join(e.name if e.positive else '-' + e.name for e in self.E)})"
+    return qs + ")"
+  def __repr__(self): return self.__str__()
+
+"""
+A Probabilistic Logic Program (PLP) usually configures a tuple `<P,PF>`, where `P` is a logic
+program and `PF` are probabilistic facts. We extend a PLP into a triple `<P,PF,Q>`, where `Q` are
+the queries to be asked from `P` and `PF`.
 
 We accept ProbLog's syntactic sugar for probabilistic rules,
 
@@ -51,16 +92,25 @@ h(X) :- b1(X), b2(X), ..., bn(X), a.
 where `a` is a unique probabilistic fact added with probability `p`.
 """
 class Program:
-  "Constructs a PLP out of a file named `filename`."
-  def __init__(self, filename: str):
-    self.P, self.PF = parse(filename)
+  "Constructs a PLP out of a logic program `P`, probabilistic facts `PF` and queries `Q`."
+  def __init__(self, P: str, PF: list[ProbFact], Q: list[Query]):
+    self.P = P
+    self.PF = PF
+    self.Q = Q
 
-REGEX_PROB_FACT  = re.compile("[0-9]*\.[0-9]*\:\:[a-zA-Z][a-zA-Z0-9]*\.")
-REGEX_PROB_RULE  = re.compile("[0-9]*\.[0-9]*\:\:[a-zA-Z0-9]+\([A-Z][a-zA-Z0-9]*\)\s*\:\-.*?\.")
+  def __str__(self): return f"<\n{self.P[:-1]},\n{self.PF},\n{self.Q}>"
+  def __repr__(self): return self.__str__()
+
+REGEX_PROB_CMNT  = re.compile("\%.*$", flags = re.MULTILINE)
+REGEX_PROB_FACT  = re.compile("[0-9]*\.[0-9]*\:\:[a-zA-Z]\w*\.")
+REGEX_PROB_RULE  = re.compile("[0-9]*\.[0-9]*\:\:[a-zA-Z]\w*\([a-zA-Z]\w*\)\s*\:\-.*?\.")
+REGEX_PROB_QUERY = re.compile("^\#query\(.+\)", flags = re.MULTILINE)
 REGEX_PROB_TOKEN = re.compile("\:\:")
 REGEX_BEG_WSPACE = re.compile("^\s*", flags = re.MULTILINE)
+REGEX_QUERY_COND = re.compile("\s*\|\s*")
+REGEX_QUERY_ARGS = re.compile("\s*\,\s*")
 
-def parse(filename: str) -> tuple[str, str]:
+def parse(filename: str) -> Program:
   # Logic Program
   P = None
   # Probabilistic Facts
@@ -69,6 +119,11 @@ def parse(filename: str) -> tuple[str, str]:
   # usually small). In the future, consider streaming batches of text instead for large files.
   data = None
   with open(filename, "r") as f: data = f.read()
+
+  # Remove comments
+  data = REGEX_PROB_CMNT.sub("", data)
+
+  # Parse probabilistic facts and probabilistic rules.
   PF = [ProbFact(*REGEX_PROB_TOKEN.split(x)) for x in REGEX_PROB_FACT.findall(data)]
   data = REGEX_PROB_FACT.sub("", data)
   PR = [(*ProbRule(*REGEX_PROB_TOKEN.split(x)), x) for x in REGEX_PROB_RULE.findall(data)]
@@ -76,5 +131,9 @@ def parse(filename: str) -> tuple[str, str]:
   for r, pf, o in PR:
     data = data.replace(o, r)
     PF.append(pf)
+
+  # Parse query commands.
+  Q = [Query(*(REGEX_QUERY_ARGS.split(y) for y in REGEX_QUERY_COND.split(x[7:-1]))) for x in REGEX_PROB_QUERY.findall(data)]
+  data = REGEX_PROB_QUERY.sub("", data)
   P = REGEX_BEG_WSPACE.sub("", data)
-  return P, PF
+  return Program(P, PF, Q)
