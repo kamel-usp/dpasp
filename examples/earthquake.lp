@@ -1,3 +1,6 @@
+% Example 5 of On the Semantics and Complexity of Probabilistic Logic Programs. Fabio Cozman and
+% Denis Mauá. Journal of Artificial Intelligence Research. 2017.
+
 0.7::burglary. 0.2::earthquake.
 0.9::alarm :- burglary, earthquake.
 0.8::alarm :- burglary, not earthquake.
@@ -5,5 +8,7 @@
 calls(X) :- alarm, neighbor(X).
 neighbor(a). neighbor(b).
 
-#query(calls(a))
-#query(calls(a) | earthquake)
+#query(alarm | burglary; earthquake)
+#query(alarm | -burglary; earthquake)
+#query(alarm | burglary; -earthquake)
+#query(alarm | -burglary; -earthquake)
