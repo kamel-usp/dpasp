@@ -33,7 +33,9 @@ A Probabilistic Rule (PR) is a syntactic sugar for constructing a (Logic Program
 with a (unique) PF as one of its subgoals. To reflect this, `ProbRule` is actually a function that
 returns a rule and a PF.
 """
-def ProbRule(p: float, r: str): return r, ProbFact(p, unique_fact())
+def ProbRule(p: float, r: str):
+  f = unique_fact()
+  return f"{r[:-1]}, {f}", ProbFact(p, f)
 
 """
 A query is a meta-command within a PLP to signal the solver to produce and output a probabilistic
@@ -98,12 +100,12 @@ class Program:
     self.PF = PF
     self.Q = Q
 
-  def __str__(self): return f"<\n{self.P[:-1]},\n{self.PF},\n{self.Q}>"
+  def __str__(self): return f"<{self.P[:-1]},\n{self.PF},\n{self.Q}>"
   def __repr__(self): return self.__str__()
 
 REGEX_PROB_CMNT  = re.compile("\%.*$", flags = re.MULTILINE)
 REGEX_PROB_FACT  = re.compile("[0-9]*\.[0-9]*\:\:[a-zA-Z]\w*\.")
-REGEX_PROB_RULE  = re.compile("[0-9]*\.[0-9]*\:\:[a-zA-Z]\w*\([a-zA-Z]\w*\)\s*\:\-.*?\.")
+REGEX_PROB_RULE  = re.compile("[0-9]*\.[0-9]*\:\:[a-zA-Z]\w*(?:\([a-zA-Z]\w*\))*\s*\:\-.*?\.")
 REGEX_PROB_QUERY = re.compile("^\#query\(.+\)", flags = re.MULTILINE)
 REGEX_PROB_TOKEN = re.compile("\:\:")
 REGEX_BEG_WSPACE = re.compile("^\s*", flags = re.MULTILINE)
