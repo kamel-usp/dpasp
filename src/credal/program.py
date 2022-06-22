@@ -23,7 +23,8 @@ class ProbFact:
     self.p = p
     self.f = f
     # Construct a clingo.symbol.Function from this fact.
-    self.cl_f = clingo.parse_term(f[:-1]) # remove the dot at the end.
+    clf = clingo.parse_term(f[:-1]) # remove the dot at the end.
+    self.cl_f = [Function(clf.name, clf.arguments, not clf.positive), clf]
 
   def __str__(self) -> str: return f"{self.p}::{self.f}"
   def __repr__(self) -> str: return self.__str__()
@@ -39,18 +40,21 @@ def ProbRule(p: float, r: str):
 
 """
 A query is a meta-command within a PLP to signal the solver to produce and output a probabilistic
-query. A query follows the same syntax as PASOCS [1], that is, the query (not necessarily in this
+query. A query follows a modified PASOCS [1] syntax, that is, the query (not necessarily in this
 order)
 
 ```
-#query(q1, ..., qk, -p1, ..., -pm | e1, ..., en, -v1, ..., -vt)
+#query(q1; ...; qk; -p1; ...; -pm | e1; ...; en; -v1; ...; -vt)
 ```
 
-is equivalent to asking the probability
+of ground atoms `q1, ..., qk`, `p1, ..., pm`, `e1, ..., en`, `v1, ..., vt` is equivalent to asking
+the probability
 
 ```
 P({q1, ..., qk} = true, {p1, ..., pm} = false | {e1, ..., en} = true, {v1, ..., vt} = false).
 ```
+
+See concrete examples in the `/examples` folder.
 
 [1] - PASOCS: A Parallel Approximate Solver for Probabilistic Logic Programs under the Credal
 Semantics. Tuckey et al, 2021. URL: https://arxiv.org/abs/2105.10908.
@@ -61,14 +65,13 @@ class Query:
 
   We use the notation `iter` as a type hinting to mean `Q` and `E` are iterables.
   """
-  def __init__(self, Q: iter, E: iter = None):
+  def __init__(self, Q: iter, E: iter = []):
     self.Q = [clingo.parse_term(q) for q in Q]
-    self.E = [clingo.parse_term(e) for e in E] if E is not None else None
+    self.E = [clingo.parse_term(e) for e in E]
 
   def __str__(self):
-    qs = f"ℙ({', '.join(q.name if q.positive else '-' + q.name for q in self.Q)}"
-    if self.E is not None:
-      return qs + f" | {', '.join(e.name if e.positive else '-' + e.name for e in self.E)})"
+    qs = f"ℙ({', '.join(str(q) for q in self.Q)}"
+    if len(self.E) != 0: return qs + f" | {', '.join(str(e) for e in self.E)})"
     return qs + ")"
   def __repr__(self): return self.__str__()
 
@@ -104,13 +107,13 @@ class Program:
   def __repr__(self): return self.__str__()
 
 REGEX_PROB_CMNT  = re.compile("\%.*$", flags = re.MULTILINE)
-REGEX_PROB_FACT  = re.compile("[0-9]*\.[0-9]*\:\:[a-zA-Z]\w*\.")
-REGEX_PROB_RULE  = re.compile("[0-9]*\.[0-9]*\:\:[a-zA-Z]\w*(?:\([a-zA-Z]\w*\))*\s*\:\-.*?\.")
+REGEX_PROB_FACT  = re.compile("[0-9]*\.[0-9]*\:\:[a-zA-Z]\w*(?:\((?:[a-z]\w*\s*\,{0,1}\s*)+\)){0,1}\s*\.")
+REGEX_PROB_RULE  = re.compile("[0-9]*\.[0-9]*\:\:[a-zA-Z]\w*(?:\([a-zA-Z]\w*\)){0,1}\s*\:\-.*?\.")
 REGEX_PROB_QUERY = re.compile("^\#query\(.+\)", flags = re.MULTILINE)
 REGEX_PROB_TOKEN = re.compile("\:\:")
 REGEX_BEG_WSPACE = re.compile("^\s*", flags = re.MULTILINE)
 REGEX_QUERY_COND = re.compile("\s*\|\s*")
-REGEX_QUERY_ARGS = re.compile("\s*\,\s*")
+REGEX_QUERY_ARGS = re.compile("\s*\;\s*")
 
 def parse(filename: str) -> Program:
   # Logic Program
@@ -120,7 +123,10 @@ def parse(filename: str) -> Program:
   # For now, dump file entirely into memory (this isn't too much of a problem, since PLPs are
   # usually small). In the future, consider streaming batches of text instead for large files.
   data = None
-  with open(filename, "r") as f: data = f.read()
+  try:
+    with open(filename, "r") as f: data = f.read()
+  except Exception as ex:
+    raise ex
 
   # Remove comments
   data = REGEX_PROB_CMNT.sub("", data)
