@@ -1,6 +1,7 @@
 import sys
 import os
 import contextlib
+import array
 
 class DummyStream:
   def write(self, x): pass
@@ -40,3 +41,6 @@ def suppress_ext_err():
       yield
     finally:
       sys.stderr = _stderr
+
+def new_array(n: int, t: type = 'b', v: int = 0): return array.array(t, [v])*n
+def new_list(n: int, v = None): return [v for _ in range(n)]
