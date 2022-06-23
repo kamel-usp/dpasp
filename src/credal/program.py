@@ -7,7 +7,7 @@ from clingo.symbol import Function
 Creates a new unique fact for probabilistic rules. To do this, we update a counter `unique_fact.i`
 in a way equivalent to C's `static` variables.
 """
-def unique_fact(i: int = None):
+def unique_fact(i: int = None) -> str:
   if i is None:
     unique_fact.i += 1
     return f"__unique_id_{unique_fact.i}."
@@ -34,9 +34,15 @@ A Probabilistic Rule (PR) is a syntactic sugar for constructing a (Logic Program
 with a (unique) PF as one of its subgoals. To reflect this, `ProbRule` is actually a function that
 returns a rule and a PF.
 """
-def ProbRule(p: float, r: str):
+def ProbRule(p: float, r: str) -> tuple[str, ProbFact]:
   f = unique_fact()
   return f"{r[:-1]}, {f}", ProbFact(p, f)
+
+"""
+String formats a query tuple `(f, t)`, where `f` is an atom and `t` is whether it should appear
+in the program or not.
+"""
+def _str_query_assignment(f: Function, t: bool) -> str: return str(f) if t else "not " + str(f)
 
 """
 A query is a meta-command within a PLP to signal the solver to produce and output a probabilistic
@@ -44,7 +50,7 @@ query. A query follows a modified PASOCS [1] syntax, that is, the query (not nec
 order)
 
 ```
-#query(q1; ...; qk; -p1; ...; -pm | e1; ...; en; -v1; ...; -vt)
+#query(q1; ...; qk; not p1; ...; not pm | e1; ...; en; not v1; ...; not vt)
 ```
 
 of ground atoms `q1, ..., qk`, `p1, ..., pm`, `e1, ..., en`, `v1, ..., vt` is equivalent to asking
@@ -66,14 +72,14 @@ class Query:
   We use the notation `iter` as a type hinting to mean `Q` and `E` are iterables.
   """
   def __init__(self, Q: iter, E: iter = []):
-    self.Q = [clingo.parse_term(q) for q in Q]
-    self.E = [clingo.parse_term(e) for e in E]
+    self.Q = [(clingo.parse_term((t := REGEX_QUERY_NOT.subn("", q))[0]), t[1] == 0) for q in Q]
+    self.E = [(clingo.parse_term((t := REGEX_QUERY_NOT.subn("", e))[0]), t[1] == 0) for e in E]
 
-  def __str__(self):
-    qs = f"ℙ({', '.join(str(q) for q in self.Q)}"
-    if len(self.E) != 0: return qs + f" | {', '.join(str(e) for e in self.E)})"
+  def __str__(self) -> str:
+    qs = f"ℙ({', '.join(_str_query_assignment(q, t) for q, t in self.Q)}"
+    if len(self.E) != 0: return qs + f" | {', '.join(_str_query_assignment(e, t) for e, t in self.E)})"
     return qs + ")"
-  def __repr__(self): return self.__str__()
+  def __repr__(self) -> str: return self.__str__()
 
 """
 A Probabilistic Logic Program (PLP) usually configures a tuple `<P,PF>`, where `P` is a logic
@@ -103,8 +109,8 @@ class Program:
     self.PF = PF
     self.Q = Q
 
-  def __str__(self): return f"<{self.P[:-1]},\n{self.PF},\n{self.Q}>"
-  def __repr__(self): return self.__str__()
+  def __str__(self) -> str: return f"<{self.P[:-1]},\n{self.PF},\n{self.Q}>"
+  def __repr__(self) -> str: return self.__str__()
 
 REGEX_PROB_CMNT  = re.compile("\%.*$", flags = re.MULTILINE)
 REGEX_PROB_FACT  = re.compile("[0-9]*\.[0-9]*\:\:[a-zA-Z]\w*(?:\((?:[a-z]\w*\s*\,{0,1}\s*)+\)){0,1}\s*\.")
@@ -114,6 +120,7 @@ REGEX_PROB_TOKEN = re.compile("\:\:")
 REGEX_BEG_WSPACE = re.compile("^\s*", flags = re.MULTILINE)
 REGEX_QUERY_COND = re.compile("\s*\|\s*")
 REGEX_QUERY_ARGS = re.compile("\s*\;\s*")
+REGEX_QUERY_NOT = re.compile("\s*not\s*")
 
 def parse(filename: str) -> Program:
   # Logic Program

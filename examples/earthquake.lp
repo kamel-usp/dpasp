@@ -9,6 +9,6 @@ calls(X) :- alarm, neighbor(X).
 neighbor(a). neighbor(b).
 
 #query(alarm | burglary; earthquake)
-#query(alarm | -burglary; earthquake)
-#query(alarm | burglary; -earthquake)
-#query(alarm | -burglary; -earthquake)
+#query(alarm | not burglary; earthquake)
+#query(alarm | burglary; not earthquake)
+#query(alarm | not burglary; not earthquake)

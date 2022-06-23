@@ -62,9 +62,9 @@ def exact(P: Program) -> list[tuple[float, float]]:
         nonlocal m, count_q_e, count_e, count_partial_q_e
         nonlocal cond_2, cond_4
         m += 1
-        all_e = all(σ.contains(e) for e in E)
+        all_e = all(σ.contains(e) if t else not σ.contains(e) for e, t in E) # if e = true, check if e ∈ σ.
         if not all_e: return
-        all_q = all(σ.contains(q) for q in Q)
+        all_q = all(σ.contains(q) if t else not σ.contains(q) for q, t in Q) # if q = true, check if q ∈ σ.
         count_e += 1
         if all_q: cond_2 = True; count_q_e += 1
         else: cond_4 = True; count_partial_q_e += 1
