@@ -91,14 +91,14 @@ def exact(P: Program) -> list[tuple[float, float]]:
   for i in range(n_queries):
     # Evaluate a, b, c, d values and return ℙ(Q|E) as a tuple of lower and upper probabilities.
     _a, _b, _c, _d = a[i], b[i], c[i], d[i]
-    if len(queries[i].E) == 0: R[i] = (_a, _b)
+    if len(queries[i].E) == 0: R[i] = [_a, _b]
     else:
       if _b + _d == 0:
         print("Fail: ℙ(E) = 0!")
-        R[i] = (-math.inf, math.inf)
+        R[i] = [-math.inf, math.inf]
       else:
-        if _b + _c == 0 and _d > 0: R[i] = (0, 0)
-        elif _a + _d == 0 and _b > 0: R[i] = (1, 1)
-        else: R[i] = (_a/(_a+_d), _b/(_b+_c))
+        if _b + _c == 0 and _d > 0: R[i] = [0, 0]
+        elif _a + _d == 0 and _b > 0: R[i] = [1, 1]
+        else: R[i] = [_a/(_a+_d), _b/(_b+_c)]
     print(f"{queries[i]} = {R[i]}")
   return R

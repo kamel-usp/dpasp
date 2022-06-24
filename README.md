@@ -1,4 +1,4 @@
-# Credal Semantics for Probabilistic Logic Programs
+# PASP -- Credal Semantics for Probabilistic Answer Set Programming
 
 Prototype implementation of the credal semantics for probabilistic ASP [[1]](#ref-1)[[2]](#ref-2).
 Example probabilistic logic programs may be found in [`examples/`](examples/). Let's take a look at
@@ -73,9 +73,9 @@ lower and upper probabilities. Let's ask the package to provide these probabilit
 inspect our Probabilistic Logic Program (PLP).
 
 ```python
-import credal
+import pasp
 
-P = credal.parse("examples/asia.lp")
+P = pasp.parse("examples/asia.lp")
 print(P)
 ```
 ```
@@ -100,7 +100,7 @@ Let's ask the solver to produce the probabilities we asked exactly. We can do so
 this package.
 
 ```python
-R = credal.exact(P)
+R = pasp.exact(P)
 ```
 ```
 ℙ(trip) = (0.010000000000000009, 0.010000000000000009)
@@ -113,7 +113,7 @@ R = credal.exact(P)
 ℙ(test | not or) = (0.04999999999999998, 0.04999999999999998)
 ```
 
-Function `credal.exact` returns the results of the queries as a list of pairs of lower and upper
+Function `pasp.exact` returns the results of the queries as a list of pairs of lower and upper
 probabilities in the order the queries are asked for in the PLP code.
 
 Since [`examples/asia.lp`](examples/asia.lp) comes from a Bayesian network and therefore is an
@@ -135,7 +135,7 @@ essentially resulting in two possible stable models: one where only `work` is se
 other where only `sleep` is true, each having different sets of probabilities. Let's query!
 
 ```python
-credal.exact(credal.parse("examples/insomnia.lp"))
+pasp.exact(pasp.parse("examples/insomnia.lp"))
 ```
 ```
 ℙ(insomnia) = (0.3, 0.3)
