@@ -1,3 +1,5 @@
+# cython: c_string_type=unicode, c_string_encoding=utf8
+
 import re
 
 import clingo
@@ -72,8 +74,14 @@ class Query:
   We use the notation `iter` as a type hinting to mean `Q` and `E` are iterables.
   """
   def __init__(self, Q: iter, E: iter = []):
-    self.Q = [(clingo.parse_term((t := REGEX_QUERY_NOT.subn("", q))[0]), t[1] == 0) for q in Q]
-    self.E = [(clingo.parse_term((t := REGEX_QUERY_NOT.subn("", e))[0]), t[1] == 0) for e in E]
+    self.Q = [None for _ in range(len(Q))]
+    for i, q in enumerate(Q):
+      t, n = REGEX_QUERY_NOT.subn("", q)
+      self.Q[i] = (clingo.parse_term(t), n == 0)
+    self.E = [None for _ in range(len(E))]
+    for i, e in enumerate(E):
+      t, n = REGEX_QUERY_NOT.subn("", e)
+      self.E[i] = (clingo.parse_term(t), n == 0)
 
   def __str__(self) -> str:
     qs = f"ℙ({', '.join(_str_query_assignment(q, t) for q, t in self.Q)}"

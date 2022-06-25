@@ -1,12 +1,13 @@
 import sys, os
-sys.path.append(os.path.join(os.path.dirname(__file__)[:-4], "src"))
 
-import credal
+import pasp
 
 if __name__ == "__main__":
   f = "earthquake" if len(sys.argv) < 2 else sys.argv[1]
-  P = credal.parse(f"examples/{f}.lp")
+  P = pasp.parse(f"examples/{f}.lp")
   print("=======\nProgram:\n=======")
   print(P)
   print("\n==============\nQuery results:\n==============")
-  R = credal.exact(P)
+  R = pasp.exact(P)
+  print("\n=================\nBC Query results:\n=================")
+  pasp.exact_bc(P)

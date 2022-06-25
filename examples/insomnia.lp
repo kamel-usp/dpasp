@@ -8,3 +8,4 @@ sleep :- not work, not insomnia. work :- not sleep.
 #query(work)
 #query(sleep)
 #query(not sleep)
+#query(not work)

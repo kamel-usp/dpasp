@@ -103,14 +103,14 @@ this package.
 R = pasp.exact(P)
 ```
 ```
-ℙ(trip) = (0.010000000000000009, 0.010000000000000009)
-ℙ(tuberculosis | trip) = (0.04999999999999998, 0.04999999999999998)
-ℙ(cancer | smoking) = (0.1, 0.1)
-ℙ(test | or) = (0.98, 0.98)
-ℙ(smoking) = (0.5000000000000001, 0.5000000000000001)
-ℙ(tuberculosis | not trip) = (0.010000000000000002, 0.010000000000000002)
-ℙ(cancer | not smoking) = (0.009999999999999995, 0.009999999999999995)
-ℙ(test | not or) = (0.04999999999999998, 0.04999999999999998)
+ℙ(trip) = [0.010000000000000009, 0.010000000000000009]
+ℙ(tuberculosis | trip) = [0.04999999999999998, 0.04999999999999998]
+ℙ(cancer | smoking) = [0.1, 0.1]
+ℙ(test | or) = [0.98, 0.98]
+ℙ(smoking) = [0.5000000000000001, 0.5000000000000001]
+ℙ(tuberculosis | not trip) = [0.010000000000000002, 0.010000000000000002]
+ℙ(cancer | not smoking) = [0.009999999999999995, 0.009999999999999995]
+ℙ(test | not or) = [0.04999999999999998, 0.04999999999999998]
 ```
 
 Function `pasp.exact` returns the results of the queries as a list of pairs of lower and upper
@@ -138,15 +138,26 @@ other where only `sleep` is true, each having different sets of probabilities. L
 pasp.exact(pasp.parse("examples/insomnia.lp"))
 ```
 ```
-ℙ(insomnia) = (0.3, 0.3)
-ℙ(work) = (0.3, 1.0)
-ℙ(sleep) = (0.0, 0.7)
-ℙ(not sleep) = (0.3, 1.0)
+ℙ(insomnia) = [0.3, 0.3]
+ℙ(work) = [0.3, 1.0]
+ℙ(sleep) = [0.0, 0.7]
+ℙ(not sleep) = [0.3, 1.0]
 ```
 
 We now have the right lower and upper probabilities taking into account all possible stable models
 of the PLP. This shows us that the probability of `sleep`, for instance, can take values low as
 `0.0` and high as `0.7`, while `work` has at least `0.3` mass.
+
+## Usage
+
+For now, `pasp` is only to be run locally. Clone this repository to a directory of your choice, say
+`pasp`. Change your working directory to it and then simply run
+
+```python
+import pasp
+```
+
+to have access to the exported symbols in the package.
 
 ## References
 
