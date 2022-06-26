@@ -70,7 +70,7 @@ def exact(P: Program) -> list[tuple[float, float]]:
         if not all_e: continue
         all_q = all(s.contains(q) if t else not s.contains(q) for q, t in Q) # if q = true, check if q ∈ σ.
         count_e[i] += 1
-        if all_q: cond_3[i] = True; count_q_e[i] += 1
+        if all_q: cond_2[i] = True; count_q_e[i] += 1
         else: cond_4[i] = True; count_partial_q_e[i] += 1
     # Solve for <P,θ>, running on_model for every stable model σ found.
     C.solve(on_model = count_sat)
@@ -87,7 +87,6 @@ def exact(P: Program) -> list[tuple[float, float]]:
       b[i] += cond_2[i]*p
       c[i] += cond_3[i]*p
       d[i] += cond_4[i]*p
-    print(a, b, c, d)
   for i in range(n_queries):
     # Evaluate a, b, c, d values and return ℙ(Q|E) as a tuple of lower and upper probabilities.
     _a, _b, _c, _d = a[i], b[i], c[i], d[i]
@@ -160,7 +159,6 @@ def exact_bc(P: Program) -> list[tuple[float, float]]:
       d[i] += (all_e and not all_q)*p
       # Condition 2: if some stable model in Γ(θ) satisfies Q and E.
       b[i] += (all_e and all_q)*p
-    print(a, b, c, d)
   for i in range(n_queries):
     # Evaluate a, b, c, d values and return ℙ(Q|E) as a tuple of lower and upper probabilities.
     _a, _b, _c, _d = a[i], b[i], c[i], d[i]
