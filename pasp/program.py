@@ -25,20 +25,46 @@ class ProbFact:
     self.p = p
     self.f = f
     # Construct a clingo.symbol.Function from this fact.
-    clf = clingo.parse_term(f[:-1]) # remove the dot at the end.
-    self.cl_f = [Function(clf.name, clf.arguments, not clf.positive), clf]
+    self.cl_f = clingo.parse_term(f[:-1]) # remove the dot at the end.
+    #self.cl_f = [Function(clf.name, clf.arguments, not clf.positive), clf]
 
   def __str__(self) -> str: return f"{self.p}::{self.f}"
   def __repr__(self) -> str: return self.__str__()
 
 """
-A Probabilistic Rule (PR) is a syntactic sugar for constructing a (Logic Program) rule equipped
+A Probabilistic Rule (PR) is syntactic sugar for constructing a (Logic Program) rule equipped
 with a (unique) PF as one of its subgoals. To reflect this, `ProbRule` is actually a function that
 returns a rule and a PF.
 """
 def ProbRule(p: float, r: str) -> tuple[str, ProbFact]:
   f = unique_fact()
   return f"{r[:-1]}, {f}", ProbFact(p, f)
+
+"""
+A Credal Fact (CF) is syntactic sugar for constructing four (Logic Program) rules, two of them
+being part of a probabilistic rule. Suppose we have a CF `f` whose lower and upper probabilities
+are 0.25 and 0.75 respectively. We syntactically write this as:
+
+```
+[0.25, 0.75]::f.
+```
+
+This is equivalent to the following rules:
+
+```
+u :- not v. v :- not u.
+0.25::f :- u. 0.75::f :- v.
+```
+
+Facts `u` and `v` encode the lower and upper cases respectively of `f`. The first two rules state
+that both `u` and `v` must never occur simultaneously (i.e., they are mutually exclusive). The
+following two (probabilistic) rules set the probabilities of `f` according to the choice of `u` and
+`v`.
+"""
+def CredalFact(p: float, q: float, f: str) -> tuple[str, str, ProbFact, str, ProbFact]:
+  u, v = unique_fact()[:-1], unique_fact()[:-1]
+  return f"{u} :- not {v}. {v} :- not {u}.", \
+         *ProbRule(p, f"{f} :- {u}."), *ProbRule(q, f"{f} :- {v}.")
 
 """
 String formats a query tuple `(f, t)`, where `f` is an atom and `t` is whether it should appear
@@ -120,15 +146,17 @@ class Program:
   def __str__(self) -> str: return f"<{self.P[:-1]},\n{self.PF},\n{self.Q}>"
   def __repr__(self) -> str: return self.__str__()
 
-REGEX_PROB_CMNT  = re.compile("\%.*$", flags = re.MULTILINE)
-REGEX_PROB_FACT  = re.compile("[0-9]*\.[0-9]*\:\:[a-zA-Z]\w*(?:\((?:[a-z]\w*\s*\,{0,1}\s*)+\)){0,1}\s*\.")
-REGEX_PROB_RULE  = re.compile("[0-9]*\.[0-9]*\:\:[a-zA-Z]\w*(?:\([a-zA-Z]\w*\)){0,1}\s*\:\-.*?\.")
-REGEX_PROB_QUERY = re.compile("^\#query\(.+\)", flags = re.MULTILINE)
-REGEX_PROB_TOKEN = re.compile("\:\:")
-REGEX_BEG_WSPACE = re.compile("^\s*", flags = re.MULTILINE)
-REGEX_QUERY_COND = re.compile("\s*\|\s*")
-REGEX_QUERY_ARGS = re.compile("\s*\;\s*")
-REGEX_QUERY_NOT = re.compile("\s*not\s*")
+REGEX_PROB_CMNT  = re.compile(r"\%.*$", flags = re.MULTILINE)
+REGEX_PROB_FACT  = re.compile(r"\d+(?:\.\d*)?\:\:[a-zA-Z]\w*(?:\((?:[a-z]\w*\s*\,?\s*)+\))?\s*\.")
+REGEX_PROB_RULE  = re.compile(r"\d+(?:\.\d*)?\:\:[a-zA-Z]\w*(?:\([a-zA-Z]\w*\))?\s*\:\-.*?\.")
+REGEX_PROB_QUERY = re.compile(r"^\#query\(.+\)", flags = re.MULTILINE)
+REGEX_PROB_TOKEN = re.compile(r"\:\:")
+REGEX_CRED_PROBS = re.compile(r"\[\s*(\d+(?:\.\d*)?)\s*\,\s*(\d+(?:\.\d*)?)\s*\]")
+REGEX_CRED_FACT  = re.compile(r"\[\s*\d+(?:\.\d*)?\s*\,\s*\d+(?:\.\d*)?\s*\]\:\:[a-zA-Z]\w*(?:\((?:[a-z]\w*\s*\,?\s*)+\))?\s*\.")
+REGEX_BEG_WSPACE = re.compile(r"^\s*", flags = re.MULTILINE)
+REGEX_QUERY_COND = re.compile(r"\s*\|\s*")
+REGEX_QUERY_ARGS = re.compile(r"\s*\;\s*")
+REGEX_QUERY_NOT  = re.compile(r"\s*not\s*")
 
 def parse(filename: str) -> Program:
   # Logic Program
@@ -152,8 +180,14 @@ def parse(filename: str) -> Program:
   PR = [(*ProbRule(*REGEX_PROB_TOKEN.split(x)), x) for x in REGEX_PROB_RULE.findall(data)]
   # r - logic rule, pf - probabilistic fact, o - original probabilistic rule
   for r, pf, o in PR:
-    data = data.replace(o, r)
+    data = data.replace(o, f"{r} % {o}")
     PF.append(pf)
+
+  # Parse credal facts.
+  CF = [(*CredalFact(*REGEX_CRED_PROBS.match(x).groups(), REGEX_PROB_TOKEN.split(x)[1][:-1]), x) for x in REGEX_CRED_FACT.findall(data)]
+  for xor_rules, lower_fact, lower_pf, upper_fact, upper_pf, o in CF:
+    data = data.replace(o, f"{xor_rules} {lower_fact} {upper_fact} % {o}")
+    PF.extend((lower_pf, upper_pf))
 
   # Parse query commands.
   Q = [Query(*(REGEX_QUERY_ARGS.split(y) for y in REGEX_QUERY_COND.split(x[7:-1]))) for x in REGEX_PROB_QUERY.findall(data)]
