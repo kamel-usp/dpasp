@@ -11,6 +11,39 @@ from . import choices
 from .utils import new_list, undef_atom_ignore
 
 """
+Construct target rules from a Program and add them to a .
+
+Suppose we have a query ℙ(Q|E) where Q = {a, not b} and E = {not c, d}. The target rules `r` and
+`t` of ℙ(Q|E) will be:
+
+```
+e  :- not c, d.
+q  :- a, not b.
+r  :- q, e.
+t  :- not q, e.
+```
+
+Target rule `r` corresponds to the query assignments in conditions 1 and 2, while `t` codifies the
+truth values in conditions 3 and 4 in [1].
+
+[1] - On the Semantics and Complexity of Probabilistic Logic Programs. Fabio Cozman and Denis Mauá.
+Journal of Artificial Intelligence Research. 2017.
+"""
+def add_target_rules(P: Program, B: clingo.backend.Backend, T: list[tuple[clingo.symbol.Function, clingo.symbol.Function]]):
+  for i, query in enumerate(P.Q):
+    Q, E = query.Q, query.E
+    r_f, t_f = clingo.parse_term(f"__query_r_{i}"), clingo.parse_term(f"__query_t_{i}")
+    e = B.add_atom(clingo.parse_term(f"__query_e_{i}"))
+    q = B.add_atom(clingo.parse_term(f"__query_q_{i}"))
+    r, t = B.add_atom(r_f), B.add_atom(t_f)
+    B.add_rule((e,), [B.add_atom(x) if t else -B.add_atom(x) for x, t in E])
+    B.add_rule((q,), [B.add_atom(x) if t else -B.add_atom(x) for x, t in Q])
+    B.add_rule((r,), (q, e,))
+    B.add_rule((t,), (-q, e,))
+    T[i] = (r_f, t_f)
+  return T
+
+"""
 Runs exact inference in order to answer the queries in `P`.
 """
 def exact(P: Program) -> list[tuple[float, float]]:
@@ -41,8 +74,6 @@ def exact(P: Program) -> list[tuple[float, float]]:
   # We iterate through each total choice θ (itertools.product is written in C, so this loop
   # somewhat efficient.)
   for theta in itertools.product([False, True], repeat = len(PF)):
-    # F are the facts produced by the total choice θ.
-    F = [PF[i].cl_f[x] for i, x in enumerate(theta)]
     # Initialize a clingo Control.
     C = Control(logger = undef_atom_ignore)
     # Force solver to output all stable models.
@@ -51,7 +82,7 @@ def exact(P: Program) -> list[tuple[float, float]]:
     C.add("base", [], P.P)
     # Add probabilistic facts according to θ.
     with C.backend() as B:
-      for x in F: B.add_rule((B.add_atom(x),))
+      for x in [PF[i].cl_f for i, x in enumerate(theta) if x]: B.add_rule((B.add_atom(x),))
     # Ground atoms.
     C.ground([("base", [])])
     # m is the number of stable models according to <P,θ>, i.e. m = |Γ(θ)|.
@@ -113,9 +144,11 @@ def exact_bc(P: Program) -> list[tuple[float, float]]:
   # Query results.
   n_queries = len(queries)
   R = new_list(n_queries, None)
-  # Model counts
+  # Model counts.
   a, b = new_list(n_queries, .0), new_list(n_queries, .0)
   c, d = new_list(n_queries, .0), new_list(n_queries, .0)
+  # Target rules.
+  T = new_list(n_queries, None)
 
   # We iterate through each total choice θ (itertools.product is written in C, so this loop
   # somewhat efficient.)
@@ -126,9 +159,11 @@ def exact_bc(P: Program) -> list[tuple[float, float]]:
     C.configuration.solve.models = 0
     # Input the logic program into the clingo Control.
     C.add("base", [], P.P)
-    # Add probabilistic facts according to θ.
     with C.backend() as B:
-      for x in [PF[i].cl_f[x] for i, x in enumerate(theta)]: B.add_rule((B.add_atom(x),))
+      # Add probabilistic facts according to θ.
+      for x in [PF[i].cl_f for i, x in enumerate(theta) if x]: B.add_rule((B.add_atom(x),))
+      # Add query targets.
+      add_target_rules(P, B, T)
     # Ground atoms.
     C.ground([("base", [])])
     # Record consequences of either brave or cautious reasoning.
@@ -141,24 +176,22 @@ def exact_bc(P: Program) -> list[tuple[float, float]]:
     C.configuration.solve.enum_mode = "cautious"
     C.solve(on_model = record_consequences)
     K_map = set(K)
-    for i, query in enumerate(queries):
-      all_e = all((e in K_map) if t else not (e in K_map) for e, t in query.E)
-      all_q = all((q in K_map) if t else not (q in K_map) for q, t in query.Q)
-      # Condition 3: if every stable model in Γ(θ) satisfies E but fails Q.
-      c[i] += (all_e and not all_q)*p
+    for i in range(n_queries):
+      r, t = T[i]
       # Condition 1: if every stable model in Γ(θ) satisfies Q and E.
-      a[i] += (all_e and all_q)*p
+      a[i] += (r in K_map)*p
+      # Condition 3: if every stable model in Γ(θ) satisfies E but fails Q.
+      c[i] += (t in K_map)*p
     # Solve for the brave consequences of <P,θ>.
     C.configuration.solve.enum_mode = "brave"
     C.solve(on_model = record_consequences)
     K_map = set(K)
-    for i, query in enumerate(queries):
-      all_e = all((e in K_map) if t else not (e in K_map) for e, t in query.E)
-      all_q = all((q in K_map) if t else not (q in K_map) for q, t in query.Q)
-      # Condition 4: if some stable model in Γ(θ) satisfies E but fails Q.
-      d[i] += (all_e and not all_q)*p
+    for i in range(n_queries):
+      r, t = T[i]
       # Condition 2: if some stable model in Γ(θ) satisfies Q and E.
-      b[i] += (all_e and all_q)*p
+      b[i] += (r in K_map)*p
+      # Condition 4: if some stable model in Γ(θ) satisfies E but fails Q.
+      d[i] += (t in K_map)*p
   for i in range(n_queries):
     # Evaluate a, b, c, d values and return ℙ(Q|E) as a tuple of lower and upper probabilities.
     _a, _b, _c, _d = a[i], b[i], c[i], d[i]
