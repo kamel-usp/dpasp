@@ -1,0 +1,39 @@
+NEG: "not"
+ADD: "+"
+SUB: "-"
+DIV: "/"
+MOD: "\\"
+MUL: "*"
+EQQ: "="
+OP: ADD
+  | SUB
+  | DIV
+  | MOD
+  | MUL
+  | EQQ
+CONST: /[a-z]\w*/
+VAR: /[A-Z]\w*/
+?atom: NEG* (CONST | VAR | pred | interval)
+interval: ID ".." ID
+pred: CONST "(" (atom | ID) ("," (atom | ID))* ")"
+_fact: atom "."
+fact: _fact
+pfact: PROB "::" _fact
+head: (atom | bop) ("," (atom | bop))*
+body: (atom | bop) ("," (atom | bop))*
+_rule: head ":-" body "."
+rule: _rule
+prule: PROB "::" _rule
+bop: (ID | VAR | bop) OP (ID | VAR | bop)
+plp: (fact | rule | pfact | prule)*
+
+COMMENT: "%" /[^\n]*/ NEWLINE
+
+%import common.WORD -> NAME
+%import common.INT -> ID
+%import common.NUMBER -> PROB
+%import common.NEWLINE -> NEWLINE
+%import common.WS
+
+%ignore WS
+%ignore COMMENT
