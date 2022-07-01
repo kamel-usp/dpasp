@@ -2,6 +2,7 @@ import sys
 import os
 import contextlib
 import array
+import timeit
 
 import clingo
 
@@ -43,6 +44,17 @@ def suppress_ext_err():
       yield
     finally:
       sys.stderr = _stderr
+
+@contextlib.contextmanager
+def timer_block():
+  s = timeit.default_timer()
+  try:
+    yield
+  finally:
+    print("Time elapsed: ", timeit.default_timer() - s)
+
+def start_timer() -> float: start_timer.s = timeit.default_timer(); return start_timer.s
+def end_timer() -> float: return timeit.default_timer() - start_timer.s
 
 def undef_atom_ignore(x, y):
   if x == clingo.MessageCode.AtomUndefined: return
