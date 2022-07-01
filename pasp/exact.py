@@ -1,14 +1,13 @@
 import sys
 import itertools
 import math
-import numpy as np
 
 import clingo
 from clingo.control import Control
 
 from .program import Program
 from . import choices
-from .utils import new_list, undef_atom_ignore
+from .utils import new_list, undef_atom_ignore, start_timer, end_timer
 
 """
 Construct target rules from a Program and add them to a .
@@ -40,6 +39,7 @@ def add_target_rules(P: Program, B: clingo.backend.Backend, T: list[tuple[clingo
     B.add_rule((q,), [B.add_atom(x) if t else -B.add_atom(x) for x, t in Q])
     B.add_rule((r,), (q, e,))
     B.add_rule((t,), (-q, e,))
+    B.add_project([r, t])
     T[i] = (r_f, t_f)
   return T
 
@@ -48,7 +48,7 @@ Runs exact inference in order to answer the queries in `P`.
 """
 def exact(P: Program) -> list[tuple[float, float]]:
   # Get all probabilistic facts.
-  PF = np.array(P.PF)
+  PF = P.PF
   # Get all queries.
   queries = P.Q
   # Query results.
@@ -138,7 +138,7 @@ Runs exact inference using brave and cautious reasoning in order to answer the q
 """
 def exact_bc(P: Program) -> list[tuple[float, float]]:
   # Get all probabilistic facts.
-  PF = np.array(P.PF)
+  PF = P.PF
   # Get all queries.
   queries = P.Q
   # Query results.
@@ -157,6 +157,8 @@ def exact_bc(P: Program) -> list[tuple[float, float]]:
     C = Control(logger = undef_atom_ignore)
     # Force solver to output all stable models.
     C.configuration.solve.models = 0
+    # Force projection on target rules.
+    C.configuration.solve.project = "auto"
     # Input the logic program into the clingo Control.
     C.add("base", [], P.P)
     with C.backend() as B:
