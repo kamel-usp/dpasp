@@ -1,3 +1,4 @@
+// Operator terminals.
 NEG: "not"
 ADD: "+"
 SUB: "-"
@@ -5,27 +6,55 @@ DIV: "/"
 MOD: "\\"
 MUL: "*"
 EQQ: "="
+// Operators.
 OP: ADD
   | SUB
   | DIV
   | MOD
   | MUL
   | EQQ
+
+// Constants.
 CONST: /[a-z]\w*/
+// Variables
 VAR: /[A-Z]\w*/
-?atom: NEG* (CONST | VAR | pred | interval)
+
+// Ground atom.
+gratom: NEG* (CONST | grpred)
+// Ground predicates.
+grpred: NEG* CONST "(" (gratom | ID) ("," (gratom | ID | interval))* ")"
+
+// Atom.
+atom: NEG* (CONST | VAR | pred)
+// Interval.
 interval: ID ".." ID
-pred: CONST "(" (atom | ID) ("," (atom | ID))* ")"
+// Predicate.
+pred: NEG* CONST "(" (atom | ID | interval) ("," (atom | ID | interval))* ")"
+
+// Fact.
 _fact: atom "."
 fact: _fact
+// Probabilistic fact.
 pfact: PROB "::" _fact
-head: (atom | bop) ("," (atom | bop))*
+
+// Head of a rule.
+head: (atom) ("," (atom))*
+// Body of a rule.
 body: (atom | bop) ("," (atom | bop))*
+// Rule.
 _rule: head ":-" body "."
 rule: _rule
+// Probabilistic rule.
 prule: PROB "::" _rule
+
+// Binary operation.
 bop: (ID | VAR | bop) OP (ID | VAR | bop)
-plp: (fact | rule | pfact | prule)*
+
+// Query.
+interp: gratom (", " gratom)*
+query: "#query(" interp ("|" interp)? ")" "."?
+
+plp: (fact | rule | pfact | prule | query)*
 
 COMMENT: "%" /[^\n]*/ NEWLINE
 

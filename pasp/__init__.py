@@ -1,2 +1,2 @@
-from .program import parse
+from .grammar import parse
 from .exact import exact, exact_bc

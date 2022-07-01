@@ -12,8 +12,8 @@ in a way equivalent to C's `static` variables.
 def unique_fact(i: int = None) -> str:
   if i is None:
     unique_fact.i += 1
-    return f"__unique_id_{unique_fact.i}."
-  return f"__unique_id_{i}."
+    return f"__unique_id_{unique_fact.i}"
+  return f"__unique_id_{i}"
 unique_fact.i = 0
 
 """
@@ -25,7 +25,7 @@ class ProbFact:
     self.p = p
     self.f = f
     # Construct a clingo.symbol.Function from this fact.
-    self.cl_f = clingo.parse_term(f[:-1]) # remove the dot at the end.
+    self.cl_f = clingo.parse_term(f) # remove the dot at the end.
     #self.cl_f = [Function(clf.name, clf.arguments, not clf.positive), clf]
 
   def __str__(self) -> str: return f"{self.p}::{self.f}"
@@ -38,7 +38,7 @@ returns a rule and a PF.
 """
 def ProbRule(p: float, r: str) -> tuple[str, ProbFact]:
   f = unique_fact()
-  return f"{r[:-1]}, {f}", ProbFact(p, f)
+  return f"{r}, {f}", ProbFact(p, f)
 
 """
 A Credal Fact (CF) is syntactic sugar for constructing four (Logic Program) rules, two of them
@@ -143,7 +143,7 @@ class Program:
     self.PF = PF
     self.Q = Q
 
-  def __str__(self) -> str: return f"<{self.P[:-1]},\n{self.PF},\n{self.Q}>"
+  def __str__(self) -> str: return f"<{self.P},\n{self.PF},\n{self.Q}>"
   def __repr__(self) -> str: return self.__str__()
 
 REGEX_PROB_CMNT  = re.compile(r"\%.*$", flags = re.MULTILINE)
@@ -158,39 +158,3 @@ REGEX_QUERY_COND = re.compile(r"\s*\|\s*")
 REGEX_QUERY_ARGS = re.compile(r"\s*\;\s*")
 REGEX_QUERY_NOT  = re.compile(r"\s*not\s*")
 
-def parse(filename: str) -> Program:
-  # Logic Program
-  P = None
-  # Probabilistic Facts
-  PF = None
-  # For now, dump file entirely into memory (this isn't too much of a problem, since PLPs are
-  # usually small). In the future, consider streaming batches of text instead for large files.
-  data = None
-  try:
-    with open(filename, "r") as f: data = f.read()
-  except Exception as ex:
-    raise ex
-
-  # Remove comments
-  data = REGEX_PROB_CMNT.sub("", data)
-
-  # Parse probabilistic facts and probabilistic rules.
-  PF = [ProbFact(*REGEX_PROB_TOKEN.split(x)) for x in REGEX_PROB_FACT.findall(data)]
-  data = REGEX_PROB_FACT.sub("", data)
-  PR = [(*ProbRule(*REGEX_PROB_TOKEN.split(x)), x) for x in REGEX_PROB_RULE.findall(data)]
-  # r - logic rule, pf - probabilistic fact, o - original probabilistic rule
-  for r, pf, o in PR:
-    data = data.replace(o, f"{r} % {o}")
-    PF.append(pf)
-
-  # Parse credal facts.
-  CF = [(*CredalFact(*REGEX_CRED_PROBS.match(x).groups(), REGEX_PROB_TOKEN.split(x)[1][:-1]), x) for x in REGEX_CRED_FACT.findall(data)]
-  for xor_rules, lower_fact, lower_pf, upper_fact, upper_pf, o in CF:
-    data = data.replace(o, f"{xor_rules} {lower_fact} {upper_fact} % {o}")
-    PF.extend((lower_pf, upper_pf))
-
-  # Parse query commands.
-  Q = [Query(*(REGEX_QUERY_ARGS.split(y) for y in REGEX_QUERY_COND.split(x[7:-1]))) for x in REGEX_PROB_QUERY.findall(data)]
-  data = REGEX_PROB_QUERY.sub("", data)
-  P = REGEX_BEG_WSPACE.sub("", data)
-  return Program(P, PF, Q)
