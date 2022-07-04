@@ -25,8 +25,7 @@ class ProbFact:
     self.p = p
     self.f = f
     # Construct a clingo.symbol.Function from this fact.
-    self.cl_f = clingo.parse_term(f) # remove the dot at the end.
-    #self.cl_f = [Function(clf.name, clf.arguments, not clf.positive), clf]
+    self.cl_f = clingo.parse_term(f)
 
   def __str__(self) -> str: return f"{self.p}::{self.f}"
   def __repr__(self) -> str: return self.__str__()
@@ -41,30 +40,18 @@ def ProbRule(p: float, r: str) -> tuple[str, ProbFact]:
   return f"{r}, {f}", ProbFact(p, f)
 
 """
-A Credal Fact (CF) is syntactic sugar for constructing four (Logic Program) rules, two of them
-being part of a probabilistic rule. Suppose we have a CF `f` whose lower and upper probabilities
-are 0.25 and 0.75 respectively. We syntactically write this as:
-
-```
-[0.25, 0.75]::f.
-```
-
-This is equivalent to the following rules:
-
-```
-u :- not v. v :- not u.
-0.25::f :- u. 0.75::f :- v.
-```
-
-Facts `u` and `v` encode the lower and upper cases respectively of `f`. The first two rules state
-that both `u` and `v` must never occur simultaneously (i.e., they are mutually exclusive). The
-following two (probabilistic) rules set the probabilities of `f` according to the choice of `u` and
-`v`.
+A Credal Fact (CF) consists of a fact `f` attached to a probability interval `[l, u]`, where `l ∈
+[0, 1]` is the lowest probability `f` may attain and `u ≥ l ∈ [0, 1]` is the highest.
 """
-def CredalFact(p: float, q: float, f: str) -> tuple[str, str, ProbFact, str, ProbFact]:
-  u, v = unique_fact()[:-1], unique_fact()[:-1]
-  return f"{u} :- not {v}. {v} :- not {u}.", \
-         *ProbRule(p, f"{f} :- {u}."), *ProbRule(q, f"{f} :- {v}.")
+class CredalFact:
+  def __init__(self, l: float, u: float, f: str):
+    self.l, self.u = float(l), float(u)
+    self.f = f
+    self.cl_f = clingo.parse_term(f)
+
+  def __getitem__(self, i: bool) -> float: return self.l if False else self.u
+  def __str__(self) -> str: return f"[{self.l}, {self.u}]::{self.f}"
+  def __repr__(self) -> str: return self.__str__()
 
 """
 String formats a query tuple `(f, t)`, where `f` is an atom and `t` is whether it should appear
@@ -116,9 +103,9 @@ class Query:
   def __repr__(self) -> str: return self.__str__()
 
 """
-A Probabilistic Logic Program (PLP) usually configures a tuple `<P,PF>`, where `P` is a logic
-program and `PF` are probabilistic facts. We extend a PLP into a triple `<P,PF,Q>`, where `Q` are
-the queries to be asked from `P` and `PF`.
+A Probabilistic Logic Program (PLP) usually configures a triple `<P,PF,CF>`, where `P` is a logic
+program, `PF` are probabilistic facts and `CF` are credal facts. We extend a PLP into a tuple
+`<P,PF,CF,Q>`, where `Q` are the queries to be asked from `P`, `PF` and `CF`.
 
 We accept ProbLog's syntactic sugar for probabilistic rules,
 
@@ -137,24 +124,17 @@ h(X) :- b1(X), b2(X), ..., bn(X), a.
 where `a` is a unique probabilistic fact added with probability `p`.
 """
 class Program:
-  "Constructs a PLP out of a logic program `P`, probabilistic facts `PF` and queries `Q`."
-  def __init__(self, P: str, PF: list[ProbFact], Q: list[Query]):
+  """
+  Constructs a PLP out of a logic program `P`, probabilistic facts `PF`, credal facts `CF` and
+  queries `Q`.
+  """
+  def __init__(self, P: str, PF: list[ProbFact], Q: list[Query], CF: list[CredalFact]):
     self.P = P
     self.PF = PF
     self.Q = Q
+    self.CF = CF
 
-  def __str__(self) -> str: return f"<{self.P},\n{self.PF},\n{self.Q}>"
+  def __str__(self) -> str:
+    return f"<Logic Program:\n{self.P},\nProbabilistic Facts:\n{self.PF},\nCredal Facts:\n{self.CF}\nQueries\n{self.Q}>"
   def __repr__(self) -> str: return self.__str__()
-
-REGEX_PROB_CMNT  = re.compile(r"\%.*$", flags = re.MULTILINE)
-REGEX_PROB_FACT  = re.compile(r"\d+(?:\.\d*)?\:\:[a-zA-Z]\w*(?:\((?:[a-z]\w*\s*\,?\s*)+\))?\s*\.")
-REGEX_PROB_RULE  = re.compile(r"\d+(?:\.\d*)?\:\:[a-zA-Z]\w*(?:\([a-zA-Z]\w*\))?\s*\:\-.*?\.")
-REGEX_PROB_QUERY = re.compile(r"^\#query\(.+\)", flags = re.MULTILINE)
-REGEX_PROB_TOKEN = re.compile(r"\:\:")
-REGEX_CRED_PROBS = re.compile(r"\[\s*(\d+(?:\.\d*)?)\s*\,\s*(\d+(?:\.\d*)?)\s*\]")
-REGEX_CRED_FACT  = re.compile(r"\[\s*\d+(?:\.\d*)?\s*\,\s*\d+(?:\.\d*)?\s*\]\:\:[a-zA-Z]\w*(?:\((?:[a-z]\w*\s*\,?\s*)+\))?\s*\.")
-REGEX_BEG_WSPACE = re.compile(r"^\s*", flags = re.MULTILINE)
-REGEX_QUERY_COND = re.compile(r"\s*\|\s*")
-REGEX_QUERY_ARGS = re.compile(r"\s*\;\s*")
-REGEX_QUERY_NOT  = re.compile(r"\s*not\s*")
 
