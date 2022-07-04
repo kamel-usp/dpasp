@@ -1,6 +1,6 @@
 import pathlib, enum
 import lark, lark.reconstruct
-from .program import ProbFact, Query, ProbRule, Program
+from .program import ProbFact, Query, ProbRule, Program, CredalFact
 
 "Returns whether a node in the AST is a fact."
 def is_fact(x: lark.Tree) -> bool: return isinstance(x, lark.Tree) and x.data == "fact"
@@ -85,6 +85,7 @@ class Command(enum.Enum):
   RULE = 2
   PROB_RULE = 3
   QUERY = 4
+  CRED_FACT = 5
 
 class PLPTransformer(lark.Transformer):
   # Atoms.
@@ -112,6 +113,8 @@ class PLPTransformer(lark.Transformer):
     return Command.FACT, "".join(f) + "."
   def pfact(self, f: list[lark.Tree | lark.Token]) -> tuple[Command, ProbFact]:
     return Command.PROB_FACT, ProbFact(*f)
+  def cfact(self, f: list[lark.Tree | lark.Token]) -> tuple[Command, CredalFact]:
+    return Command.CRED_FACT, CredalFact(*f)
 
   # Heads.
   def head(self, h: list[str]) -> str: return ", ".join(h)
@@ -140,15 +143,17 @@ class PLPTransformer(lark.Transformer):
     PF = []
     # Queries.
     Q  = []
+    # Credal Facts.
+    CF = []
     for t, *c in C:
       if t == Command.FACT: P.append(c[0])
       elif t == Command.PROB_FACT: PF.append(c[0])
       elif t == Command.RULE: P.append(c[0])
       elif t == Command.PROB_RULE: P.append(c[0]); PF.append(c[1])
-      elif t == Command.QUERY:
-        Q.append(c[0])
+      elif t == Command.QUERY: Q.append(c[0])
+      elif t == Command.CRED_FACT: CF.append(c[0])
       else: P.extend(c)
-    return Program("\n".join(P), PF, Q)
+    return Program("\n".join(P), PF, Q, CF)
 
 """Either parses `streams` as blocks of text containing the PLP when `from_str = True`, or
 interprets `streams` as filenames to be read and parsed into a `Program`."""

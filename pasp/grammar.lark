@@ -36,6 +36,8 @@ _fact: atom "."
 fact: _fact
 // Probabilistic fact.
 pfact: PROB "::" _fact
+// Credal fact.
+cfact: "[" PROB "," PROB "]" "::" _fact
 
 // Head of a rule.
 head: (atom) ("," (atom))*
@@ -54,7 +56,7 @@ bop: (ID | VAR | bop) OP (ID | VAR | bop)
 interp: gratom (", " gratom)*
 query: "#query(" interp ("|" interp)? ")" "."?
 
-plp: (fact | rule | pfact | prule | query)*
+plp: (fact | rule | pfact | prule | cfact | query)*
 
 COMMENT: "%" /[^\n]*/ NEWLINE
 
