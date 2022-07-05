@@ -138,3 +138,4 @@ class Program:
     return f"<Logic Program:\n{self.P},\nProbabilistic Facts:\n{self.PF},\nCredal Facts:\n{self.CF}\nQueries\n{self.Q}>"
   def __repr__(self) -> str: return self.__str__()
 
+REGEX_QUERY_NOT  = re.compile(r"\s*not\s*")
