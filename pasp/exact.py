@@ -8,6 +8,7 @@ from clingo.control import Control
 from .program import Program
 from . import choices
 from .utils import new_list, undef_atom_ignore, start_timer, end_timer
+from .poly import Polynomial, Coefficients, minimize, maximize, minimize_smp, maximize_smp, print_poly
 
 """
 Construct target rules from a Program and add them to a .
@@ -82,7 +83,7 @@ def exact(P: Program) -> list[tuple[float, float]]:
     C.add("base", [], P.P)
     # Add probabilistic facts according to θ.
     with C.backend() as B:
-      for x in [PF[i].cl_f for i, x in enumerate(theta) if x]: B.add_rule((B.add_atom(x),))
+      for x in [PF[i].cl_f for i, y in enumerate(theta) if y]: B.add_rule((B.add_atom(x),))
     # Ground atoms.
     C.ground([("base", [])])
     # m is the number of stable models according to <P,θ>, i.e. m = |Γ(θ)|.
@@ -163,7 +164,7 @@ def exact_bc(P: Program) -> list[tuple[float, float]]:
     C.add("base", [], P.P)
     with C.backend() as B:
       # Add probabilistic facts according to θ.
-      for x in [PF[i].cl_f for i, x in enumerate(theta) if x]: B.add_rule((B.add_atom(x),))
+      for x in [PF[i].cl_f for i, y in enumerate(theta) if y]: B.add_rule((B.add_atom(x),))
       # Add query targets.
       add_target_rules(P, B, T)
     # Ground atoms.
@@ -208,3 +209,107 @@ def exact_bc(P: Program) -> list[tuple[float, float]]:
         else: R[i] = [_a/(_a+_d), _b/(_b+_c)]
     print(f"{queries[i]} = {R[i]}")
   return R
+
+"""
+Symbolically runs exact inference in order to answer the queries in `P` when `P` contains credal
+facts.
+"""
+def exact_sym(P: Program) -> list[tuple[float, float]]:
+  # Get all probabilistic facts.
+  PF = P.PF; n_PF = len(PF)
+  # Get all credal facts.
+  CF = P.CF; bounds_CF = [(c.l, c.u) for c in CF]
+  # Get all queries.
+  queries = P.Q
+  # Query results.
+  n_queries = len(queries)
+  R = new_list(n_queries, None)
+
+  # Condition 1: if every stable model in Γ(θ) satisfies Q and E.
+  cond_1 = new_list(n_queries, False)
+  # Condition 2: if some stable model in Γ(θ) satisfies Q and E.
+  cond_2 = new_list(n_queries, False)
+  # Condition 3: if every stable model in Γ(θ) satisfies E but fails Q.
+  cond_3 = new_list(n_queries, False)
+  # Condition 4: if some stable model in Γ(θ) satisfies E but fails Q.
+  cond_4 = new_list(n_queries, False)
+  # How many models satisfy Q and E, and how many models satisfy E.
+  count_q_e, count_e = new_list(n_queries, 0), new_list(n_queries, 0)
+  # How many models satisfy E but do not satisfy Q completely.
+  count_partial_q_e = new_list(n_queries, 0)
+
+  # Credal facts polynomial and coefficients.
+  Pn = [(Polynomial(), Polynomial(), Polynomial(), Polynomial()) for _ in range(n_queries)]
+  K = [(Coefficients(), Coefficients(), Coefficients(), Coefficients()) for _ in range(n_queries)]
+
+  # We iterate through each total choice θ (itertools.product is written in C, so this loop
+  # somewhat efficient.)
+  for theta in itertools.product([False, True], repeat = n_PF+len(CF)):
+    # Initialize a clingo Control.
+    C = Control(logger = undef_atom_ignore)
+    # Force solver to output all stable models.
+    C.configuration.solve.models = 0
+    # Input the logic program into the clingo Control.
+    C.add("base", [], P.P)
+    # Add probabilistic facts according to θ.
+    with C.backend() as B:
+      for x in [PF[i].cl_f for i in range(n_PF) if theta[i]]: B.add_rule((B.add_atom(x),))
+      for x in [CF[i].cl_f for i in range(len(CF)) if theta[n_PF+i]]: B.add_rule((B.add_atom(x),))
+    # Ground atoms.
+    C.ground([("base", [])])
+    # m is the number of stable models according to <P,θ>, i.e. m = |Γ(θ)|.
+    m = 0
+    # Zero-initialize counters.
+    for i in range(n_queries):
+      cond_1[i] = cond_2[i] = cond_3[i] = cond_4[i] = False
+      count_q_e[i] = count_e[i] = count_partial_q_e[i] = 0
+    # Count which models satisfy Q and/or E.
+    def count_sat(s: clingo.solving.Model):
+      print(s)
+      nonlocal m
+      m += 1
+      for i, query in enumerate(queries):
+        Q, E = query.Q, query.E
+        all_e = all(s.contains(e) if t else not s.contains(e) for e, t in E) # if e = true, check if e ∈ σ.
+        if not all_e: continue
+        all_q = all(s.contains(q) if t else not s.contains(q) for q, t in Q) # if q = true, check if q ∈ σ.
+        count_e[i] += 1
+        if all_q: cond_2[i] = True; count_q_e[i] += 1
+        else: cond_4[i] = True; count_partial_q_e[i] += 1
+
+    # Solve for <P,θ>, running on_model for every stable model σ found.
+    C.solve(on_model = count_sat)
+    p = choices.pr(PF, theta)
+    for i in range(n_queries):
+      # Evaluate counts to judge whether cond_1 and/or cond_3 are true.
+      if count_e[i] == m or len(queries[i].E) == 0:
+        # All stable models satisfy Q and E completely.
+        if count_q_e[i] == m: cond_1[i] = True
+        # All stable models satisfy E, but none satisfies Q completely.
+        if count_partial_q_e[i] == m: cond_3[i] = True
+      # Add probability ℙ(θ) according to model satisfiabilities and append polynomials.
+      theta_CF = theta[n_PF:]
+      if cond_1[i]: Pn[i][0].append(theta_CF); K[i][0].append(p)
+      if cond_2[i]: Pn[i][1].append(theta_CF); K[i][1].append(p)
+      if cond_3[i]: Pn[i][2].append(theta_CF); K[i][2].append(p)
+      if cond_4[i]: Pn[i][3].append(theta_CF); K[i][3].append(p)
+  for i in range(n_queries):
+    print("Pn", Pn, "\nK", K)
+    for p, k in zip(Pn[i], K[i]): print_poly(p, k)
+    # Evaluate a, b, c, d values by optimizing the polynomials.
+    if len(queries[i].E) == 0:
+      R[i] = [minimize_smp(Pn[i][0], K[i][0], bounds_CF), maximize_smp(Pn[i][1], K[i][1], bounds_CF)]
+    else:
+      a, b, c, d = len(Pn[i][0]), len(Pn[i][1]), len(Pn[i][2]), len(Pn[i][3])
+      if b + d == 0:
+        print("Fail: ℙ(E) = 0!")
+        R[i] = [-math.inf, math.inf]
+      else:
+        if b + c == 0 and d > 0: R[i] = [0, 0]
+        elif a + d == 0 and b > 0: R[i] = [1, 1]
+        else: R[i] = [minimize(Pn[i][0], Pn[i][3], K[i][0], K[i][3], bounds_CF),
+                      maximize(Pn[i][1], Pn[i][2], K[i][1], K[i][2], bounds_CF)]
+    print(f"{queries[i]} = {R[i]}")
+  return R
+
+
