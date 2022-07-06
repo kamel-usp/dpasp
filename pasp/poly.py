@@ -21,13 +21,13 @@ def _obj_func(X: np.array, S: np.array, T: np.array, C: np.array, K: np.array) -
   n, m, X_cmpl = len(C), len(K), 1-X
   x = 0 if len(S) == 0 else sum(np.prod(np.where(S[i], X, X_cmpl))*C[i] for i in range(n))
   y = 0 if len(T) == 0 else sum(np.prod(np.where(T[i], X, X_cmpl))*K[i] for i in range(m))
-  return x/(x+y)
+  return 0 if x+y == 0 else x/(x+y)
 
 def _obj_func_neg(X: np.array, S: np.array, T: np.array, C: np.array, K: np.array) -> float:
   n, m, X_cmpl = len(C), len(K), 1-X
   x = 0 if len(S) == 0 else sum(np.prod(np.where(S[i], X, X_cmpl))*C[i] for i in range(n))
   y = 0 if len(T) == 0 else sum(np.prod(np.where(T[i], X, X_cmpl))*K[i] for i in range(m))
-  return -(x/(x+y))
+  return 0 if x+y == 0 else -(x/(x+y))
 
 def minimize_smp(P: Polynomial, K: Coefficients, B: list[tuple[float, float]]) -> float:
   return brute(_smp_obj_func, ranges = B, args = (np.array(P), np.array(K)), Ns = 2, finish = None, \

@@ -47,7 +47,15 @@ def add_target_rules(P: Program, B: clingo.backend.Backend, T: list[tuple[clingo
 """
 Runs exact inference in order to answer the queries in `P`.
 """
-def exact(P: Program) -> list[tuple[float, float]]:
+def exact(P: Program, use_bc: bool = False) -> list[tuple[float, float]]:
+  if len(P.CF) > 0: return exact_sym(P)
+  elif use_bc: return exact_bc(P)
+  return exact_smp(P)
+
+"""
+Runs exact inference in order to answer the queries in `P`.
+"""
+def exact_smp(P: Program) -> list[tuple[float, float]]:
   # Get all probabilistic facts.
   PF = P.PF
   # Get all queries.
@@ -265,7 +273,6 @@ def exact_sym(P: Program) -> list[tuple[float, float]]:
       count_q_e[i] = count_e[i] = count_partial_q_e[i] = 0
     # Count which models satisfy Q and/or E.
     def count_sat(s: clingo.solving.Model):
-      print(s)
       nonlocal m
       m += 1
       for i, query in enumerate(queries):
@@ -294,8 +301,6 @@ def exact_sym(P: Program) -> list[tuple[float, float]]:
       if cond_3[i]: Pn[i][2].append(theta_CF); K[i][2].append(p)
       if cond_4[i]: Pn[i][3].append(theta_CF); K[i][3].append(p)
   for i in range(n_queries):
-    print("Pn", Pn, "\nK", K)
-    for p, k in zip(Pn[i], K[i]): print_poly(p, k)
     # Evaluate a, b, c, d values by optimizing the polynomials.
     if len(queries[i].E) == 0:
       R[i] = [minimize_smp(Pn[i][0], K[i][0], bounds_CF), maximize_smp(Pn[i][1], K[i][1], bounds_CF)]
@@ -311,5 +316,4 @@ def exact_sym(P: Program) -> list[tuple[float, float]]:
                       maximize(Pn[i][1], Pn[i][2], K[i][1], K[i][2], bounds_CF)]
     print(f"{queries[i]} = {R[i]}")
   return R
-
 
