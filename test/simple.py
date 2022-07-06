@@ -11,3 +11,5 @@ if __name__ == "__main__":
   R = pasp.exact(P)
   print("\n=================\nBC Query results:\n=================")
   pasp.exact_bc(P)
+  print("\n=====================\nCredal Query results:\n=====================")
+  pasp.exact_sym(P)
