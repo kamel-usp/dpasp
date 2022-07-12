@@ -53,7 +53,7 @@ prule: PROB "::" _rule
 bop: (ID | VAR | bop) OP (ID | VAR | bop)
 
 // Query.
-interp: gratom (", " gratom)*
+interp: gratom ("," gratom)*
 query: "#query(" interp ("|" interp)? ")" "."?
 
 plp: (fact | rule | pfact | prule | cfact | query)*

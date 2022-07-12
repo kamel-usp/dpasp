@@ -9,11 +9,11 @@ or :- tuberculosis. or :- cancer.
 0.98::test :- or.
 0.05::test :- not or.
 
-#query(trip)
-#query(tuberculosis | trip)
-#query(cancer | smoking)
-#query(test | or)
-#query(smoking)
-#query(tuberculosis | not trip)
-#query(cancer | not smoking)
-#query(test | not or)
+#query(trip).
+#query(tuberculosis | trip).
+#query(cancer | smoking).
+#query(test | or).
+#query(smoking).
+#query(tuberculosis | not trip).
+#query(cancer | not smoking).
+#query(test | not or).

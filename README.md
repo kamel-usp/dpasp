@@ -64,8 +64,8 @@ The lines above ask for the probabilities of atoms. For instance, `#query(trip)`
 probability that `trip` is provably true $\mathbb{P}(\texttt{trip})$, while `#query(tuberculosis |
 not trip)` is asking for the probability of `tuberculosis` being provably true given that we know
 `trip` not to be $\mathbb{P}(\texttt{tuberculosis}|\neg\texttt{trip})$. We may ask more complex
-queries by aggregating atoms with a semicolon; for instance `#query(tuberculosis; not cancer | not
-smoking; trip)` asks the probability
+queries by aggregating atoms with a comma; for instance `#query(tuberculosis, not cancer | not
+smoking, trip)` asks the probability
 $\mathbb{P}(\texttt{tuberculosis},\neg\texttt{cancer}|\neg\texttt{smoking},\texttt{trip})$.
 
 Since we are working with the credal semantics, each one of these queries will return a tuple of
