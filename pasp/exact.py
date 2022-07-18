@@ -9,6 +9,7 @@ from .program import Program
 from . import choices
 from .utils import new_list, undef_atom_ignore, start_timer, end_timer
 from .poly import Polynomial, Coefficients, minimize, maximize, minimize_smp, maximize_smp, print_poly
+from optimize import bf, bfca, bf_smp, bfca_smp
 
 """
 Construct target rules from a Program and add them to a .
@@ -226,7 +227,9 @@ def exact_sym(P: Program) -> list[tuple[float, float]]:
   # Get all probabilistic facts.
   PF = P.PF; n_PF = len(PF)
   # Get all credal facts.
-  CF = P.CF; bounds_CF = [(c.l, c.u) for c in CF]
+  CF = P.CF
+  # Extract lower and upper probabilities.
+  L_CF = [c.l for c in CF]; U_CF = [c.u for c in CF]
   # Get all queries.
   queries = P.Q
   # Query results.
@@ -296,14 +299,14 @@ def exact_sym(P: Program) -> list[tuple[float, float]]:
         if count_partial_q_e[i] == m: cond_3[i] = True
       # Add probability ℙ(θ) according to model satisfiabilities and append polynomials.
       theta_CF = theta[n_PF:]
-      if cond_1[i]: Pn[i][0].append(theta_CF); K[i][0].append(p)
-      if cond_2[i]: Pn[i][1].append(theta_CF); K[i][1].append(p)
-      if cond_3[i]: Pn[i][2].append(theta_CF); K[i][2].append(p)
-      if cond_4[i]: Pn[i][3].append(theta_CF); K[i][3].append(p)
+      if cond_1[i]: Pn[i][0].extend(theta_CF); K[i][0].append(p)
+      if cond_2[i]: Pn[i][1].extend(theta_CF); K[i][1].append(p)
+      if cond_3[i]: Pn[i][2].extend(theta_CF); K[i][2].append(p)
+      if cond_4[i]: Pn[i][3].extend(theta_CF); K[i][3].append(p)
   for i in range(n_queries):
     # Evaluate a, b, c, d values by optimizing the polynomials.
     if len(queries[i].E) == 0:
-      R[i] = [minimize_smp(Pn[i][0], K[i][0], bounds_CF), maximize_smp(Pn[i][1], K[i][1], bounds_CF)]
+      R[i] = list(bf_smp(Pn[i][0], Pn[i][1], K[i][0], K[i][1], L_CF, U_CF))
     else:
       a, b, c, d = len(Pn[i][0]), len(Pn[i][1]), len(Pn[i][2]), len(Pn[i][3])
       if b + d == 0:
@@ -312,8 +315,7 @@ def exact_sym(P: Program) -> list[tuple[float, float]]:
       else:
         if b + c == 0 and d > 0: R[i] = [0, 0]
         elif a + d == 0 and b > 0: R[i] = [1, 1]
-        else: R[i] = [minimize(Pn[i][0], Pn[i][3], K[i][0], K[i][3], bounds_CF),
-                      maximize(Pn[i][1], Pn[i][2], K[i][1], K[i][2], bounds_CF)]
+        else: R[i] = list(bf(Pn[i][0], Pn[i][3], K[i][0], K[i][3], L_CF, U_CF))
     print(f"{queries[i]} = {R[i]}")
   return R
 
