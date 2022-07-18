@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pasp"
+version = "0.0.1"
+description = "Probabilistic Answer Set Programming"
+dependencies = [
+  "clingo",
+  "scipy",
+  "numpy",
+  "lark",
+]
+
