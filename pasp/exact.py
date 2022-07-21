@@ -9,7 +9,7 @@ from .program import Program
 from . import choices
 from .utils import new_list, undef_atom_ignore, start_timer, end_timer
 from .poly import Polynomial, Coefficients, minimize, maximize, minimize_smp, maximize_smp, print_poly
-from optimize import bf, bfca, bf_smp, bfca_smp
+from .optimize import bf, bfca, bf_smp, bfca_smp
 
 """
 Construct target rules from a Program and add them to a .

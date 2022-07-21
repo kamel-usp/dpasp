@@ -13,10 +13,12 @@ class TestCommand(Command):
 
   def run(self):
     assert os.getcwd() == self.cwd, f"Must be in package root: {self.cwd}"
-    os.system("python -m unittest tests/examples.py -b")
+    os.system("python setup.py build_ext --inplace && python -m unittest tests/examples.py -b")
 
-optimize = Extension("optimize", sources = ["pasp/optimize.c"])
+optimize = Extension("pasp.optimize", sources = ["pasp/optimize.c"])
 setup(
+  packages = find_packages(where = ".", include = ["pasp*"]),
+  include_package_data = True,
   ext_modules = [optimize],
   cmdclass = {"test": TestCommand},
 )

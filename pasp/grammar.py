@@ -51,9 +51,11 @@ def tree_contains(x: lark.Tree, f) -> bool:
     return False
   return visit(x)
 
-"Returns whether node `x` is grounded, i.e. whether any node in the subtree of `x` is a variable."
-def is_ground(x: lark.Tree) -> bool:
-  return not tree_contains(x, lambda x: isinstance(x, lark.Token) and x.type == "VAR")
+"Returns whether node `x` is not grounded, i.e. whether any node in the subtree of `x` is a variable."
+def is_nonground(x: lark.Tree) -> bool:
+  return tree_contains(x, lambda x: isinstance(x, lark.Token) and x.type == "VAR")
+"Returns whether node `x` is grounded, i.e. whether no node in the subtree of `x` is a variable."
+def is_ground(x: lark.Tree) -> bool: return not is_nonground(x)
 
 "Read all `files` and parse them with grammar `G`, returning a single `lark.Tree`."
 def read(*files: str, G: lark.Lark = None, from_str: bool = False) -> lark.Tree:
@@ -89,8 +91,8 @@ class Command(enum.Enum):
 
 class PLPTransformer(lark.Transformer):
   # Atoms.
-  def atom(self, a: list[lark.Token | lark.Tree]) -> str: return " ".join(a)
-  def gratom(self, a: list[lark.Token | lark.Tree]) -> str: return self.atom(a)
+  def atom(self, a: list[lark.Tree]) -> str: return " ".join(a)
+  def gratom(self, a: list[lark.Tree]) -> str: return self.atom(a)
 
   # Intervals.
   def interval(self, i: list[lark.Token]) -> str: return "..".join(i)
@@ -106,14 +108,14 @@ class PLPTransformer(lark.Transformer):
   def grpred(self, p: list[str]) -> str: return self.pred(p)
 
   # Binary operations.
-  def bop(self, b: list[lark.Tree | lark.Token]) -> str: return " ".join(b)
+  def bop(self, b: list[lark.Tree]) -> str: return " ".join(b)
 
   # Facts.
-  def fact(self, f: list[lark.Tree | lark.Token]) -> tuple[Command, str]:
+  def fact(self, f: list[lark.Tree]) -> tuple[Command, str]:
     return Command.FACT, "".join(f) + "."
-  def pfact(self, f: list[lark.Tree | lark.Token]) -> tuple[Command, ProbFact]:
+  def pfact(self, f: list[lark.Tree]) -> tuple[Command, ProbFact]:
     return Command.PROB_FACT, ProbFact(*f)
-  def cfact(self, f: list[lark.Tree | lark.Token]) -> tuple[Command, CredalFact]:
+  def cfact(self, f: list[lark.Tree]) -> tuple[Command, CredalFact]:
     return Command.CRED_FACT, CredalFact(*f)
 
   # Heads.
@@ -136,7 +138,7 @@ class PLPTransformer(lark.Transformer):
     return Command.QUERY, Query(q[0], q[1] if len(q) > 1 else [])
 
   # Probabilistic Logic Program.
-  def plp(self, C: list[tuple[Command, str] | tuple[Command, ProbFact] | tuple[Command, str, ProbFact], tuple[str, Query]]) -> Program:
+  def plp(self, C: list[tuple]) -> Program:
     # Logic Program.
     P  = []
     # Probabilistic Facts.
@@ -160,10 +162,3 @@ interprets `streams` as filenames to be read and parsed into a `Program`."""
 def parse(*files: str, G: lark.Lark = None, from_str: bool = False) -> Program:
   return PLPTransformer().transform(read(*files, G = G, from_str = from_str))
 
-# "Pre-ground an AST, replacing all expanding all probabilistic facts with intervals."
-# def pre_ground(T: lark.Tree):
-  # F = T.find_pred(is_pfact)
-  # for f in F:
-    # I = f.find_data("interval")
-    # if len(I) == 0: continue
-    # U = [expand_interval(i) for i in I]
