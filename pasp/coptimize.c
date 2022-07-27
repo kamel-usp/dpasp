@@ -1,14 +1,8 @@
-#ifdef PASP_DEBUG
-
-#include <stdio.h>
-#include <stdlib.h>
-
-#else
-
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
-#endif
+#define COPTIMIZE_MODULE
+#include "coptimize.h"
 
 #define bool char
 
@@ -149,8 +143,6 @@ static void bf(double *X, bool *S_a, bool *S_b, double *C_a, double *C_b, double
   }
 }
 
-#ifndef PASP_DEBUG
-
 static PyObject* optimize_opt(PyObject *self, PyObject *args, int choice) {
   double min, max;
   PyObject *py_S_a, *py_S_b, *py_C_a, *py_C_b, *py_L, *py_U;
@@ -285,7 +277,7 @@ static inline PyObject* optimize_bf_smp(PyObject *self, PyObject *args) {
   return optimize_opt(self, args, OPTIMIZE_BF_SMP);
 }
 
-static PyMethodDef OptimizeMethods[] = {
+static PyMethodDef CoptimizeMethods[] = {
   {"bfca", optimize_bfca, METH_VARARGS, "Finds local optima through coordinate ascent."},
   {"bf", optimize_bf, METH_VARARGS, "Finds global optima through brute-force."},
   {"bfca_smp", optimize_bfca_smp, METH_VARARGS, "Finds local optima through coordinate ascent."},
@@ -293,17 +285,36 @@ static PyMethodDef OptimizeMethods[] = {
   {NULL, NULL, 0, NULL},
 };
 
-static struct PyModuleDef optimizemodule = {
+static struct PyModuleDef coptimizemodule = {
   PyModuleDef_HEAD_INIT,
-  "optimize",
+  "coptimize",
   "Optimize credal polynomial functions.",
   -1,
-  OptimizeMethods,
+  CoptimizeMethods,
 };
 
-PyMODINIT_FUNC PyInit_optimize(void) { return PyModule_Create(&optimizemodule); }
+PyMODINIT_FUNC PyInit_coptimize(void) {
+  PyObject *m;
+  static void* PyCoptimize_API[PyCoptimize_API_pointers];
+  PyObject *c_api_object;
 
-#else
+  m = PyModule_Create(&coptimizemodule);
+  if (!m) return NULL;
+
+  PyCoptimize_API[PyCoptimize_bfca_NUM] = (void*) bfca;
+  PyCoptimize_API[PyCoptimize_bf_NUM] = (void*) bf;
+
+  c_api_object = PyCapsule_New((void*) PyCoptimize_API, "coptimize._C_API", NULL);
+
+  if (PyModule_AddObject(m, "_C_API", c_api_object) < 0) {
+    Py_XDECREF(c_api_object);
+    Py_DECREF(m);
+    return NULL;
+  }
+  return m;
+}
+
+#ifdef PASP_DEBUG
 
 int main() {
   double C_a[] = {0.2, 0.4, 0.3, 0.5};
@@ -316,10 +327,10 @@ int main() {
   int n_a = 4, n_b = 5, m = 3;
   double min, max;
   puts("|| Coordinate-ascent ||");
-  printf("Minimized value: %f\n", bfca(X, S_a, S_b, C_a, C_b, L, U, n_a, n_b, m, BFCA_MINIMIZE, 3));
-  printf("Maximized value: %f\n", bfca(X, S_a, S_b, C_a, C_b, L, U, n_a, n_b, m, BFCA_MAXIMIZE, 3));
+  printf("Minimized value: %f\n", bfca(X, S_a, S_b, C_a, C_b, L, U, n_a, n_b, m, BFCA_MINIMIZE, 3, 0));
+  printf("Maximized value: %f\n", bfca(X, S_a, S_b, C_a, C_b, L, U, n_a, n_b, m, BFCA_MAXIMIZE, 3, 0));
   puts("\n|| Brute-force ||");
-  bf(X, S_a, S_b, C_a, C_b, L, U, n_a, n_b, m, &min, &max);
+  bf(X, S_a, S_b, C_a, C_b, L, U, n_a, n_b, m, &min, &max, 0);
   printf("Minimized value: %f\nMaximized value: %f\n", min, max);
   return 0;
 }

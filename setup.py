@@ -15,24 +15,25 @@ class TestCommand(Command):
     assert os.getcwd() == self.cwd, f"Must be in package root: {self.cwd}"
     os.system("python setup.py build_ext --inplace && python -m unittest tests/examples.py -b")
 
-optimize = Extension("optimize",
-                     sources = ["pasp/optimize.c"])
-cutils   = Extension("cutils",
-                     libraries = ["clingo"],
-                     depends = ["pasp/cutils.h"],
-                     sources = ["pasp/cutils.c"])
-cprogram = Extension("cprogram",
-                     libraries = ["clingo"],
-                     depends = ["pasp/cutils.c", "pasp/cprogram.h"],
-                     sources = ["pasp/cprogram.c"])
-cexact   = Extension("cexact",
-                     libraries = ["m", "clingo"],
-                     depends = ["pasp/cprogram.c"],
-                     sources = ["pasp/cexact.c"])
+coptimize = Extension("coptimize",
+                      depends = ["pasp/coptimize.h"],
+                      sources = ["pasp/coptimize.c"])
+cutils    = Extension("cutils",
+                      libraries = ["clingo"],
+                      depends = ["pasp/cutils.h"],
+                      sources = ["pasp/cutils.c"])
+cprogram  = Extension("cprogram",
+                      libraries = ["clingo"],
+                      depends = ["pasp/cutils.c", "pasp/cprogram.h"],
+                      sources = ["pasp/cprogram.c"])
+cexact    = Extension("cexact",
+                      libraries = ["m", "clingo"],
+                      depends = ["pasp/cprogram.c"],
+                      sources = ["pasp/cexact.c"])
 
 setup(
   packages = find_packages(where = ".", include = ["pasp*"]),
   include_package_data = True,
-  ext_modules = [optimize, cutils, cprogram, cexact],
+  ext_modules = [coptimize, cutils, cprogram, cexact],
   cmdclass = {"test": TestCommand},
 )
