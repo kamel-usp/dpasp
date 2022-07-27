@@ -9,7 +9,7 @@ from .program import Program
 from . import choices
 from .utils import new_list, undef_atom_ignore, start_timer, end_timer
 from .poly import Polynomial, Coefficients, minimize, maximize, minimize_smp, maximize_smp, print_poly
-from .optimize import bf, bfca, bf_smp, bfca_smp
+from optimize import bf, bfca, bf_smp, bfca_smp
 
 """
 Construct target rules from a Program and add them to a .
@@ -48,7 +48,7 @@ def add_target_rules(P: Program, B: clingo.backend.Backend, T: list[tuple[clingo
 """
 Runs exact inference in order to answer the queries in `P`.
 """
-def exact(P: Program, use_bc: bool = False) -> list[tuple[float, float]]:
+def exact_py(P: Program, use_bc: bool = False) -> list[tuple[float, float]]:
   if len(P.CF) > 0: return exact_sym(P)
   elif use_bc: return exact_bc(P)
   return exact_smp(P)
