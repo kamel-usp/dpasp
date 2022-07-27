@@ -5,7 +5,7 @@ import pasp
 class TestExamples(PaspTest):
   def test_asia(self):
     P = pasp.parse("examples/asia.lp")
-    R = pasp.exact(P)
+    R = pasp.exact_py(P)
     # ℙ(trip)
     self.assertApproxEqual(R[0], [0.01, 0.01])
     # ℙ(tuberculosis | trip)
@@ -25,7 +25,7 @@ class TestExamples(PaspTest):
 
   def test_earthquake(self):
     P = pasp.parse("examples/earthquake.lp")
-    R = pasp.exact(P)
+    R = pasp.exact_py(P)
     # ℙ(alarm | burglary, earthquake)
     self.assertApproxEqual(R[0], [0.9,  0.9])
     # ℙ(alarm | not burglary, earthquake)
@@ -37,7 +37,7 @@ class TestExamples(PaspTest):
 
   def test_game(self):
     P = pasp.parse("examples/game.lp")
-    R = pasp.exact(P)
+    R = pasp.exact_py(P)
     # ℙ(wins(b))
     self.assertApproxEqual(R[0], [0.7,  1.0])
     # ℙ(wins(c))
@@ -45,7 +45,7 @@ class TestExamples(PaspTest):
 
   def test_insomnia(self):
     P = pasp.parse("examples/insomnia.lp")
-    R = pasp.exact(P)
+    R = pasp.exact_py(P)
     # ℙ(insomnia)
     self.assertApproxEqual(R[0], [0.3,  0.3])
     # ℙ(work)
@@ -59,7 +59,7 @@ class TestExamples(PaspTest):
 
   def test_prisoners(self):
     P = pasp.parse("examples/prisoners.lp")
-    R = pasp.exact(P)
+    R = pasp.exact_py(P)
     α = 19/40
     # ℙ(e1 | u)
     self.assertApproxEqual(R[0], [1.0/(1+2*(((1-α)/α)**2)), 1.0/(1+2*((α/(1-α))**2))])
@@ -76,7 +76,7 @@ class TestExamples(PaspTest):
 
   def test_simple(self):
     P = pasp.parse("examples/simple.lp")
-    R = pasp.exact(P)
+    R = pasp.exact_py(P)
     # ℙ(s(a))
     self.assertApproxEqual(R[0], [0.20, 0.20])
     # ℙ(s(b))
@@ -86,7 +86,7 @@ class TestExamples(PaspTest):
 
   def test_simpler(self):
     P = pasp.parse("examples/simpler.lp")
-    R = pasp.exact(P)
+    R = pasp.exact_py(P)
     # ℙ(r)
     self.assertApproxEqual(R[0], [0.5, 0.5])
     # ℙ(v)
@@ -94,7 +94,7 @@ class TestExamples(PaspTest):
 
   def test_smokers(self):
     P = pasp.parse("examples/smokers.lp")
-    R = pasp.exact(P)
+    R = pasp.exact_py(P)
     # ℙ(smokes(a))
     self.assertApproxEqual(R[0], [0.06, 0.06])
     # ℙ(smokes(b))
