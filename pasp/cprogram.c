@@ -1,19 +1,18 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#include <locale.h>
 #include <wchar.h>
 
 #define CPROGRAM_MODULE
 #include "cprogram.h"
 
-#ifdef PASP_DEBUG
 #include "cutils.h"
-#endif
 
-static inline void print_prob_fact(prob_fact_t *pf) { printf("%f::%s", pf->p, pf->f); }
+static inline void print_prob_fact(prob_fact_t *pf) { wprintf(L"%f::%s", pf->p, pf->f); }
 static inline void free_prob_fact_contents(prob_fact_t *pf) { if (pf) Py_DECREF(pf->f_obj); }
 static inline void free_prob_fact(prob_fact_t *pf) { free_prob_fact_contents(pf); free(pf); }
 
-static inline void print_credal_fact(credal_fact_t *cf) { printf("[%f, %f]::%s", cf->l, cf->u, cf->f); }
+static inline void print_credal_fact(credal_fact_t *cf) { wprintf(L"[%f, %f]::%s", cf->l, cf->u, cf->f); }
 static inline void free_credal_fact_contents(credal_fact_t *cf) { if (cf) Py_DECREF(cf->f_obj); }
 static inline void free_credal_fact(credal_fact_t *cf) { free_credal_fact_contents(cf); free(cf); }
 
@@ -23,21 +22,21 @@ static bool print_query_with_buffer(query_t *q, string_t *s) {
 
   fputws(L"ℙ(", stdout);
   for (i = 0; i < q->Q_n; ++i) {
-    if (!q->Q_s[i]) fputs("not ", stdout);
+    if (!q->Q_s[i]) fputws(L"not ", stdout);
     if (!string_from_symbol(q->Q[i], s)) return false;
-    printf("%s", s->s);
-    if (i != q->Q_n-1) fputs(", ", stdout);
+    wprintf(L"%s", s->s, q->Q[i]);
+    if (i != q->Q_n-1) fputws(L", ", stdout);
     else {
-      if (has_E) fputs(" | ", stdout);
-      else fputs(")", stdout);
+      if (has_E) fputws(L" | ", stdout);
+      else fputws(L")", stdout);
     }
   }
   for(i = 0; i < q->E_n; ++i) {
-    if (!q->E_s[i]) fputs("not ", stdout);
+    if (!q->E_s[i]) fputws(L"not ", stdout);
     if (!string_from_symbol(q->E[i], s)) return false;
-    printf("%s", s->s);
-    if (i != q->E_n-1) fputs(", ", stdout);
-    else fputs(")", stdout);
+    wprintf(L"%s", s->s, q->E[i]);
+    if (i != q->E_n-1) fputws(L", ", stdout);
+    else fputws(L")", stdout);
   }
 
   return true;
@@ -61,13 +60,13 @@ static inline void free_query(query_t *Q) { free_query_contents(Q); free(Q); }
 static void print_program(program_t *P) {
   size_t i;
   string_t s = {NULL, 0};
-  printf("<Logic Program:\n%s,\nProbabilistic Facts:\n", P->P);
-  for (i = 0; i < P->PF_n; ++i) { print_prob_fact(P->PF + i); fputs(", ", stdout); }
-  puts("\nCredal Facts:");
-  for (i = 0; i < P->CF_n; ++i) { print_credal_fact(P->CF + i); fputs(", ", stdout); }
-  puts("\nQueries:");
-  for (i = 0; i < P->Q_n; ++i) { print_query_with_buffer(P->Q + i, &s); fputs(", ", stdout); }
-  puts(">");
+  wprintf(L"<Logic Program:\n%s,\nProbabilistic Facts:\n", P->P);
+  for (i = 0; i < P->PF_n; ++i) { print_prob_fact(P->PF + i); fputws(L", ", stdout); }
+  fputws(L"\nCredal Facts:\n", stdout);
+  for (i = 0; i < P->CF_n; ++i) { print_credal_fact(P->CF + i); fputws(L", ", stdout); }
+  fputws(L"\nQueries:\n", stdout);
+  for (i = 0; i < P->Q_n; ++i) { print_query_with_buffer(P->Q + i, &s); fputws(L", ", stdout); }
+  fputws(L">\n", stdout);
   free(s.s);
 }
 static inline void free_program_contents(program_t *P) {
@@ -84,9 +83,9 @@ static inline void free_program_contents(program_t *P) {
 static inline void free_program(program_t *P) { free_program_contents(P); free(P); }
 
 static bool from_python_prob_fact(PyObject *py_pf, prob_fact_t *pf) {
-  PyObject *py_p, *py_f, *py_cl_f = py_f = py_p = NULL;
+  PyObject *py_p, *py_f, *py_cl_f, *py_cl_f_rep = py_cl_f = py_f = py_p = NULL;
   double p;
-  char *f;
+  const char *f;
   clingo_symbol_t cl_f;
   bool r = false;
 
@@ -106,19 +105,24 @@ static bool from_python_prob_fact(PyObject *py_pf, prob_fact_t *pf) {
     PyErr_SetString(PyExc_AttributeError, "could not access field f of supposed ProbFact object!");
     goto cleanup;
   }
-  f = PyBytes_AsString(py_f);
+  f = PyUnicode_AsUTF8(py_f);
   if (!f) {
     PyErr_SetString(PyExc_TypeError, "field f of ProbFact must be a string!");
     goto cleanup;
   }
 
   py_cl_f = PyObject_GetAttrString(py_pf, "cl_f");
-  if (py_cl_f) {
+  if (!py_cl_f) {
     PyErr_SetString(PyExc_AttributeError, "could not access field cl_f of supposed ProbFact object!");
     goto cleanup;
   }
-  cl_f = PyLong_AsUnsignedLong(py_cl_f);
-  if ((cl_f == -1) && !PyErr_Occurred()) {
+  py_cl_f_rep = PyObject_GetAttrString(py_cl_f, "_rep");
+  if (!py_cl_f_rep) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field _rep of supposed Symbol object!");
+    goto cleanup;
+  }
+  cl_f = PyLong_AsUnsignedLong(py_cl_f_rep);
+  if ((cl_f == (clingo_symbol_t) -1) && !PyErr_Occurred()) {
     PyErr_SetString(PyExc_TypeError, "field cl_f of ProbFact must be a Symbol!");
     goto cleanup;
   }
@@ -132,15 +136,16 @@ static bool from_python_prob_fact(PyObject *py_pf, prob_fact_t *pf) {
 cleanup:
   Py_XDECREF(py_p);
   if (!r) Py_XDECREF(py_f);
+  Py_XDECREF(py_cl_f_rep);
   Py_XDECREF(py_cl_f);
   return r;
 }
 
 static bool from_python_credal_fact(PyObject *py_cf, credal_fact_t *cf) {
-  PyObject *py_l, *py_u, *py_f, *py_cl_f = py_f = py_u = py_l = NULL;
+  PyObject *py_l, *py_u, *py_f, *py_cl_f, *py_cl_f_rep = py_cl_f = py_f = py_u = py_l = NULL;
   double l, u;
   clingo_symbol_t cl_f;
-  char *f;
+  const char *f;
   bool r;
 
   py_l = PyObject_GetAttrString(py_cf, "l");
@@ -170,19 +175,24 @@ static bool from_python_credal_fact(PyObject *py_cf, credal_fact_t *cf) {
     PyErr_SetString(PyExc_AttributeError, "could not access field f of supposed CredalFact object!");
     goto cleanup;
   }
-  f = PyBytes_AsString(py_f);
+  f = PyUnicode_AsUTF8(py_f);
   if (!f) {
     PyErr_SetString(PyExc_TypeError, "field f of CredalFact must be a string!");
     goto cleanup;
   }
 
   py_cl_f = PyObject_GetAttrString(py_cf, "cl_f");
-  if (py_cl_f) {
+  if (!py_cl_f) {
     PyErr_SetString(PyExc_AttributeError, "could not access field cl_f of supposed CredalFact object!");
     goto cleanup;
   }
+  py_cl_f_rep = PyObject_GetAttrString(py_cl_f, "_rep");
+  if (!py_cl_f_rep) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field _rep of supposed Symbol object!");
+    goto cleanup;
+  }
   cl_f = PyLong_AsUnsignedLong(py_cl_f);
-  if ((cl_f == -1) && !PyErr_Occurred()) {
+  if ((cl_f == (clingo_symbol_t) -1) && !PyErr_Occurred()) {
     PyErr_SetString(PyExc_TypeError, "field cl_f of CredalFact must be a Symbol!");
     goto cleanup;
   }
@@ -198,6 +208,7 @@ cleanup:
   Py_XDECREF(py_l);
   Py_XDECREF(py_u);
   if (!r) Py_XDECREF(py_f);
+  Py_XDECREF(py_cl_f_rep);
   Py_XDECREF(py_cl_f);
   return r;
 }
@@ -237,26 +248,34 @@ static bool from_python_query(PyObject *py_q, query_t *q) {
   if (!E_s) goto nomem;
 
   for (i = 0; i < q->Q_n; ++i) {
+    PyObject *rep = NULL;
     PyObject *t = PySequence_Fast(PySequence_Fast_GET_ITEM(py_Q_L, i), "elements of Query.Q must either be tuples or lists!");
     if (!t) goto cleanup;
     if (PySequence_Fast_GET_SIZE(t) < 2) {
       PyErr_SetString(PyExc_ValueError, "Query.Q elements must be tuples (or lists) of size 2!");
       goto cleanup;
     }
-    Q[i] = PyLong_AsUnsignedLong(PySequence_Fast_GET_ITEM(t, 0));
+    rep = PyObject_GetAttrString(PySequence_Fast_GET_ITEM(t, 0), "_rep");
+    if (!rep) goto cleanup;
+    Q[i] = PyLong_AsUnsignedLong(rep);
     Q_s[i] = PyLong_AsLong(PySequence_Fast_GET_ITEM(t, 1));
+    Py_DECREF(rep);
     Py_DECREF(t);
   }
 
   for (i = 0; i < q->E_n; ++i) {
+    PyObject *rep = NULL;
     PyObject *t = PySequence_Fast(PySequence_Fast_GET_ITEM(py_E_L, i), "elements of Query.E must either be tuples or lists!");
     if (!t) goto cleanup;
     if (PySequence_Fast_GET_SIZE(t) < 2) {
       PyErr_SetString(PyExc_ValueError, "Query.E elements must be tuples (or lists) of size 2!");
       goto cleanup;
     }
-    E[i] = PyLong_AsUnsignedLong(PySequence_Fast_GET_ITEM(t, 0));
+    rep = PyObject_GetAttrString(PySequence_Fast_GET_ITEM(t, 0), "_rep");
+    if (!rep) goto cleanup;
+    E[i] = PyLong_AsUnsignedLong(rep);
     E_s[i] = PyLong_AsLong(PySequence_Fast_GET_ITEM(t, 1));
+    Py_DECREF(rep);
     Py_DECREF(t);
   }
 
@@ -286,10 +305,10 @@ cleanup:
 static bool from_python_program(PyObject *py_P, program_t *P) {
   PyObject *py_P_P, *py_P_PF, *py_P_PF_L, *py_P_Q, *py_P_Q_L, *py_P_CF;
   PyObject *py_P_CF_L = py_P_CF = py_P_Q_L = py_P_Q = py_P_PF_L = py_P_PF = py_P_P = NULL;
-  char *P_P;
-  prob_fact_t *PF;
-  query_t *Q;
-  credal_fact_t *CF;
+  const char *P_P;
+  prob_fact_t *PF = NULL;
+  query_t *Q = NULL;
+  credal_fact_t *CF = NULL;
   size_t i;
 
   py_P_P = PyObject_GetAttrString(py_P, "P");
@@ -297,7 +316,7 @@ static bool from_python_program(PyObject *py_P, program_t *P) {
     PyErr_SetString(PyExc_AttributeError, "could not access field P of supposed Program object!");
     goto cleanup;
   }
-  P_P = PyBytes_AsString(py_P_P);
+  P_P = PyUnicode_AsUTF8(py_P_P);
   if (!P_P) {
     PyErr_SetString(PyExc_TypeError, "field P of Program must be a string!");
     goto cleanup;
@@ -419,6 +438,9 @@ PyMODINIT_FUNC PyInit_cprogram(void) {
     Py_DECREF(m);
     return NULL;
   }
+
+  setlocale(LC_CTYPE, "");
+
   return m;
 }
 

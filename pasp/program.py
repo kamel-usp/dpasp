@@ -22,7 +22,7 @@ A Probabilistic Fact (PF) is a (Logic Program) fact which is "chosen" with some 
 class ProbFact:
   "Constructs a PF out of a probability `p` and fact `f`."
   def __init__(self, p: str, f: str):
-    self.p = p
+    self.p = float(p)
     self.f = f
     # Construct a clingo.symbol.Function from this fact.
     self.cl_f = clingo.parse_term(f)
