@@ -1,8 +1,8 @@
-# PASP -- Credal Semantics for Probabilistic Answer Set Programming
+# PASP -- Probabilistic Answer Set Programming
 
-Prototype implementation of the credal semantics for probabilistic ASP [[1]](#ref-1)[[2]](#ref-2).
-Example probabilistic logic programs may be found in [`examples/`](examples/). Let's take a look at
-some examples to show how to do inference with this package.
+Prototype implementation for probabilistic ASP [[1]](#ref-1)[[2]](#ref-2). Example probabilistic
+logic programs may be found in [`examples/`](examples/). Let's take a look at some examples to show
+how to do inference with this package.
 
 ## Examples
 
@@ -151,13 +151,23 @@ of the PLP. This shows us that the probability of `sleep`, for instance, can tak
 ## Usage
 
 For now, `pasp` is only to be run locally. Clone this repository to a directory of your choice, say
-`pasp`. Change your working directory to it and then simply run
+`pasp/`. The package is written in Python, with the more critical parts written as C extensions. The
+only dependency from the C-side of `pasp` is [clingo](https://potassco.org/). Change your working
+directory to `pasp/` and then compile the C parts with the following command:
+
+```bash
+python setup.py build_ext --inplace
+```
+
+This will build the C modules in the `pasp/` directory. Import the package normally
 
 ```python
 import pasp
 ```
 
-to have access to the exported symbols in the package.
+to have access to the exported symbols in the package. For exact inference we provide a C
+(`pasp.exact`) and Python (`pasp.exact_py`) implementation. For now, only the Python version
+supports credal facts.
 
 ## References
 
