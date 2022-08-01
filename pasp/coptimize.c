@@ -1,10 +1,10 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
+#include <stdbool.h>
+
 #define COPTIMIZE_MODULE
 #include "coptimize.h"
-
-#define bool char
 
 /* The polynomial to evaluate, where X are the variables, S are the signs of each factor, C are the
  * coefficients, n are the number of terms and m are the number of variables. For example, the
@@ -22,8 +22,8 @@
  *
  * Note that |X| = m, |S| = n*m, and |C| = n.
  */
-static double f(double *X, bool *S, double *C, int n, int m) {
-  int i, j, u;
+static double f(double *X, bool *S, double *C, size_t n, size_t m) {
+  size_t i, j, u;
   double s, y;
   for (i = s = 0; i < n; ++i) {
     y = 1;
@@ -65,13 +65,13 @@ static double f(double *X, bool *S, double *C, int n, int m) {
  * override the objective function with g(X)=a(X).
  */
 static double bfca(double *X, bool *S_a, bool *S_b, double *C_a, double *C_b, double *L, double *U,
-    int n_a, int n_b, int m, int maxmin, int tries, bool smp) {
+    size_t n_a, size_t n_b, size_t m, int maxmin, size_t tries, bool smp) {
   double est, lest, best = 1;
   double a_l, a_u, b_l, b_u, l, u;
-  int i, t, r;
+  size_t i, t, r;
   for (t = 0; t < tries; ++t) {
     r = rand() % (1 << m);
-    for (i = 0; i < m; ++i) X[i] = (r >> i) % 2 ? L[i] : U[i];
+    for (i = 0; i < m; ++i) X[i] = ((r >> i) % 2) ? L[i] : U[i];
     est = 0;
     lest = -1;
     while (est > lest) {
@@ -118,28 +118,49 @@ static double bfca(double *X, bool *S_a, bool *S_b, double *C_a, double *C_b, do
  * determines (if true) that the function should override the objective function with g(X)=a(X)
  */
 static void bf(double *X, bool *S_a, bool *S_b, double *C_a, double *C_b, double *L, double *U,
-    int n_a, int n_b, int m, double *low, double *up, bool smp) {
-  int i, j;
-  long k;
+    size_t n_a, size_t n_b, size_t m, double *low, double *up, bool smp) {
+  size_t j;
+  unsigned long long int k, i;
   double a, b, y;
 
   *low = 1.0; *up = 0.0;
   k = 1 << m;
   for (i = 0; i < k; ++i) {
-    for (j = 0; j < m; ++j) X[j] = (i >> j) % 2 ? L[j] : U[j];
+    for (j = 0; j < m; ++j) X[j] = ((i >> j) % 2) ? L[j] : U[j];
+    a = f(X, S_a, C_a, n_a, m);
+    b = f(X, S_b, C_b, n_b, m);
     if (smp) {
-      a = f(X, S_a, C_a, n_a, m);
-      b = f(X, S_b, C_b, n_b, m);
       if (*low > a) *low = a;
       if (*up < b) *up = b;
     } else {
-      a = f(X, S_a, C_a, n_a, m);
-      b = f(X, S_b, C_b, n_b, m);
       y = a+b;
       if (y != 0) y = a/y;
       if (*low > y) *low = y;
       if (*up < y) *up = y;
     }
+  }
+}
+static void bf_minmax(double *X, bool *S_a, bool *S_b, bool* S_c, bool* S_d, double *C_a,
+    double *C_b, double *C_c, double *C_d, double *L, double *U, size_t n_a, size_t n_b,
+    size_t n_c, size_t n_d, size_t m, double *low, double *up) {
+  size_t j;
+  unsigned long long int k, i;
+  double a, b, c, d, y, z;
+
+  *low = 1.0; *up = 0.0;
+  k = 1 << m;
+  for (i = 0; i < k; ++i) {
+    for (j = 0; j < m; ++j) X[j] = ((i >> j) % 2) ? L[j] : U[j];
+    a = f(X, S_a, C_a, n_a, m);
+    b = f(X, S_b, C_b, n_b, m);
+    c = f(X, S_c, C_c, n_c, m);
+    d = f(X, S_d, C_d, n_d, m);
+    y = a+d;
+    if (y != 0) y = a/y;
+    z = b+c;
+    if (z != 0) z = b/z;
+    if (*low > y) *low = y;
+    if (*up < z) *up = z;
   }
 }
 
@@ -215,37 +236,39 @@ static PyObject* optimize_opt(PyObject *self, PyObject *args, int choice) {
 
 #define OPTIMIZE_FREE_ALL free(L); free(U); free(C_a); free(S_a); free(X); free(S_b); free(C_b)
 
-#define catch_val_error(var, msg) if ((var) == -1 && !PyErr_Occurred()) { \
+#define catch_val_error(var, type, msg) if ((var) == (type) -1 && !PyErr_Occurred()) { \
       OPTIMIZE_CLEAR_ALL; OPTIMIZE_FREE_ALL; PyErr_SetString(PyExc_ValueError, msg); return NULL; \
     }
 
   /* Get lower and upper probabilities from bounds B. */
   for (i = 0; i < m; ++i) {
     L[i] = PyFloat_AsDouble(PySequence_Fast_GET_ITEM(py_L, i));
-    catch_val_error(L[i], "argument L must be a list (or tuple) of floats!");
+    catch_val_error(L[i], double, "argument L must be a list (or tuple) of floats!");
     U[i] = PyFloat_AsDouble(PySequence_Fast_GET_ITEM(py_U, i));
-    catch_val_error(U[i], "argument U must be a list (or tuple) of floats!");
+    catch_val_error(U[i], double, "argument U must be a list (or tuple) of floats!");
   }
 
   /* Store values from C_a, S_a. */
   for (i = 0; i < n_a; ++i) {
     C_a[i] = PyFloat_AsDouble(PySequence_Fast_GET_ITEM(py_C_a, i));
-    catch_val_error(C_a[i], "argument C_a must be a list of floats!");
+    catch_val_error(C_a[i], double, "argument C_a must be a list of floats!");
     for (j = 0; j < m; ++j) {
-      int u = i*m+j;
-      S_a[u] = (bool) PyLong_AsLong(PySequence_Fast_GET_ITEM(py_S_a, u));
-      catch_val_error(S_a[u], "argument S_a must be a list of bools!");
+      int u = i*m+j, x;
+      x = PyLong_AsLong(PySequence_Fast_GET_ITEM(py_S_a, u));
+      catch_val_error(x, int, "argument S_a must be a list of bools!");
+      S_a[u] = (bool) x;
     }
   }
 
   /* Store values from C_b, S_b. */
   for (i = 0; i < n_b; ++i) {
     C_b[i] = PyFloat_AsDouble(PySequence_Fast_GET_ITEM(py_C_b, i));
-    catch_val_error(C_b[i], "argument C_b must be a list of floats!");
+    catch_val_error(C_b[i], double, "argument C_b must be a list of floats!");
     for (j = 0; j < m; ++j) {
-      int u = i*m+j;
-      S_b[u] = (bool) PyLong_AsLong(PySequence_Fast_GET_ITEM(py_S_b, u));
-      catch_val_error(S_b[u], "argument S_b must be a list of bools!");
+      int u = i*m+j, x;
+      x = PyLong_AsLong(PySequence_Fast_GET_ITEM(py_S_b, u));
+      catch_val_error(x, int, "argument S_b must be a list of bools!");
+      S_b[u] = (bool) x;
     }
   }
 
@@ -303,6 +326,7 @@ PyMODINIT_FUNC PyInit_coptimize(void) {
 
   PyCoptimize_API[PyCoptimize_bfca_NUM] = (void*) bfca;
   PyCoptimize_API[PyCoptimize_bf_NUM] = (void*) bf;
+  PyCoptimize_API[PyCoptimize_bf_minmax_NUM] = (void*) bf_minmax;
 
   c_api_object = PyCapsule_New((void*) PyCoptimize_API, "coptimize._C_API", NULL);
 
