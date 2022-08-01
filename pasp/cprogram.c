@@ -191,7 +191,7 @@ static bool from_python_credal_fact(PyObject *py_cf, credal_fact_t *cf) {
     PyErr_SetString(PyExc_AttributeError, "could not access field _rep of supposed Symbol object!");
     goto cleanup;
   }
-  cl_f = PyLong_AsUnsignedLong(py_cl_f);
+  cl_f = PyLong_AsUnsignedLong(py_cl_f_rep);
   if ((cl_f == (clingo_symbol_t) -1) && !PyErr_Occurred()) {
     PyErr_SetString(PyExc_TypeError, "field cl_f of CredalFact must be a Symbol!");
     goto cleanup;
