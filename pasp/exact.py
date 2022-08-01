@@ -280,9 +280,9 @@ def exact_sym(P: Program) -> list[tuple[float, float]]:
       m += 1
       for i, query in enumerate(queries):
         Q, E = query.Q, query.E
-        all_e = all(s.contains(e) if t else not s.contains(e) for e, t in E) # if e = true, check if e ∈ σ.
+        all_e = all(s.contains(e) == t for e, t in E) # if e = true, check if e ∈ σ.
         if not all_e: continue
-        all_q = all(s.contains(q) if t else not s.contains(q) for q, t in Q) # if q = true, check if q ∈ σ.
+        all_q = all(s.contains(q) == t for q, t in Q) # if q = true, check if q ∈ σ.
         count_e[i] += 1
         if all_q: cond_2[i] = True; count_q_e[i] += 1
         else: cond_4[i] = True; count_partial_q_e[i] += 1
