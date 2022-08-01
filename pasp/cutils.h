@@ -20,12 +20,22 @@ typedef struct string {
 #define PyCutils_string_free_RETURN void
 #define PyCutils_string_free_PROTO (string_t *s)
 
-#define PyCutils_API_pointers 2
+#define PyCutils_print_solution_NUM 2
+#define PyCutils_print_solution_RETURN bool
+#define PyCutils_print_solution_PROTO (const clingo_model_t *model)
+
+#define PyCutils_print_bin_NUM 3
+#define PyCutils_print_bin_RETURN void
+#define PyCutils_print_bin_PROTO (unsigned long long int x, size_t n)
+
+#define PyCutils_API_pointers 4
 
 #ifdef CUTILS_MODULE
 
 static PyCutils_string_from_symbol_RETURN string_from_symbol PyCutils_string_from_symbol_PROTO;
 static PyCutils_string_free_RETURN string_free PyCutils_string_free_PROTO;
+static PyCutils_print_solution_RETURN print_solution PyCutils_print_solution_PROTO;
+static PyCutils_print_bin_RETURN print_bin PyCutils_print_bin_PROTO;
 
 #else
 
@@ -35,6 +45,10 @@ static void** PyCutils_API;
   (*(PyCutils_string_from_symbol_RETURN (*)PyCutils_string_from_symbol_PROTO) PyCutils_API[PyCutils_string_from_symbol_NUM])
 #define string_free \
   (*(PyCutils_string_free_RETURN (*)PyCutils_string_free_PROTO) PyCutils_API[PyCutils_string_free_NUM])
+#define print_solution \
+  (*(PyCutils_print_solution_RETURN (*)PyCutils_print_solution_PROTO) PyCutils_API[PyCutils_print_solution_NUM])
+#define print_bin \
+  (*(PyCutils_print_bin_RETURN (*)PyCutils_print_bin_PROTO) PyCutils_API[PyCutils_print_bin_NUM])
 
 static int import_cutils(void) {
   PyCutils_API = (void**) PyCapsule_Import("cutils._C_API", 0);
