@@ -28,12 +28,15 @@ cprogram  = Extension("cprogram",
                       sources = ["pasp/cprogram.c"])
 cexact    = Extension("cexact",
                       libraries = ["m", "clingo"],
-                      depends = ["pasp/cprogram.c"],
+                      depends = ["pasp/cprogram.c", "pasp/coptimize.c"],
                       sources = ["pasp/cexact.c"])
+carray    = Extension("carray",
+                      depends = ["pasp/carray.h"],
+                      sources = ["pasp/carray.c"])
 
 setup(
   packages = find_packages(where = ".", include = ["pasp*"]),
   include_package_data = True,
-  ext_modules = [coptimize, cutils, cprogram, cexact],
+  ext_modules = [coptimize, cutils, cprogram, cexact, carray],
   cmdclass = {"test": TestCommand},
 )
