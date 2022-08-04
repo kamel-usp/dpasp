@@ -12,6 +12,12 @@ static inline void print_prob_fact(prob_fact_t *pf) { wprintf(L"%f::%s", pf->p, 
 static inline void free_prob_fact_contents(prob_fact_t *pf) { if (pf) Py_DECREF(pf->f_obj); }
 static inline void free_prob_fact(prob_fact_t *pf) { free_prob_fact_contents(pf); free(pf); }
 
+static inline void print_prob_rule(prob_rule_t *pr) { wprintf(L"%f::%s", pr->p, pr->f); }
+static inline void free_prob_rule_contents(prob_rule_t *pr) {
+  if (pr) { Py_DECREF(pr->f_obj); Py_XDECREF(pr->unify_obj); }
+}
+static inline void free_prob_rule(prob_rule_t *pr) { free_prob_rule_contents(pr); free(pr); }
+
 static inline void print_credal_fact(credal_fact_t *cf) { wprintf(L"[%f, %f]::%s", cf->l, cf->u, cf->f); }
 static inline void free_credal_fact_contents(credal_fact_t *cf) { if (cf) Py_DECREF(cf->f_obj); }
 static inline void free_credal_fact(credal_fact_t *cf) { free_credal_fact_contents(cf); free(cf); }
@@ -64,6 +70,8 @@ static void print_program(program_t *P) {
   for (i = 0; i < P->PF_n; ++i) { print_prob_fact(P->PF + i); fputws(L", ", stdout); }
   fputws(L"\nCredal Facts:\n", stdout);
   for (i = 0; i < P->CF_n; ++i) { print_credal_fact(P->CF + i); fputws(L", ", stdout); }
+  fputws(L"\nProbabilistic Rules:\n", stdout);
+  for (i = 0; i < P->PR_n; ++i) { print_prob_rule(P->PR + i); fputws(L", ", stdout); }
   fputws(L"\nQueries:\n", stdout);
   for (i = 0; i < P->Q_n; ++i) { print_query_with_buffer(P->Q + i, &s); fputws(L", ", stdout); }
   fputws(L">\n", stdout);
@@ -75,12 +83,86 @@ static inline void free_program_contents(program_t *P) {
   Py_DECREF(P->P_obj);
   for (i = 0; i < P->PF_n; ++i) free_prob_fact_contents(&P->PF[i]);
   free(P->PF);
+  for (i = 0; i < P->PR_n; ++i) free_prob_rule_contents(&P->PR[i]);
+  free(P->PR);
   for (i = 0; i < P->Q_n; ++i) free_query_contents(&P->Q[i]);
   free(P->Q);
   for (i = 0; i < P->CF_n; ++i) free_credal_fact_contents(&P->CF[i]);
   free(P->CF);
+  array_clingo_symbol_t_free_contents(&P->gr_PF);
+  array_char_free_contents(&P->gr_P);
+  array_double_free_contents(&P->gr_pr);
 }
 static inline void free_program(program_t *P) { free_program_contents(P); free(P); }
+
+static bool from_python_prob_rule(PyObject *py_pr, prob_rule_t *pr) {
+  PyObject *py_p, *py_f, *py_is_prop, *py_unify = py_is_prop = py_f = py_p = NULL;
+  double p;
+  const char *f;
+  long is_prop_l;
+  const char *unify = NULL;
+  bool r = false;
+
+  py_p = PyObject_GetAttrString(py_pr, "p");
+  if (!py_p) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field p of supposed ProbRule object!");
+    goto cleanup;
+  }
+  p = PyFloat_AsDouble(py_p);
+  if ((p == -1) && !PyErr_Occurred()) {
+    PyErr_SetString(PyExc_TypeError, "field p of ProbRule must be a floating-point number!");
+    goto cleanup;
+  }
+
+  py_f = PyObject_GetAttrString(py_pr, "f");
+  if (!py_f) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field f of supposed ProbRule object!");
+    goto cleanup;
+  }
+  f = PyUnicode_AsUTF8(py_f);
+  if (!f) {
+    PyErr_SetString(PyExc_TypeError, "field f of ProbRule must be a string!");
+    goto cleanup;
+  }
+
+  py_is_prop = PyObject_GetAttrString(py_pr, "is_prop");
+  if (!py_is_prop) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field is_prop of supposed ProbRule object!");
+    goto cleanup;
+  }
+  is_prop_l = PyLong_AsLong(py_is_prop);
+  if ((is_prop_l == (long) -1) && !PyErr_Occurred()) {
+    PyErr_SetString(PyExc_TypeError, "field is_prop of ProbRule must be a bool!");
+    goto cleanup;
+  }
+
+  if (!is_prop_l) {
+    py_unify = PyObject_GetAttrString(py_pr, "unify");
+    if (!py_unify) {
+      PyErr_SetString(PyExc_AttributeError, "could not access field unify of supposed ProbRule object!");
+      goto cleanup;
+    }
+    unify = PyUnicode_AsUTF8(py_unify);
+    if (!unify) {
+      PyErr_SetString(PyExc_TypeError, "field unify of ProbRule must be a string!");
+      goto cleanup;
+    }
+  }
+
+  pr->p = p;
+  pr->f = f;
+  pr->f_obj = py_f;
+  pr->is_prop = (bool) is_prop_l;
+  pr->unify = unify;
+  pr->unify_obj = py_unify;
+  r = true;
+
+cleanup:
+  Py_XDECREF(py_p);
+  if (!r) { Py_XDECREF(py_f); Py_XDECREF(py_unify); }
+  Py_XDECREF(py_is_prop);
+  return r;
+}
 
 static bool from_python_prob_fact(PyObject *py_pf, prob_fact_t *pf) {
   PyObject *py_p, *py_f, *py_cl_f, *py_cl_f_rep = py_cl_f = py_f = py_p = NULL;
@@ -303,10 +385,11 @@ cleanup:
 }
 
 static bool from_python_program(PyObject *py_P, program_t *P) {
-  PyObject *py_P_P, *py_P_PF, *py_P_PF_L, *py_P_Q, *py_P_Q_L, *py_P_CF;
-  PyObject *py_P_CF_L = py_P_CF = py_P_Q_L = py_P_Q = py_P_PF_L = py_P_PF = py_P_P = NULL;
+  PyObject *py_P_P, *py_P_PF, *py_P_PF_L, *py_P_PR, *py_P_PR_L, *py_P_Q, *py_P_Q_L, *py_P_CF;
+  PyObject *py_P_CF_L = py_P_CF = py_P_Q_L = py_P_Q = py_P_PR_L = py_P_PR = py_P_PF_L = py_P_PF = py_P_P = NULL;
   const char *P_P;
   prob_fact_t *PF = NULL;
+  prob_rule_t *PR = NULL;
   query_t *Q = NULL;
   credal_fact_t *CF = NULL;
   size_t i;
@@ -327,6 +410,11 @@ static bool from_python_program(PyObject *py_P, program_t *P) {
     PyErr_SetString(PyExc_AttributeError, "could not access field PF of supposed Program object!");
     goto cleanup;
   }
+  py_P_PR = PyObject_GetAttrString(py_P, "PR");
+  if (!py_P_PR) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field PR of supposed Program object!");
+    goto cleanup;
+  }
   py_P_Q = PyObject_GetAttrString(py_P, "Q");
   if (!py_P_Q) {
     PyErr_SetString(PyExc_AttributeError, "could not access field Q of supposed Program object!");
@@ -340,17 +428,22 @@ static bool from_python_program(PyObject *py_P, program_t *P) {
 
   py_P_PF_L = PySequence_Fast(py_P_PF, "field Program.PF must either be a list or tuple!");
   if (!py_P_PF_L) goto cleanup;
+  py_P_PR_L = PySequence_Fast(py_P_PR, "field Program.PR must either be a list or tuple!");
+  if (!py_P_PR_L) goto cleanup;
   py_P_Q_L = PySequence_Fast(py_P_Q, "field Program.Q must either be a list or tuple!");
   if (!py_P_Q_L) goto cleanup;
   py_P_CF_L = PySequence_Fast(py_P_CF, "field Program.CF must either be a list or tuple!");
   if (!py_P_CF_L) goto cleanup;
 
   P->PF_n = PySequence_Fast_GET_SIZE(py_P_PF_L);
+  P->PR_n = PySequence_Fast_GET_SIZE(py_P_PR_L);
   P->Q_n = PySequence_Fast_GET_SIZE(py_P_Q_L);
   P->CF_n = PySequence_Fast_GET_SIZE(py_P_CF_L);
 
   PF = (prob_fact_t*) malloc(P->PF_n*sizeof(prob_fact_t));
   if (!PF) goto nomem;
+  PR = (prob_rule_t*) malloc(P->PR_n*sizeof(prob_rule_t));
+  if (!PR) goto nomem;
   Q = (query_t*) malloc(P->Q_n*sizeof(query_t));
   if (!Q) goto nomem;
   CF = (credal_fact_t*) malloc(P->CF_n*sizeof(credal_fact_t));
@@ -358,6 +451,8 @@ static bool from_python_program(PyObject *py_P, program_t *P) {
 
   for (i = 0; i < P->PF_n; ++i)
     if (!from_python_prob_fact(PySequence_Fast_GET_ITEM(py_P_PF_L, i), &PF[i])) goto cleanup;
+  for (i = 0; i < P->PR_n; ++i)
+    if (!from_python_prob_rule(PySequence_Fast_GET_ITEM(py_P_PR_L, i), &PR[i])) goto cleanup;
   for (i = 0; i < P->Q_n; ++i)
     if (!from_python_query(PySequence_Fast_GET_ITEM(py_P_Q_L, i), &Q[i])) goto cleanup;
   for (i = 0; i < P->CF_n; ++i)
@@ -366,13 +461,22 @@ static bool from_python_program(PyObject *py_P, program_t *P) {
   P->P = P_P;
   P->P_obj = py_P_P;
   P->PF = PF;
+  P->PR = PR;
   P->Q = Q;
   P->CF = CF;
 
+  P->gr_PF.d = NULL; P->gr_PF.n = P->gr_PF.c = 0;
+  P->gr_P.d = NULL; P->gr_P.n = P->gr_P.c = 0;
+  P->gr_pr.d = NULL; P->gr_pr.n = P->gr_pr.c = 0;
+
+  P->py_P = py_P;
+
   Py_DECREF(py_P_PF);
+  Py_DECREF(py_P_PR);
   Py_DECREF(py_P_Q);
   Py_DECREF(py_P_CF);
   Py_DECREF(py_P_PF_L);
+  Py_DECREF(py_P_PR_L);
   Py_DECREF(py_P_Q_L);
   Py_DECREF(py_P_CF_L);
 
@@ -382,12 +486,15 @@ nomem:
 cleanup:
   Py_XDECREF(py_P_P);
   Py_XDECREF(py_P_PF);
+  Py_XDECREF(py_P_PR);
   Py_XDECREF(py_P_Q);
   Py_XDECREF(py_P_CF);
   Py_XDECREF(py_P_PF_L);
+  Py_XDECREF(py_P_PR_L);
   Py_XDECREF(py_P_Q_L);
   Py_XDECREF(py_P_CF_L);
   free(PF);
+  free(PR);
   free(Q);
   free(CF);
   return false;
@@ -413,6 +520,7 @@ PyMODINIT_FUNC PyInit_cprogram(void) {
   m = PyModule_Create(&cprogrammodule);
   if (!m) return NULL;
   if (import_cutils() < 0) return NULL;
+  if (import_carray() < 0) return NULL;
 
   PyCprogram_API[PyCprogram_print_prob_fact_NUM] = (void*) print_prob_fact;
   PyCprogram_API[PyCprogram_free_prob_fact_contents_NUM] = (void*) free_prob_fact_contents;
@@ -430,6 +538,9 @@ PyMODINIT_FUNC PyInit_cprogram(void) {
   PyCprogram_API[PyCprogram_from_python_credal_fact_NUM] = (void*) from_python_credal_fact;
   PyCprogram_API[PyCprogram_from_python_query_NUM] = (void*) from_python_query;
   PyCprogram_API[PyCprogram_from_python_program_NUM] = (void*) from_python_program;
+  PyCprogram_API[PyCprogram_print_prob_rule_NUM] = (void*) print_prob_rule;
+  PyCprogram_API[PyCprogram_free_prob_rule_contents_NUM] = (void*) free_prob_rule_contents;
+  PyCprogram_API[PyCprogram_free_prob_rule_NUM] = (void*) free_prob_rule;
 
   c_api_object = PyCapsule_New((void*) PyCprogram_API, "cprogram._C_API", NULL);
 

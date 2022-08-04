@@ -6,6 +6,7 @@ extern "C" {
 #endif
 
 #include <clingo.h>
+#include "carray.h"
 
 typedef struct prob_fact {
   double p;
@@ -13,6 +14,15 @@ typedef struct prob_fact {
   PyObject *f_obj;
   clingo_symbol_t cl_f;
 } prob_fact_t;
+
+typedef struct prob_rule {
+  double p;
+  const char *f;
+  PyObject *f_obj;
+  bool is_prop;
+  const char *unify;
+  PyObject *unify_obj;
+} prob_rule_t;
 
 typedef struct credal_fact {
   double l;
@@ -36,10 +46,18 @@ typedef struct program {
   PyObject *P_obj;
   prob_fact_t *PF;
   size_t PF_n;
+  prob_rule_t *PR;
+  size_t PR_n;
   query_t *Q;
   size_t Q_n;
   credal_fact_t *CF;
   size_t CF_n;
+
+  array_clingo_symbol_t_t gr_PF;
+  array_char_t gr_P;
+  array_double_t gr_pr;
+
+  PyObject *py_P;
 } program_t;
 
 #define PyCprogram_print_prob_fact_NUM 0
@@ -106,7 +124,23 @@ typedef struct program {
 #define PyCprogram_from_python_program_RETURN bool
 #define PyCprogram_from_python_program_PROTO (PyObject *py_P, program_t *P)
 
-#define PyCprogram_API_pointers 16
+#define PyCprogram_print_prob_rule_NUM 16
+#define PyCprogram_print_prob_rule_RETURN void
+#define PyCprogram_print_prob_rule_PROTO (prob_rule_t *pr)
+
+#define PyCprogram_free_prob_rule_contents_NUM 17
+#define PyCprogram_free_prob_rule_contents_RETURN void
+#define PyCprogram_free_prob_rule_contents_PROTO (prob_rule_t *pr)
+
+#define PyCprogram_free_prob_rule_NUM 18
+#define PyCprogram_free_prob_rule_RETURN void
+#define PyCprogram_free_prob_rule_PROTO (prob_rule_t *pr)
+
+#define PyCprogram_from_python_prob_rule_NUM 19
+#define PyCprogram_from_python_prob_rule_RETURN bool
+#define PyCprogram_from_python_prob_rule_PROTO (PyObject *py_pr, prob_rule_t *pr)
+
+#define PyCprogram_API_pointers 20
 
 #ifdef CPROGRAM_MODULE
 
@@ -126,6 +160,10 @@ static PyCprogram_from_python_prob_fact_RETURN from_python_prob_fact PyCprogram_
 static PyCprogram_from_python_credal_fact_RETURN from_python_credal_fact PyCprogram_from_python_credal_fact_PROTO;
 static PyCprogram_from_python_query_RETURN from_python_query PyCprogram_from_python_query_PROTO;
 static PyCprogram_from_python_program_RETURN from_python_program PyCprogram_from_python_program_PROTO;
+static PyCprogram_print_prob_rule_RETURN print_prob_rule PyCprogram_print_prob_rule_PROTO;
+static PyCprogram_free_prob_rule_contents_RETURN free_prob_rule_contents PyCprogram_free_prob_rule_contents_PROTO;
+static PyCprogram_free_prob_rule_RETURN free_prob_rule PyCprogram_free_prob_rule_PROTO;
+static PyCprogram_from_python_prob_rule_RETURN from_python_prob_rule PyCprogram_from_python_prob_rule_PROTO;
 
 #else
 
@@ -163,6 +201,14 @@ static void** PyCprogram_API;
   (*(PyCprogram_from_python_query_RETURN (*)PyCprogram_from_python_query_PROTO) PyCprogram_API[PyCprogram_from_python_query_NUM])
 #define from_python_program \
   (*(PyCprogram_from_python_program_RETURN (*)PyCprogram_from_python_program_PROTO) PyCprogram_API[PyCprogram_from_python_program_NUM])
+#define print_prob_rule \
+  (*(PyCprogram_print_prob_rule_RETURN (*)PyCprogram_print_prob_rule_PROTO) PyCprogram_API[PyCprogram_print_prob_rule_NUM])
+#define free_prob_rule_contents \
+  (*(PyCprogram_free_prob_rule_contents_RETURN (*)PyCprogram_free_prob_rule_contents_PROTO) PyCprogram_API[PyCprogram_free_prob_rule_contents_NUM])
+#define free_prob_rule \
+  (*(PyCprogram_free_prob_rule_RETURN (*)PyCprogram_free_prob_rule_PROTO) PyCprogram_API[PyCprogram_free_prob_rule_NUM])
+#define from_python_prob_rule \
+  (*(PyCprogram_from_python_prob_rule_RETURN (*)PyCprogram_from_python_prob_rule_PROTO) PyCprogram_API[PyCprogram_from_python_prob_rule_NUM])
 
 static int import_cprogram(void) {
   PyCprogram_API = (void**) PyCapsule_Import("cprogram._C_API", 0);
