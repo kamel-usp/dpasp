@@ -51,9 +51,13 @@ def tree_contains(x: lark.Tree, f) -> bool:
     return False
   return visit(x)
 
+def is_var(x: lark.Token): return isinstance(x, lark.Token) and x.type == "VAR"
+
 "Returns whether node `x` is not grounded, i.e. whether any node in the subtree of `x` is a variable."
 def is_nonground(x: lark.Tree) -> bool:
-  return tree_contains(x, lambda x: isinstance(x, lark.Token) and x.type == "VAR")
+  try: iter(x)
+  except TypeError: return tree_contains(x, is_var)
+  else: return any(tree_contains(x, is_var))
 "Returns whether node `x` is grounded, i.e. whether no node in the subtree of `x` is a variable."
 def is_ground(x: lark.Tree) -> bool: return not is_nonground(x)
 
@@ -81,6 +85,8 @@ def read(*files: str, G: lark.Lark = None, from_str: bool = False) -> lark.Tree:
   assert T is not None, "No file read."
   return T
 
+def getnths(X: iter, i: int) -> iter: return (x[i] for x in X)
+
 class Command(enum.Enum):
   FACT = 0
   PROB_FACT = 1
@@ -90,48 +96,68 @@ class Command(enum.Enum):
   CRED_FACT = 5
 
 class PLPTransformer(lark.Transformer):
+  # Terminals.
+  def CONST(self, a: list[lark.Token]) -> tuple[str, bool]: return a, True
+  def NEG(self, a: list[lark.Token]) -> tuple[str, bool]: return a, True
+  def VAR(self, a: list[lark.Token]) -> tuple[str, bool]: return a, False
+  def ID(self, a: list[lark.Token]) -> tuple[str, bool]: return a, True
+
   # Atoms.
-  def atom(self, a: list[lark.Tree]) -> str: return " ".join(a)
-  def gratom(self, a: list[lark.Tree]) -> str: return self.atom(a)
+  def atom(self, a: list[lark.Tree]) -> tuple[str, bool]:
+    return " ".join(getnths(a, 0)), all(getnths(a, 1)), True
+  def gratom(self, a: list[lark.Tree]) -> tuple[str, bool]: return self.atom(a)[0], True
 
   # Intervals.
-  def interval(self, i: list[lark.Token]) -> str: return "..".join(i)
+  def interval(self, i: list[lark.Token]) -> tuple[str, bool]:
+    return "..".join(getnths(i, 0)), all(getnths(i, 1))
 
   # Predicates.
-  def pred(self, p: list[str]) -> str:
-    sign = p[0].type == "NEG"
+  def pred(self, p: list[tuple[str, bool]]) -> tuple[str, bool]:
+    sign = p[0][0].type == "NEG"
     if sign:
       name, args = p[1], p[2:]
-      return f"not {name}({', '.join(args)})"
+      return f"not {name}({', '.join(getnths(args, 0))})"
     name, args = p[0], p[1:]
-    return f"{name}({', '.join(args)})"
-  def grpred(self, p: list[str]) -> str: return self.pred(p)
+    return f"{name[0]}({', '.join(getnths(args, 0))})", all(getnths(args, 1)), True
+  def grpred(self, p: list[tuple[str, bool]]) -> tuple[str, bool]: return self.pred(p)[0], True
 
   # Binary operations.
-  def bop(self, b: list[lark.Tree]) -> str: return " ".join(b)
+  def bop(self, b: list[lark.Tree]) -> str: return " ".join(getnths(b, 0)), all(getnths(b, 1)), False
 
   # Facts.
   def fact(self, f: list[lark.Tree]) -> tuple[Command, str]:
-    return Command.FACT, "".join(f) + "."
+    return Command.FACT, "".join(getnths(f, 0)) + "."
   def pfact(self, f: list[lark.Tree]) -> tuple[Command, ProbFact]:
-    return Command.PROB_FACT, ProbFact(*f)
+    return Command.PROB_FACT, ProbFact(f[0], f[1][0])
   def cfact(self, f: list[lark.Tree]) -> tuple[Command, CredalFact]:
-    return Command.CRED_FACT, CredalFact(*f)
+    return Command.CRED_FACT, CredalFact(str(f[0]), str(f[1]), f[2][0])
 
   # Heads.
-  def head(self, h: list[str]) -> str: return ", ".join(h)
+  def head(self, h: list[str]) -> str:
+    return ", ".join(getnths(h, 0)), all(getnths(h, 1))
+  def ohead(self, h: list[str]) -> str:
+    if len(h) == 1: return h[0][0], True, h[0][0], ()
+    u = h[1:]
+    return f"{h[0][0]}({', '.join(getnths(u, 0))})", all(getnths(u, 1)), h[0][0], list(x for x, t in zip(getnths(u, 0), getnths(u, 2)) if t)
   # Bodies.
-  def body(self, b: list[str]) -> str: return ", ".join(b)
+  def body(self, b: list[str]) -> str:
+    return ", ".join(getnths(b, 0)), all(getnths(b, 1)), list(x for x, t in zip(getnths(b, 0), getnths(b, 2)) if t)
 
   # Rules.
-  def rule(self, r: list[str]) -> tuple[Command, str]: return Command.RULE, f"{r[0]} :- {r[1]}."
+  def rule(self, r: list[str]) -> tuple[Command, str]:
+    return Command.RULE, f"{r[0][0]} :- {r[1][0]}."
   def prule(self, r: list[str]) -> tuple[Command, str, ProbFact]:
-    o = f"{r[1]} :- {r[2]}"
-    l, p = ProbRule(r[0], o)
-    return Command.PROB_RULE, f"{l}. % {r[0]}::{o}.", p
+    o = f"{r[1][0]} :- {r[2][0]}"
+    prop = r[1][1] and r[2][1]
+    if prop: return Command.PROB_RULE, ProbRule(r[0], o, is_prop = True)
+    h, b = r[1][3], r[2][2]
+    # Invariant: len(b) > 0, otherwise the rule is unsafe.
+    h_s, b_s = ", ".join(h) + ", " if len(h) > 0 else "", ", ".join(b)
+    u = f"{r[1][2]}(@unify(\"{r[0]}\", {r[1][2]}, {len(h)}, {len(b)}, {h_s}{b_s})) :- {r[2][0]}."
+    return Command.PROB_RULE, ProbRule(r[0], o, is_prop = False, unify = u)
 
   # Interpretations.
-  def interp(self, i: list[str]) -> list[str]: return i
+  def interp(self, i: list[str]) -> list[str]: return list(getnths(i, 0))
 
   # Queries.
   def query(self, q: list[list[str]]) -> tuple[str, Query]:
@@ -143,6 +169,8 @@ class PLPTransformer(lark.Transformer):
     P  = []
     # Probabilistic Facts.
     PF = []
+    # Probabilistic Rules.
+    PR = []
     # Queries.
     Q  = []
     # Credal Facts.
@@ -151,11 +179,15 @@ class PLPTransformer(lark.Transformer):
       if t == Command.FACT: P.append(c[0])
       elif t == Command.PROB_FACT: PF.append(c[0])
       elif t == Command.RULE: P.append(c[0])
-      elif t == Command.PROB_RULE: P.append(c[0]); PF.append(c[1])
+      elif t == Command.PROB_RULE:
+        PR.append(c[0])
+        if c[0].is_prop:
+          P.append(c[0].prop_f)
+          PF.append(c[0].prop_pf)
       elif t == Command.QUERY: Q.append(c[0])
       elif t == Command.CRED_FACT: CF.append(c[0])
       else: P.extend(c)
-    return Program("\n".join(P), PF, Q, CF)
+    return Program("\n".join(P), PF, PR, Q, CF)
 
 """Either parses `streams` as blocks of text containing the PLP when `from_str = True`, or
 interprets `streams` as filenames to be read and parsed into a `Program`."""

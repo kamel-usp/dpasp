@@ -41,16 +41,17 @@ cfact: "[" PROB "," PROB "]" "::" _fact
 
 // Head of a rule.
 head: (atom) ("," (atom))*
+ohead: CONST ("(" (atom | pred) ("," (atom | pred))* ")")?
 // Body of a rule.
 body: (atom | bop) ("," (atom | bop))*
 // Rule.
 _rule: head ":-" body "."
 rule: _rule
 // Probabilistic rule.
-prule: PROB "::" _rule
+prule: PROB "::" ohead ":-" body "."
 
 // Binary operation.
-bop: (ID | VAR | bop) OP (ID | VAR | bop)
+bop: ((ID | VAR | bop) OP (ID | VAR | bop)) | (VAR EQQ interval)
 
 // Query.
 interp: gratom ("," gratom)*
