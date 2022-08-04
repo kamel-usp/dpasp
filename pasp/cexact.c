@@ -7,39 +7,41 @@
 #include "carray.h"
 #include "coptimize.h"
 #include "cutils.h"
+#include "cground.h"
 
-static double prob_total_choice(prob_fact_t *phi, unsigned long long int theta, size_t n) {
-  size_t i = 0;
+static double prob_total_choice(prob_fact_t *phi, size_t n, array_double_t *gr_pr, unsigned long long int theta) {
+  size_t i = 0, m = gr_pr->n;
   double p = 1.0;
   bool t;
   for (; i < n; ++i) {
     t = (theta >> i) % 2;
     p *= t*phi[i].p + (!t)*(1.0-phi[i].p);
   }
+  for (i = 0; i < m; ++i) {
+    t = (theta >> (n + i)) % 2;
+    p *= t*(gr_pr->d[i]) + (!t)*(1.0-(gr_pr->d[i]));
+  }
   return p;
 }
 
 const clingo_part_t EXACT_DEFAULT_PARTS[] = {{"base", NULL, 0}};
 
-static void undef_atom_ignore(clingo_warning_t code, const char *msg, void *data) {
-  if (code == clingo_warning_atom_undefined) return;
-  wprintf(L"clingo | error code %d: %s\n", code, msg);
-  (void) data;
-}
-
-#define IS_TRUE(t, i) ((t >> i) % 2)
+#define IS_TRUE(t, i) (((t) >> (i)) % 2)
 
 static bool exact_enum(program_t *P, double (*R)[2]) {
   bool *cond_1, *cond_2, *cond_3, *cond_4 = cond_3 = cond_2 = cond_1 = NULL, exact_num_ok = false;
   size_t *count_q_e, *count_e, *count_partial_q_e = count_e = count_q_e = NULL;
   double *a, *b, *c, *d = c = b = a = NULL, p;
-  size_t Q_n = P->Q_n, total_choice_n = P->PF_n, Q_n_bytes = Q_n*sizeof(size_t), i;
+  size_t gr_n = P->gr_pr.n, err_code = 0;
+  size_t Q_n = P->Q_n, total_choice_n = P->PF_n + gr_n, Q_n_bytes = Q_n*sizeof(size_t), i;
   unsigned long long int theta, theta_max;
 
-  if (total_choice_n > 63) {
-    fputws(L"exact inference only supports up to 63 probabilistic objects (facts or propositional rules)!\n", stdout);
+  if (total_choice_n > 62) {
+    fputws(L"exact inference only supports up to 62 probabilistic objects (facts or propositional rules)!\n", stdout);
     return false;
   } else theta_max = 1 << total_choice_n;
+
+  err_code = 1;
 
   cond_1 = (bool*) malloc(Q_n*sizeof(bool));
   if (!cond_1) goto cleanup;
@@ -75,6 +77,7 @@ static bool exact_enum(program_t *P, double (*R)[2]) {
     clingo_id_t cfg_root, cfg_sub;
     clingo_backend_t *back = NULL;
 
+    err_code = 2;
     /* Create new clingo controller. */
     if (!clingo_control_new(NULL, 0, undef_atom_ignore, NULL, 20, &C))
       goto theta_cleanup;
@@ -86,9 +89,12 @@ static bool exact_enum(program_t *P, double (*R)[2]) {
     if (!clingo_configuration_value_set(cfg, cfg_sub, "0")) goto theta_cleanup;
     /* Add the purely logical part. */
     if (!clingo_control_add(C, "base", NULL, 0, P->P)) goto theta_cleanup;
+    /* Add grounded probabilistic rules. */
+    if (P->gr_P.d) if (!clingo_control_add(C, "base", NULL, 0, P->gr_P.d)) goto theta_cleanup;
     /* Get the control's backend. */
     if (!clingo_control_backend(C, &back)) goto theta_cleanup;
     /* Startup the backend. */
+    err_code = 3;
     if (!clingo_backend_begin(back)) goto theta_cleanup;
     /* Add the probabilistic facts according to the total rule. */
     for (i = 0; i < P->PF_n; ++i) {
@@ -97,8 +103,16 @@ static bool exact_enum(program_t *P, double (*R)[2]) {
       if (!clingo_backend_add_atom(back, &P->PF[i].cl_f, &a)) goto theta_cleanup;
       if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) goto theta_cleanup;
     }
+    /* Add the grounded probabilistic rules according to the total rule. */
+    for (i = 0; i < gr_n; ++i) {
+      clingo_atom_t a;
+      if (!IS_TRUE(theta, i + P->PF_n)) continue;
+      if (!clingo_backend_add_atom(back, &P->gr_PF.d[i], &a)) goto theta_cleanup;
+      if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) goto theta_cleanup;
+    }
     /* Cleanup backend. */
     if (!clingo_backend_end(back)) goto theta_cleanup;
+    err_code = 4;
     /* Ground atoms. */
     if(!clingo_control_ground(C, EXACT_DEFAULT_PARTS, 1, NULL, NULL)) goto theta_cleanup;
     /* Zero-initialize counters and flags. */
@@ -112,11 +126,14 @@ static bool exact_enum(program_t *P, double (*R)[2]) {
       clingo_solve_handle_t *handle;
       clingo_solve_result_bitset_t solve_ret;
       const clingo_model_t *M;
+
+      err_code = 5;
       /* Get the solve handle. */
       if (!clingo_control_solve(C, clingo_solve_mode_yield, NULL, 0, NULL, NULL, &handle))
         goto solve_error;
       /* Iterate over all stable models. */
       for (m = 0; true; ++m) {
+        err_code = 6;
         /* m is the number of stable models according to <P,θ>, i.e. m = |Γ(θ)|. */
         if (!clingo_solve_handle_resume(handle)) goto solve_error;
         if (!clingo_solve_handle_model(handle, &M)) goto solve_error;
@@ -125,6 +142,8 @@ static bool exact_enum(program_t *P, double (*R)[2]) {
             size_t j;
             query_t *q = (P->Q)+i;
             bool all_e = true, all_q = true, c;
+
+            err_code = 7;
             /* all_e? - are all evidence symbols E from query q in M? */
             for (j = 0; j < q->E_n; ++j) {
               if (!clingo_model_contains(M, q->E[j], &c)) goto solve_error;
@@ -142,6 +161,7 @@ static bool exact_enum(program_t *P, double (*R)[2]) {
           }
         } else break;
       }
+      err_code = 8;
       if (!clingo_solve_handle_get(handle, &solve_ret)) goto solve_error;
       goto solve_cleanup;
 solve_error:
@@ -149,8 +169,9 @@ solve_error:
 solve_cleanup:
       if (!(clingo_solve_handle_close(handle) && ok)) goto theta_cleanup;
     }
+    err_code = 9;
     /* Compute ℙ(θ). */
-    p = prob_total_choice(P->PF, theta, total_choice_n);
+    p = prob_total_choice(P->PF, P->PF_n, &P->gr_pr, theta);
     for (i = 0; i < Q_n; ++i) {
       /* Evaluate counts to judge whether cond_1 and/or cond_3 are true. */
       if (count_e[i] == m || P->Q[i].E_n == 0) {
@@ -172,6 +193,7 @@ theta_cleanup:
     goto cleanup;
   }
 
+  err_code = 10;
   for (i = 0; i < Q_n; ++i) {
     double _a = a[i], _b = b[i], _c = c[i], _d = d[i];
     if (P->Q[i].E_n == 0) R[i][0] = _a, R[i][1] = _b;
@@ -191,7 +213,7 @@ theta_cleanup:
   exact_num_ok = true;
 cleanup:
   if (clingo_error_code() != clingo_error_success)
-    wprintf(L"Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
+    wprintf(L"Clingo error %d|%lu: %s\n", clingo_error_code(), err_code, clingo_error_message());
   free(cond_1); free(cond_2); free(cond_3); free(cond_4);
   free(count_q_e); free(count_e); free(count_partial_q_e);
   free(a); free(b); free(c); free(d);
@@ -201,15 +223,15 @@ cleanup:
 static bool exact_sym(program_t *P, double (*R)[2]) {
   bool *cond_1, *cond_2, *cond_3, *cond_4 = cond_3 = cond_2 = cond_1 = NULL, exact_num_ok = false;
   size_t *count_q_e, *count_e, *count_partial_q_e = count_e = count_q_e = NULL;
-  size_t CF_n = P->CF_n, i, PF_n = P->PF_n;
-  size_t Q_n = P->Q_n, total_choice_n = PF_n+CF_n, Q_n_bytes = Q_n*sizeof(size_t);
+  size_t CF_n = P->CF_n, i, PF_n = P->PF_n, gr_n = P->gr_pr.n;
+  size_t Q_n = P->Q_n, total_choice_n = PF_n+CF_n+gr_n, Q_n_bytes = Q_n*sizeof(size_t);
   unsigned long long int theta, theta_max;
   double p, *X, *L_CF, *U_CF = L_CF = X = NULL;
   array_bool_t (*Pn)[4] = NULL;
   array_double_t (*K)[4] = NULL;
 
-  if (total_choice_n > 63) {
-    fputws(L"exact inference only supports up to 63 probabilistic/credal objects (facts or propositional rules)!\n", stdout);
+  if (total_choice_n > 62) {
+    fputws(L"exact inference only supports up to 62 probabilistic/credal objects (facts or propositional rules)!\n", stdout);
     return false;
   } else theta_max = 1 << total_choice_n;
 
@@ -268,6 +290,8 @@ static bool exact_sym(program_t *P, double (*R)[2]) {
     if (!clingo_configuration_value_set(cfg, cfg_sub, "0")) goto theta_cleanup;
     /* Add the purely logical part. */
     if (!clingo_control_add(C, "base", NULL, 0, P->P)) goto theta_cleanup;
+    /* Add grounded probabilistic rules. */
+    if (P->gr_P.d) if (!clingo_control_add(C, "base", NULL, 0, P->gr_P.d)) goto theta_cleanup;
     /* Get the control's backend. */
     if (!clingo_control_backend(C, &back)) goto theta_cleanup;
     /* Startup the backend. */
@@ -280,10 +304,17 @@ static bool exact_sym(program_t *P, double (*R)[2]) {
       if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) goto theta_cleanup;
     }
     /* Add the probabilistic facts according to the total rule. */
-    for (; i < total_choice_n; ++i) {
+    for (; i < CF_n+PF_n; ++i) {
       clingo_atom_t a;
       if (!IS_TRUE(theta, i)) continue;
       if (!clingo_backend_add_atom(back, &P->PF[i-CF_n].cl_f, &a)) goto theta_cleanup;
+      if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) goto theta_cleanup;
+    }
+    /* Add the grounded probabilistic rules according to the total rule. */
+    for (i = 0; i < gr_n; ++i) {
+      clingo_atom_t a;
+      if (!IS_TRUE(theta, i + CF_n + PF_n)) continue;
+      if (!clingo_backend_add_atom(back, &P->gr_PF.d[i], &a)) goto theta_cleanup;
       if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) goto theta_cleanup;
     }
     /* Cleanup backend. */
@@ -339,7 +370,7 @@ solve_cleanup:
       if (!(clingo_solve_handle_close(handle) && ok)) goto theta_cleanup;
     }
     /* Compute ℙ(θ). */
-    p = prob_total_choice(P->PF, theta >> CF_n, PF_n);
+    p = prob_total_choice(P->PF, PF_n, &P->gr_pr, theta >> CF_n);
     for (i = 0; i < Q_n; ++i) {
       size_t j;
       /* Evaluate counts to judge whether cond_1 and/or cond_3 are true. */
@@ -376,7 +407,6 @@ theta_cleanup:
       double a, b;
       bf(X, Pn[i][0].d, Pn[i][1].d, K[i][0].d, K[i][1].d, L_CF, U_CF, K[i][0].n, K[i][1].n, CF_n, &a, &b, true);
       R[i][0] = a, R[i][1] = b;
-      wprintf(L"> %f, %f\n", a, b);
     } else {
       size_t a = K[i][0].n, b = K[i][1].n, c = K[i][2].n, d = K[i][3].n;
       if (b + d == 0) {
@@ -433,25 +463,34 @@ static PyObject* exact_opt(PyObject *self, PyObject *args, int choice) {
   R = (double (*)[2]) malloc(p.Q_n*sizeof(*R));
   if (!R) goto cleanup;
 
+  if (needs_ground(&p)) {
+    if (!ground(&p)) goto cleanup;
+  }
+
   if (p.CF_n > 0) {
-    if (!exact_sym(&p, R)) goto cleanup;
+    if (!exact_sym(&p, R)) goto badval;
   } else {
-    if (!exact_enum(&p, R)) goto cleanup;
+    if (!exact_enum(&p, R)) goto badval;
   }
 
   py_R = PyTuple_New(p.Q_n);
-  if (!py_R) goto error;
-  for (i = 0; i < p.Q_n; ++i) {
+  if (!py_R) {
+    PyErr_SetString(PyExc_MemoryError, "could not create new py_R tuple!");
+    goto cleanup;
+  } for (i = 0; i < p.Q_n; ++i) {
     PyObject *py_R_i = PyTuple_New(2);
-    if (!py_R_i) goto error;
+    if (!py_R_i) {
+      PyErr_SetString(PyExc_MemoryError, "could not create new py_R_i tuple!");
+      goto cleanup;
+    }
     PyTuple_SET_ITEM(py_R_i, 0, PyFloat_FromDouble(R[i][0]));
     PyTuple_SET_ITEM(py_R_i, 1, PyFloat_FromDouble(R[i][1]));
     PyTuple_SET_ITEM(py_R, i, py_R_i);
   }
   r = true;
   goto cleanup;
-error:
-  PyErr_SetString(PyExc_MemoryError, "could not create new tuple!");
+badval:
+  PyErr_SetString(PyExc_Exception, "clingo or unknown error!");
 cleanup:
   free_program_contents(&p);
   free(R);
@@ -485,6 +524,7 @@ PyMODINIT_FUNC PyInit_cexact(void) {
   if (import_carray() < 0) return NULL;
   if (import_coptimize() < 0) return NULL;
   if (import_cutils() < 0) return NULL;
+  if (import_cground() < 0) return NULL;
 
   return m;
 }
