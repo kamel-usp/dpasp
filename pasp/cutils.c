@@ -4,6 +4,14 @@
 #define CUTILS_MODULE
 #include "cutils.h"
 
+static bool char_from_symbol(clingo_symbol_t sym, char *s, size_t n) {
+  size_t k;
+  if (!clingo_symbol_to_string_size(sym, &k)) return false;
+  if (n < k) return false;
+  if (!clingo_symbol_to_string(sym, s, k)) return false;
+  return true;
+}
+
 static bool string_from_symbol(clingo_symbol_t sym, string_t *buf) {
   bool r = true;
   char *s;
@@ -141,6 +149,12 @@ void print_bin(unsigned long long int x, size_t n) {
   while (n--) printf("%llu", (x >> n) % 2);
 }
 
+static void undef_atom_ignore(clingo_warning_t code, const char *msg, void *data) {
+  if (code == clingo_warning_atom_undefined) return;
+  printf("clingo | error code %d: %s\n", code, msg);
+  (void) data;
+}
+
 static PyMethodDef CutilsMethods[] = {
   {NULL, NULL, 0, NULL},
 };
@@ -165,6 +179,8 @@ PyMODINIT_FUNC PyInit_cutils(void) {
   PyCutils_API[PyCutils_string_free_NUM] = (void*) string_free;
   PyCutils_API[PyCutils_print_solution_NUM] = (void*) print_solution;
   PyCutils_API[PyCutils_print_bin_NUM] = (void*) print_bin;
+  PyCutils_API[PyCutils_undef_atom_ignore_NUM] = (void*) undef_atom_ignore;
+  PyCutils_API[PyCutils_char_from_symbol_NUM] = (void*) char_from_symbol;
 
   c_api_object = PyCapsule_New((void*) PyCutils_API, "cutils._C_API", NULL);
 
