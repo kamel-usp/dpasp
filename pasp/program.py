@@ -31,13 +31,20 @@ class ProbFact:
   def __repr__(self) -> str: return self.__str__()
 
 """
-A Probabilistic Rule (PR) is syntactic sugar for constructing a (Logic Program) rule equipped
-with a (unique) PF as one of its subgoals. To reflect this, `ProbRule` is actually a function that
-returns a rule and a PF.
+A Probabilistic Rule (PR) is a (Logic Program) rule that (when propositional) may be chosen with
+some probability `p`. A non-propositional PR must be grounded first.
 """
-def ProbRule(p: float, r: str) -> tuple[str, ProbFact]:
-  f = unique_fact()
-  return f"{r}, {f}", ProbFact(p, f)
+class ProbRule:
+  def __init__(self, p: str, f: str, is_prop: bool = True, unify: str = None):
+    self.p = p
+    self.f = f
+    self.is_prop = is_prop
+    self.unify = unify
+    self.prop_pf = ProbFact(p, unique_fact())
+    self.prop_f = f"{f}, {self.prop_pf.f}."
+
+  def __str__(self) -> str: return f"{self.p}::{self.f}"
+  def __repr__(self) -> str: return self.__str__()
 
 """
 A Credal Fact (CF) consists of a fact `f` attached to a probability interval `[l, u]`, where `l ∈
@@ -128,14 +135,19 @@ class Program:
   Constructs a PLP out of a logic program `P`, probabilistic facts `PF`, credal facts `CF` and
   queries `Q`.
   """
-  def __init__(self, P: str, PF: list[ProbFact], Q: list[Query], CF: list[CredalFact]):
+  def __init__(self, P: str, PF: list[ProbFact], PR: list[ProbRule], Q: list[Query], CF: list[CredalFact]):
     self.P = P
     self.PF = PF
+    self.PR = PR
     self.Q = Q
     self.CF = CF
 
+    self.gr_P = None
+    self.gr_PF = None
+    self.gr_pr = None
+
   def __str__(self) -> str:
-    return f"<Logic Program:\n{self.P},\nProbabilistic Facts:\n{self.PF},\nCredal Facts:\n{self.CF}\nQueries\n{self.Q}>"
+    return f"<Logic Program:\n{self.P},\nProbabilistic Facts:\n{self.PF},\nCredal Facts:\n{self.CF}\nProbabilistic Rules:\n{self.PR},\nQueries\n{self.Q}>"
   def __repr__(self) -> str: return self.__str__()
 
 REGEX_QUERY_NOT  = re.compile(r"\s*not\s*")
