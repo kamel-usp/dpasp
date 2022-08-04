@@ -33,10 +33,14 @@ cexact    = Extension("cexact",
 carray    = Extension("carray",
                       depends = ["pasp/carray.h"],
                       sources = ["pasp/carray.c"])
+cground   = Extension("cground",
+                      libraries = ["clingo"],
+                      depends = ["pasp/cutils.c", "pasp/cprogram.c", "pasp/cground.h"],
+                      sources = ["pasp/cground.c"])
 
 setup(
   packages = find_packages(where = ".", include = ["pasp*"]),
   include_package_data = True,
-  ext_modules = [coptimize, cutils, cprogram, cexact, carray],
+  ext_modules = [coptimize, cutils, cprogram, cexact, carray, cground],
   cmdclass = {"test": TestCommand},
 )
