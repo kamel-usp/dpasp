@@ -94,6 +94,7 @@ class Command(enum.Enum):
   PROB_RULE = 3
   QUERY = 4
   CRED_FACT = 5
+  CONSTRAINT = 6
 
 class PLPTransformer(lark.Transformer):
   # Terminals.
@@ -156,6 +157,10 @@ class PLPTransformer(lark.Transformer):
     u = f"{r[1][2]}(@unify(\"{r[0]}\", {r[1][2]}, {len(h)}, {len(b)}, {h_s}{b_s})) :- {r[2][0]}."
     return Command.PROB_RULE, ProbRule(r[0], o, is_prop = False, unify = u)
 
+  # Constraint.
+  def constraint(self, b: list[str]) -> tuple[Command, str]:
+    return Command.CONSTRAINT, f":- {b[0][0]}."
+
   # Interpretations.
   def interp(self, i: list[str]) -> list[str]: return list(getnths(i, 0))
 
@@ -186,6 +191,7 @@ class PLPTransformer(lark.Transformer):
           PF.append(c[0].prop_pf)
       elif t == Command.QUERY: Q.append(c[0])
       elif t == Command.CRED_FACT: CF.append(c[0])
+      elif t == Command.CONSTRAINT: P.append(c[0])
       else: P.extend(c)
     return Program("\n".join(P), PF, PR, Q, CF)
 

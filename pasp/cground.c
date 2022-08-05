@@ -10,14 +10,6 @@
 #define CGROUND_MODULE
 #include "cground.h"
 
-#define OBSERVER_INIT(o, rcb) \
-  o.init_program = NULL; o.begin_step = NULL; o.end_step = NULL; o.weight_rule = NULL; \
-  o.minimize = NULL; o.project = NULL; o.output_atom = NULL; o.output_term = NULL; \
-  o.output_csp = NULL; o.external = NULL; o.assume = NULL; o.heuristic = NULL; \
-  o.acyc_edge = NULL; o.theory_term_number = NULL; o.theory_term_string = NULL; \
-  o.theory_term_compound = NULL; o.theory_element = NULL; o.theory_atom = NULL; \
-  o.theory_atom_with_guard = NULL; o.rule = rcb;
-
 static inline size_t unique_ground_pfact_id() { static size_t i = 0; return i++; }
 
 const clingo_part_t GROUND_DEFAULT_PARTS[] = {{"base", NULL, 0}};

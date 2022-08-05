@@ -50,6 +50,9 @@ rule: _rule
 // Probabilistic rule.
 prule: PROB "::" ohead ":-" body "."
 
+// Constraint.
+constraint: ":-" body "."
+
 // Binary operation.
 bop: ((ID | VAR | bop) OP (ID | VAR | bop)) | (VAR EQQ interval)
 
@@ -57,7 +60,7 @@ bop: ((ID | VAR | bop) OP (ID | VAR | bop)) | (VAR EQQ interval)
 interp: gratom ("," gratom)*
 query: "#query(" interp ("|" interp)? ")" "."?
 
-plp: (fact | rule | pfact | prule | cfact | query)*
+plp: (fact | rule | pfact | prule | cfact | constraint | query)*
 
 COMMENT: "%" /[^\n]*/ NEWLINE
 
