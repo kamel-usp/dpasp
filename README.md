@@ -46,6 +46,13 @@ tuberculosis :- trip, a.
 % where a is a unique atom.
 ```
 
+`pasp` also supports probabilistic rules with variables (e.g. `0.3::f(X) :- g(X).`), although these
+are (for now) constrained to only normal rules. Internally, what `pasp` does is ground these rules
+and then apply the transformation mentioned above, adding a probabilistic fact to the body of the
+grounded rule. For efficiency reasons, subgoals in first-order probabilistic rules are only
+grounded following the non-probabilistic part of the program; otherwise, at every total choice a
+new grounded program would have to be generated.
+
 Let's take a look at the remaining lines in [`examples/asia.lp`](examples/asia.lp). To query for
 probabilities, we use a similar syntax to [PASOCS](https://arxiv.org/abs/2105.10908).
 
@@ -152,8 +159,10 @@ of the PLP. This shows us that the probability of `sleep`, for instance, can tak
 
 For now, `pasp` is only to be run locally. Clone this repository to a directory of your choice, say
 `pasp/`. The package is written in Python, with the more critical parts written as C extensions. The
-only dependency from the C-side of `pasp` is [clingo](https://potassco.org/). Change your working
-directory to `pasp/` and then compile the C parts with the following command:
+only dependency from the C-side of `pasp` is [clingo](https://potassco.org/), while the only
+dependencies from the Python side are the [clingo](https://potassco.org/) Python API and
+[lark](https://github.com/lark-parser/lark). Change your working directory to `pasp/` and then
+compile the C parts with the following command:
 
 ```bash
 python setup.py build_ext --inplace
@@ -165,9 +174,7 @@ This will build the C modules in the `pasp/` directory. Import the package norma
 import pasp
 ```
 
-to have access to the exported symbols in the package. For exact inference we provide a C
-(`pasp.exact`) and Python (`pasp.exact_py`) implementation. For now, only the Python version
-supports credal facts.
+to have access to the exported symbols in the package.
 
 ## References
 

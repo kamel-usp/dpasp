@@ -1,3 +1,7 @@
+###########################################################
+# THE FUNCTIONS CONTAINED WITHIN THIS FILE ARE DEPRECATED #
+###########################################################
+
 import itertools, math
 
 import numpy as np

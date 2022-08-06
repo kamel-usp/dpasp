@@ -1,4 +1,2 @@
 clingo
-scipy
-numpy
 lark
