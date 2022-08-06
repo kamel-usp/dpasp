@@ -27,12 +27,12 @@ static bool unify_callback(const clingo_location_t *loc, const char *name, const
   array_char_t *S = (array_char_t*) pack[1];
   array_double_t *Pr = (array_double_t*) pack[2];
   clingo_symbol_t ground_pf;
-  const char *pr_s;
+  const char *cl_str;
   double pr;
 
   /* Get probability of probabilistic rule. */
-  if (!clingo_symbol_string(args[0], &pr_s)) goto error;
-  pr = atof(pr_s);
+  if (!clingo_symbol_string(args[0], &cl_str)) goto error;
+  pr = atof(cl_str);
 
   /* Get number of head arguments. */
   if (!clingo_symbol_number(args[2], &h)) goto error;
@@ -54,10 +54,11 @@ static bool unify_callback(const clingo_location_t *loc, const char *name, const
   /* Fill out grounded body subgoals. */
   for (i = 0, j += h; i < b; ++i) {
     if (!clingo_symbol_to_string_size(args[i+j], &s_n)) goto error;
-    if (!clingo_symbol_to_string(args[i+j], s, s_n)) goto error;
-    s[s_n-1] = ','; s[s_n++] = ' ';
-    memcpy(line+cursor, s, s_n);
+    s_n -= 2;
+    if (!clingo_symbol_string(args[i+j], &cl_str)) goto error;
+    memcpy(line+cursor, cl_str, s_n);
     cursor += s_n;
+    line[cursor-1] = ','; line[cursor++] = ' ';
   }
   /* Add the probabilistic fact. */
   s_n = sprintf(s, "__unique_grid_%lu", unique_ground_pfact_id());

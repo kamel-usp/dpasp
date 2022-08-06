@@ -153,7 +153,7 @@ class PLPTransformer(lark.Transformer):
     if prop: return Command.PROB_RULE, ProbRule(r[0], o, is_prop = True)
     h, b = r[1][3], r[2][2]
     # Invariant: len(b) > 0, otherwise the rule is unsafe.
-    h_s, b_s = ", ".join(h) + ", " if len(h) > 0 else "", ", ".join(b)
+    h_s, b_s = ", ".join(h) + ", " if len(h) > 0 else "", ", ".join(map(lambda x: f"\"{x}\"", b))
     u = f"{r[1][2]}(@unify(\"{r[0]}\", {r[1][2]}, {len(h)}, {len(b)}, {h_s}{b_s})) :- {r[2][0]}."
     return Command.PROB_RULE, ProbRule(r[0], o, is_prop = False, unify = u)
 
