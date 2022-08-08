@@ -28,6 +28,54 @@ const clingo_part_t EXACT_DEFAULT_PARTS[] = {{"base", NULL, 0}};
 
 #define IS_TRUE(t, i) (((t) >> (i)) % 2)
 
+static inline bool setup_control(clingo_control_t **C) {
+  clingo_configuration_t *cfg = NULL;
+  clingo_id_t cfg_root, cfg_sub;
+  /* Create new clingo controller. */
+  if (!clingo_control_new(NULL, 0, undef_atom_ignore, NULL, 20, C)) return false;
+  /* Get the control's configuration. */
+  if (!clingo_control_configuration(*C, &cfg)) return false;
+  /* Set to enumerate all stable models. */
+  if (!clingo_configuration_root(cfg, &cfg_root)) return false;
+  if (!clingo_configuration_map_at(cfg, cfg_root, "solve.models", &cfg_sub)) return false;
+  if (!clingo_configuration_value_set(cfg, cfg_sub, "0")) return false;
+  return true;
+}
+
+static inline bool setup_conds(bool **cond_1, bool **cond_2, bool **cond_3, bool **cond_4, size_t n) {
+  *cond_1 = (bool*) malloc(n);
+  if (!(*cond_1)) return false;
+  *cond_2 = (bool*) malloc(n);
+  if (!(*cond_2)) return false;
+  *cond_3 = (bool*) malloc(n);
+  if (!(*cond_3)) return false;
+  *cond_4 = (bool*) malloc(n);
+  if (!(*cond_4)) return false;
+  return true;
+}
+
+static inline bool setup_counts(size_t **count_q_e, size_t **count_e, size_t **count_partial_q_e, size_t n) {
+  *count_q_e = (size_t*) malloc(n);
+  if (!(*count_q_e)) return false;
+  *count_e = (size_t*) malloc(n);
+  if (!(*count_e)) return false;
+  *count_partial_q_e = (size_t*) malloc(n);
+  if (!(*count_partial_q_e)) return false;
+  return true;
+}
+
+static inline bool setup_abcd(double **a, double **b, double **c, double **d, size_t n, size_t s) {
+  *a = (double*) calloc(n, s);
+  if (!(*a)) return false;
+  *b = (double*) calloc(n, s);
+  if (!(*b)) return false;
+  *c = (double*) calloc(n, s);
+  if (!(*c)) return false;
+  *d = (double*) calloc(n, s);
+  if (!(*d)) return false;
+  return true;
+}
+
 static bool exact_enum(program_t *P, double (*R)[2]) {
   bool *cond_1, *cond_2, *cond_3, *cond_4 = cond_3 = cond_2 = cond_1 = NULL, exact_num_ok = false;
   size_t *count_q_e, *count_e, *count_partial_q_e = count_e = count_q_e = NULL;
@@ -43,50 +91,19 @@ static bool exact_enum(program_t *P, double (*R)[2]) {
 
   err_code = 1;
 
-  cond_1 = (bool*) malloc(Q_n*sizeof(bool));
-  if (!cond_1) goto cleanup;
-  cond_2 = (bool*) malloc(Q_n*sizeof(bool));
-  if (!cond_2) goto cleanup;
-  cond_3 = (bool*) malloc(Q_n*sizeof(bool));
-  if (!cond_3) goto cleanup;
-  cond_4 = (bool*) malloc(Q_n*sizeof(bool));
-  if (!cond_4) goto cleanup;
-
-  count_q_e = (size_t*) malloc(Q_n_bytes);
-  if (!count_q_e) goto cleanup;
-  count_e = (size_t*) malloc(Q_n_bytes);
-  if (!count_e) goto cleanup;
-  count_partial_q_e = (size_t*) malloc(Q_n_bytes);
-  if (!count_partial_q_e) goto cleanup;
-
-  a = (double*) calloc(Q_n, sizeof(double));
-  if (!a) goto cleanup;
-  b = (double*) calloc(Q_n, sizeof(double));
-  if (!b) goto cleanup;
-  c = (double*) calloc(Q_n, sizeof(double));
-  if (!c) goto cleanup;
-  d = (double*) calloc(Q_n, sizeof(double));
-  if (!d) goto cleanup;
+  if (!setup_conds(&cond_1, &cond_2, &cond_3, &cond_4, Q_n*sizeof(bool))) goto cleanup;
+  if (!setup_counts(&count_q_e, &count_e, &count_partial_q_e, Q_n_bytes)) goto cleanup;
+  if (!setup_abcd(&a, &b, &c, &d, Q_n, sizeof(double))) goto cleanup;
 
   /* TODO: ground probabilistic rules with free variables. */
 
   for (theta = 0; theta < theta_max; ++theta) {
     size_t m;
     clingo_control_t *C = NULL;
-    clingo_configuration_t *cfg = NULL;
-    clingo_id_t cfg_root, cfg_sub;
     clingo_backend_t *back = NULL;
 
     err_code = 2;
-    /* Create new clingo controller. */
-    if (!clingo_control_new(NULL, 0, undef_atom_ignore, NULL, 20, &C))
-      goto theta_cleanup;
-    /* Get the control's configuration. */
-    if (!clingo_control_configuration(C, &cfg)) goto theta_cleanup;
-    /* Set to enumerate all stable models. */
-    if (!clingo_configuration_root(cfg, &cfg_root)) goto theta_cleanup;
-    if (!clingo_configuration_map_at(cfg, cfg_root, "solve.models", &cfg_sub)) goto theta_cleanup;
-    if (!clingo_configuration_value_set(cfg, cfg_sub, "0")) goto theta_cleanup;
+    if (!setup_control(&C)) goto theta_cleanup;
     /* Add the purely logical part. */
     if (!clingo_control_add(C, "base", NULL, 0, P->P)) goto theta_cleanup;
     /* Add grounded probabilistic rules. */
@@ -235,21 +252,8 @@ static bool exact_sym(program_t *P, double (*R)[2]) {
     return false;
   } else theta_max = 1 << total_choice_n;
 
-  cond_1 = (bool*) malloc(Q_n*sizeof(bool));
-  if (!cond_1) goto cleanup;
-  cond_2 = (bool*) malloc(Q_n*sizeof(bool));
-  if (!cond_2) goto cleanup;
-  cond_3 = (bool*) malloc(Q_n*sizeof(bool));
-  if (!cond_3) goto cleanup;
-  cond_4 = (bool*) malloc(Q_n*sizeof(bool));
-  if (!cond_4) goto cleanup;
-
-  count_q_e = (size_t*) malloc(Q_n_bytes);
-  if (!count_q_e) goto cleanup;
-  count_e = (size_t*) malloc(Q_n_bytes);
-  if (!count_e) goto cleanup;
-  count_partial_q_e = (size_t*) malloc(Q_n_bytes);
-  if (!count_partial_q_e) goto cleanup;
+  if (!setup_conds(&cond_1, &cond_2, &cond_3, &cond_4, Q_n*sizeof(bool))) goto cleanup;
+  if (!setup_counts(&count_q_e, &count_e, &count_partial_q_e, Q_n_bytes)) goto cleanup;
 
   L_CF = (double*) malloc(CF_n*sizeof(double));
   if (!L_CF) goto cleanup;
@@ -274,20 +278,10 @@ static bool exact_sym(program_t *P, double (*R)[2]) {
   for (theta = 0; theta < theta_max; ++theta) {
     size_t m;
     clingo_control_t *C = NULL;
-    clingo_configuration_t *cfg = NULL;
-    clingo_id_t cfg_root, cfg_sub;
     clingo_backend_t *back = NULL;
     unsigned long long int theta_CF = theta & ((1 << CF_n)-1);
 
-    /* Create new clingo controller. */
-    if (!clingo_control_new(NULL, 0, undef_atom_ignore, NULL, 20, &C))
-      goto theta_cleanup;
-    /* Get the control's configuration. */
-    if (!clingo_control_configuration(C, &cfg)) goto theta_cleanup;
-    /* Set to enumerate all stable models. */
-    if (!clingo_configuration_root(cfg, &cfg_root)) goto theta_cleanup;
-    if (!clingo_configuration_map_at(cfg, cfg_root, "solve.models", &cfg_sub)) goto theta_cleanup;
-    if (!clingo_configuration_value_set(cfg, cfg_sub, "0")) goto theta_cleanup;
+    if (!setup_control(&C)) goto theta_cleanup;
     /* Add the purely logical part. */
     if (!clingo_control_add(C, "base", NULL, 0, P->P)) goto theta_cleanup;
     /* Add grounded probabilistic rules. */
