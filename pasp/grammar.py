@@ -1,6 +1,6 @@
 import pathlib, enum
 import lark, lark.reconstruct
-from .program import ProbFact, Query, ProbRule, Program, CredalFact
+from .program import ProbFact, Query, ProbRule, Program, CredalFact, unique_fact
 
 "Returns whether a node in the AST is a fact."
 def is_fact(x: lark.Tree) -> bool: return isinstance(x, lark.Tree) and x.data == "fact"
@@ -135,14 +135,14 @@ class PLPTransformer(lark.Transformer):
 
   # Heads.
   def head(self, h: list[str]) -> str:
-    return ", ".join(getnths(h, 0)), all(getnths(h, 1))
+    return ", ".join(getnths(h, 0)), all(getnths(h, 1)), [x for x in getnths(h, 0)]
   def ohead(self, h: list[str]) -> str:
-    if len(h) == 1: return h[0][0], True, h[0][0], ()
+    if len(h) == 1: return str(h[0][0]), True, h[0][0], ()
     u = h[1:]
-    return f"{h[0][0]}({', '.join(getnths(u, 0))})", all(getnths(u, 1)), h[0][0], list(x for x, t in zip(getnths(u, 0), getnths(u, 2)) if t)
+    return f"{h[0][0]}({', '.join(getnths(u, 0))})", all(getnths(u, 1)), h[0][0], list(getnths(u, 0))
   # Bodies.
   def body(self, b: list[str]) -> str:
-    return ", ".join(getnths(b, 0)), all(getnths(b, 1)), list(x for x, t in zip(getnths(b, 0), getnths(b, 2)) if t)
+    return ", ".join(getnths(b, 0)), all(getnths(b, 1)), list(x for x, t in zip(getnths(b, 0), getnths(b, 2)) if t), list(getnths(b, 0))
 
   # Rules.
   def rule(self, r: list[str]) -> tuple[Command, str]:
@@ -181,22 +181,90 @@ class PLPTransformer(lark.Transformer):
     # Credal Facts.
     CF = []
     for t, *c in C:
-      if t == Command.FACT: P.append(c[0])
-      elif t == Command.PROB_FACT: PF.append(c[0])
-      elif t == Command.RULE: P.append(c[0])
+      if t == Command.FACT: P.extend(c)
+      elif t == Command.PROB_FACT: PF.extend(c)
+      elif t == Command.RULE: P.extend(c)
       elif t == Command.PROB_RULE:
-        PR.append(c[0])
-        if c[0].is_prop:
-          P.append(c[0].prop_f)
-          PF.append(c[0].prop_pf)
-      elif t == Command.QUERY: Q.append(c[0])
-      elif t == Command.CRED_FACT: CF.append(c[0])
-      elif t == Command.CONSTRAINT: P.append(c[0])
+        for r in c:
+          PR.append(r)
+          if r.is_prop:
+            P.append(r.prop_f)
+            PF.append(r.prop_pf)
+      elif t == Command.QUERY: Q.extend(c)
+      elif t == Command.CRED_FACT: CF.extend(c)
+      elif t == Command.CONSTRAINT: P.extend(c)
       else: P.extend(c)
+    return Program("\n".join(P), PF, PR, Q, CF)
+
+class PartialTransformer(PLPTransformer):
+  def __init__(self):
+    super().__init__(self)
+    self.PT = set()
+
+  def rule(self, r) -> tuple[Command, str, str, str]:
+    b1 = ", ".join(map(lambda x: f"not _{x[4:]}" if x[:4] == "not " else x, r[1][3]))
+    b2 = ", ".join(map(lambda x: x if x[:4] == "not " else f"_{x}", r[1][3]))
+    h1, h2 = ", ".join(r[0][2]), ", ".join(map(lambda x: f"_{x}", r[0][2]))
+    for h in r[0][2]: self.PT.add(h)
+    return Command.RULE, f"{h1} :- {b1}.", f"{h2} :- {b2}."
+
+  def prule(self, r) -> tuple[Command, str, str, str]:
+    tr_negs = lambda x: f"not _{x[4:]}" if x[:4] == "not " else x
+    tr_pos  = lambda x: x if x[:4] == "not " else f"_{x}"
+    b1 = ", ".join(map(tr_negs, r[2][3]))
+    b2 = ", ".join(map(tr_pos, r[2][3]))
+    h = r[1][0]
+    o1, o2 = f"{h} :- {b1}", f"_{h} :- {b2}"
+    self.PT.add(h)
+    prop = r[1][1] and r[2][1]
+    uid = unique_fact()
+    if prop: return Command.PROB_RULE, ProbRule(r[0], o1, ufact = uid), ProbRule(r[0], o2, ufact = uid)
+    h_a, b = r[1][3], r[2][2]
+    # Invariant: len(b) > 0, otherwise the rule is unsafe.
+    h_s = ", ".join(h_a) + ", " if len(h_a) > 0 else ""
+    b1_s = ", ".join(map(lambda x: f"\"not _{x[4:]}\"" if x[:4] == "not " else f"\"{x}\"", b))
+    b2_s = ", ".join(map(lambda x: f"\"{x}\"" if x[:4] == "not " else f"\"_{x}\"", b))
+    u1 = f"{r[1][2]}(@unify(\"{r[0]}\", {r[1][2]}, {len(h_a)}, {len(b)}, {h_s}{b1_s})) :- {b1}."
+    u2 = f"_{r[1][2]}(@unify(\"{r[0]}\", {r[1][2]}, {len(h_a)}, {len(b)}, {h_s}{b2_s})) :- {b2}."
+    r1 = ProbRule(r[0], o1, is_prop = False, unify = u1, ufact = uid)
+    r2 = ProbRule(r[0], o2, is_prop = False, unify = u2, ufact = uid)
+    self.PT.add(h)
+    return Command.PROB_RULE, r1, r2
+
+  def plp(self, C: list[tuple]) -> Program:
+    # Logic Program.
+    P  = []
+    # Probabilistic Facts.
+    PF = []
+    # Probabilistic Rules.
+    PR = []
+    # Queries.
+    Q  = []
+    # Credal Facts.
+    CF = []
+    for t, *c in C:
+      if t == Command.FACT: P.extend(c)
+      elif t == Command.PROB_FACT: PF.extend(c)
+      elif t == Command.RULE: P.extend(c)
+      elif t == Command.PROB_RULE:
+        print(c)
+        r1, r2 = c
+        PR.extend((r1, r2))
+        if r1.is_prop:
+          P.append(r1.prop_f)
+          PF.append(r1.prop_pf)
+        if r2.is_prop:
+          P.append(r2.prop_f)
+          PF.append(r2.prop_pf)
+      elif t == Command.QUERY: Q.extend(c)
+      elif t == Command.CRED_FACT: CF.extend(c)
+      elif t == Command.CONSTRAINT: P.extend(c)
+      else: P.extend(c)
+    P.extend(f"_{x} :- {x}." for x in self.PT)
     return Program("\n".join(P), PF, PR, Q, CF)
 
 """Either parses `streams` as blocks of text containing the PLP when `from_str = True`, or
 interprets `streams` as filenames to be read and parsed into a `Program`."""
-def parse(*files: str, G: lark.Lark = None, from_str: bool = False) -> Program:
-  return PLPTransformer().transform(read(*files, G = G, from_str = from_str))
+def parse(*files: str, G: lark.Lark = None, from_str: bool = False, semantics: str = "stable") -> Program:
+  return (PartialTransformer() if semantics == "partial" else PLPTransformer()).transform(read(*files, G = G, from_str = from_str))
 

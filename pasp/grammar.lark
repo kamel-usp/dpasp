@@ -40,7 +40,7 @@ pfact: PROB "::" _fact
 cfact: "[" PROB "," PROB "]" "::" _fact
 
 // Head of a rule.
-head: (atom) ("," (atom))*
+head: (atom) (("," | ";") (atom))*
 ohead: CONST ("(" (atom | pred) ("," (atom | pred))* ")")?
 // Body of a rule.
 body: (atom | bop) ("," (atom | bop))*
