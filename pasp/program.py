@@ -1,6 +1,6 @@
 # cython: c_string_type=unicode, c_string_encoding=utf8
 
-import re
+import enum
 
 import clingo
 from clingo.symbol import Function
@@ -64,7 +64,13 @@ class CredalFact:
 String formats a query tuple `(f, t)`, where `f` is an atom and `t` is whether it should appear
 in the program or not.
 """
-def _str_query_assignment(f: Function, t: bool) -> str: return str(f) if t else "not " + str(f)
+def _str_query_assignment(f: Function, t: bool) -> str:
+  return str(f) if t == Query.TERM_POS else ("not " + str(f) if t == Query.TERM_NEG else "undef " + str(f))
+
+class Semantics(enum.IntEnum):
+  STABLE = 0
+  PARTIAL = 1
+  LSTABLE = 2
 
 """
 A query is a meta-command within a PLP to signal the solver to produce and output a probabilistic
@@ -88,23 +94,28 @@ See concrete examples in the `/examples` folder.
 Semantics. Tuckey et al, 2021. URL: https://arxiv.org/abs/2105.10908.
 """
 class Query:
+  TERM_NEG = 0
+  TERM_POS = 1
+  TERM_UND = 2
+
   """
   Constructs a query from query (`Q`) and evidence (`E`) assignments.
 
   We use the notation `iter` as a type hinting to mean `Q` and `E` are iterables.
   """
-  def __init__(self, Q: iter, E: iter = []):
-    self.Q = [None for _ in range(len(Q))]
-    for i, q in enumerate(Q):
-      t, n = REGEX_QUERY_NOT.subn("", q)
-      self.Q[i] = (clingo.parse_term(t), n == 0)
-    self.E = [None for _ in range(len(E))]
-    for i, e in enumerate(E):
-      t, n = REGEX_QUERY_NOT.subn("", e)
-      self.E[i] = (clingo.parse_term(t), n == 0)
+  def __init__(self, Q: iter, E: iter = [], semantics: Semantics = Semantics.STABLE):
+    self.Q = [Query.parse_term(q, semantics) for q in Q]
+    self.E = [Query.parse_term(e, semantics) for e in E]
+
+  @staticmethod
+  def parse_term(u: str, s: Semantics):
+    if u.startswith("not "): t, n = u[4:], Query.TERM_NEG
+    elif u.startswith("undef "): t, n = u[6:], Query.TERM_UND
+    else: t, n = u, Query.TERM_POS
+    return clingo.parse_term(t), n, None if s == Semantics.STABLE else clingo.parse_term(f"_{t}")
 
   def __str__(self) -> str:
-    qs = f"ℙ({', '.join(_str_query_assignment(q, t) for q, t in self.Q)}"
+    qs = f"ℙ({', '.join(_str_query_assignment(q, t) for q, t, _ in self.Q)}"
     if len(self.E) != 0: return qs + f" | {', '.join(_str_query_assignment(e, t) for e, t in self.E)})"
     return qs + ")"
   def __repr__(self) -> str: return self.__str__()
@@ -135,7 +146,8 @@ class Program:
   Constructs a PLP out of a logic program `P`, probabilistic facts `PF`, credal facts `CF` and
   queries `Q`.
   """
-  def __init__(self, P: str, PF: list[ProbFact], PR: list[ProbRule], Q: list[Query], CF: list[CredalFact]):
+  def __init__(self, P: str, PF: list[ProbFact], PR: list[ProbRule], Q: list[Query], \
+               CF: list[CredalFact], semantics: Semantics = Semantics.STABLE):
     self.P = P
     self.PF = PF
     self.PR = PR
@@ -146,8 +158,8 @@ class Program:
     self.gr_PF = None
     self.gr_pr = None
 
+    self.semantics = semantics
+
   def __str__(self) -> str:
     return f"<Logic Program:\n{self.P},\nProbabilistic Facts:\n{self.PF},\nCredal Facts:\n{self.CF}\nProbabilistic Rules:\n{self.PR},\nQueries\n{self.Q}>"
   def __repr__(self) -> str: return self.__str__()
-
-REGEX_QUERY_NOT  = re.compile(r"\s*not\s*")

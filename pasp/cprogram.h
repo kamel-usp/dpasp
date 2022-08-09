@@ -32,14 +32,27 @@ typedef struct credal_fact {
   clingo_symbol_t cl_f;
 } credal_fact_t;
 
+#define QUERY_TERM_NEG 0
+#define QUERY_TERM_POS 1
+#define QUERY_TERM_UND 2
+
 typedef struct query {
   clingo_symbol_t *Q;
-  bool *Q_s;
+  char *Q_s;
   size_t Q_n;
+  clingo_symbol_t *Q_u; /* Potentially true auxiliary variables for partial semantics. */
+
   clingo_symbol_t *E;
-  bool *E_s;
+  char *E_s;
   size_t E_n;
+  clingo_symbol_t *E_u; /* Potentially true auxiliary variables for partial semantics. */
 } query_t;
+
+typedef enum semantics {
+  STABLE_SEMANTICS = 0,
+  PARTIAL_SEMANTICS = 1,
+  LSTABLE_SEMANTICS = 2,
+} semantics_t;
 
 typedef struct program {
   const char *P;
@@ -57,6 +70,7 @@ typedef struct program {
   array_char_t gr_P;
   array_double_t gr_pr;
 
+  semantics_t sem;
   PyObject *py_P;
 } program_t;
 
@@ -118,7 +132,7 @@ typedef struct program {
 
 #define PyCprogram_from_python_query_NUM 14
 #define PyCprogram_from_python_query_RETURN bool
-#define PyCprogram_from_python_query_PROTO (PyObject *py_q, query_t *q)
+#define PyCprogram_from_python_query_PROTO (PyObject *py_q, query_t *q, semantics_t sem)
 
 #define PyCprogram_from_python_program_NUM 15
 #define PyCprogram_from_python_program_RETURN bool

@@ -1,6 +1,6 @@
 import pathlib, enum
 import lark, lark.reconstruct
-from .program import ProbFact, Query, ProbRule, Program, CredalFact, unique_fact
+from .program import ProbFact, Query, ProbRule, Program, CredalFact, unique_fact, Semantics
 
 "Returns whether a node in the AST is a fact."
 def is_fact(x: lark.Tree) -> bool: return isinstance(x, lark.Tree) and x.data == "fact"
@@ -97,7 +97,12 @@ class Command(enum.Enum):
   CONSTRAINT = 6
 
 class PLPTransformer(lark.Transformer):
+  def __init__(self):
+    super().__init__()
+    self.semantics = Semantics.STABLE
+
   # Terminals.
+  def UND(self, a: list[lark.Token]) -> tuple[str, bool]: return a, True
   def CONST(self, a: list[lark.Token]) -> tuple[str, bool]: return a, True
   def NEG(self, a: list[lark.Token]) -> tuple[str, bool]: return a, True
   def VAR(self, a: list[lark.Token]) -> tuple[str, bool]: return a, False
@@ -166,7 +171,7 @@ class PLPTransformer(lark.Transformer):
 
   # Queries.
   def query(self, q: list[list[str]]) -> tuple[str, Query]:
-    return Command.QUERY, Query(q[0], q[1] if len(q) > 1 else [])
+    return Command.QUERY, Query(q[0], q[1] if len(q) > 1 else [], semantics = self.semantics)
 
   # Probabilistic Logic Program.
   def plp(self, C: list[tuple]) -> Program:
@@ -194,12 +199,13 @@ class PLPTransformer(lark.Transformer):
       elif t == Command.CRED_FACT: CF.extend(c)
       elif t == Command.CONSTRAINT: P.extend(c)
       else: P.extend(c)
-    return Program("\n".join(P), PF, PR, Q, CF)
+    return Program("\n".join(P), PF, PR, Q, CF, semantics = self.semantics)
 
 class PartialTransformer(PLPTransformer):
   def __init__(self):
-    super().__init__(self)
+    super().__init__()
     self.PT = set()
+    self.semantics = Semantics.LSTABLE
 
   def rule(self, r) -> tuple[Command, str, str, str]:
     b1 = ", ".join(map(lambda x: f"not _{x[4:]}" if x[:4] == "not " else x, r[1][3]))
@@ -247,7 +253,6 @@ class PartialTransformer(PLPTransformer):
       elif t == Command.PROB_FACT: PF.extend(c)
       elif t == Command.RULE: P.extend(c)
       elif t == Command.PROB_RULE:
-        print(c)
         r1, r2 = c
         PR.extend((r1, r2))
         if r1.is_prop:
@@ -255,13 +260,12 @@ class PartialTransformer(PLPTransformer):
           PF.append(r1.prop_pf)
         if r2.is_prop:
           P.append(r2.prop_f)
-          PF.append(r2.prop_pf)
       elif t == Command.QUERY: Q.extend(c)
       elif t == Command.CRED_FACT: CF.extend(c)
       elif t == Command.CONSTRAINT: P.extend(c)
       else: P.extend(c)
     P.extend(f"_{x} :- {x}." for x in self.PT)
-    return Program("\n".join(P), PF, PR, Q, CF)
+    return Program("\n".join(P), PF, PR, Q, CF, semantics = self.semantics)
 
 """Either parses `streams` as blocks of text containing the PLP when `from_str = True`, or
 interprets `streams` as filenames to be read and parsed into a `Program`."""

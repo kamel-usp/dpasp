@@ -1,4 +1,5 @@
 // Operator terminals.
+UND: "undef"
 NEG: "not"
 ADD: "+"
 SUB: "-"
@@ -20,9 +21,9 @@ CONST: /[a-z]\w*/
 VAR: /[A-Z]\w*/
 
 // Ground atom.
-gratom: NEG* (CONST | grpred)
+gratom: (NEG | UND)?  (CONST | grpred)
 // Ground predicates.
-grpred: NEG* CONST "(" (gratom | ID) ("," (gratom | ID | interval))* ")"
+grpred: (NEG | UND)? CONST "(" (gratom | ID) ("," (gratom | ID | interval))* ")"
 
 // Atom.
 atom: NEG* (CONST | VAR | pred)

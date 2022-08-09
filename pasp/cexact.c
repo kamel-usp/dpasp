@@ -76,11 +76,21 @@ static inline bool setup_abcd(double **a, double **b, double **c, double **d, si
   return true;
 }
 
+static inline bool neg_partial_cmp(bool x, bool _x, char s) {
+  /* See page 36 of the lparse manual. This is the negation of the truth value of an atom. */
+  if (s == QUERY_TERM_POS)
+    return !(x && _x);
+  else if (s == QUERY_TERM_UND)
+    return x || !_x; /* ≡ !(!x && _x) */
+  /* else s == QUERY_TERM_NEG */
+  return !_x; /* ≡ !(x && _x) && !(!x && _x); */
+}
+
 static bool exact_enum(program_t *P, double (*R)[2]) {
   bool *cond_1, *cond_2, *cond_3, *cond_4 = cond_3 = cond_2 = cond_1 = NULL, exact_num_ok = false;
   size_t *count_q_e, *count_e, *count_partial_q_e = count_e = count_q_e = NULL;
   size_t CF_n = P->CF_n, i, PF_n = P->PF_n, gr_n = P->gr_pr.n;
-  bool has_credal = CF_n > 0;
+  bool has_credal = CF_n > 0, is_partial = P->sem;
   double *a, *b, *c, *d = c = b = a = NULL;
   size_t err_code = 0, total_choice_n = has_credal ? PF_n+CF_n+gr_n : P->PF_n+gr_n;
   size_t Q_n = P->Q_n, Q_n_bytes = Q_n*sizeof(size_t);
@@ -197,13 +207,25 @@ static bool exact_enum(program_t *P, double (*R)[2]) {
             /* all_e? - are all evidence symbols E from query q in M? */
             for (j = 0; j < q->E_n; ++j) {
               if (!clingo_model_contains(M, q->E[j], &c)) goto solve_error;
-              if (c != q->E_s[j]) { all_e = false; break; }
+              if (is_partial) {
+                bool c_a;
+                if (!clingo_model_contains(M, q->E_u[j], &c_a)) goto solve_error;
+                if (neg_partial_cmp(c, c_a, q->E_s[j])) { all_e = false; break; }
+              } else {
+                if (c != q->E_s[j]) { all_e = false; break; }
+              }
             }
             if (!all_e) continue;
             /* all_q? - are all query symbols Q from query q in M? */
             for (j = 0; j < q->Q_n; ++j) {
               if (!clingo_model_contains(M, q->Q[j], &c)) goto solve_error;
-              if (c != q->Q_s[j]) { all_q = false; break; }
+              if (is_partial) {
+                bool c_a;
+                if (!clingo_model_contains(M, q->Q_u[j], &c_a)) goto solve_error;
+                if (neg_partial_cmp(c, c_a, q->Q_s[j])) { all_q = false; break; }
+              } else {
+                if (c != q->Q_s[j]) { all_q = false; break; }
+              }
             }
             ++count_e[i];
             if (all_q) { cond_2[i] = true; ++count_q_e[i]; }
@@ -261,30 +283,29 @@ theta_cleanup:
   }
 
   err_code = 10;
-  for (i = 0; i < Q_n; ++i)
+  for (i = 0; i < Q_n; ++i) {
     if (has_credal) {
       if (P->Q[i].E_n == 0) {
-        double a, b;
-        bf(X, Pn[i][0].d, Pn[i][1].d, K[i][0].d, K[i][1].d, L_CF, U_CF, K[i][0].n, K[i][1].n, CF_n, &a, &b, true);
-        R[i][0] = a, R[i][1] = b;
+        double _a, _b;
+        bf(X, Pn[i][0].d, Pn[i][1].d, K[i][0].d, K[i][1].d, L_CF, U_CF, K[i][0].n, K[i][1].n, CF_n, &_a, &_b, true);
+        R[i][0] = _a, R[i][1] = _b;
       } else {
-        size_t a = K[i][0].n, b = K[i][1].n, c = K[i][2].n, d = K[i][3].n;
-        if (b + d == 0) {
+        size_t _a = K[i][0].n, _b = K[i][1].n, _c = K[i][2].n, _d = K[i][3].n;
+        if (_b + _d == 0) {
           fputws(L"Fail: ℙ(E) = 0!\n", stdout);
           R[i][0] = -INFINITY, R[i][1] = INFINITY;
         } else {
-          if ((b + c == 0) && (d > 0)) R[i][0] = 0, R[i][1] = 0;
-          else if ((a + d == 0) && (b > 0)) R[i][0] = 1, R[i][1] = 1;
+          if ((_b + _c == 0) && (_d > 0)) R[i][0] = 0, R[i][1] = 0;
+          else if ((_a + _d == 0) && (_b > 0)) R[i][0] = 1, R[i][1] = 1;
           else {
             double min, max;
             bf_minmax(X, Pn[i][0].d, Pn[i][1].d, Pn[i][2].d, Pn[i][3].d, K[i][0].d, K[i][1].d,
-                K[i][2].d, K[i][3].d, L_CF, U_CF, a, b, c, d, CF_n, &min, &max);
-            /*bf(X, Pn[i][0].d, Pn[i][3].d, K[i][0].d, K[i][3].d, L_CF, U_CF, a, d, CF_n, &min, &max, false);*/
+                K[i][2].d, K[i][3].d, L_CF, U_CF, _a, _b, _c, _d, CF_n, &min, &max);
+            /*bf(X, Pn[i][0].d, Pn[i][3].d, K[i][0].d, K[i][3].d, L_CF, U_CF, _a, _d, CF_n, &min, &max, false);*/
             R[i][0] = min, R[i][1] = max;
           }
         }
       }
-      print_query(P->Q+i); wprintf(L" = [%f, %f]\n", R[i][0], R[i][1]);
     } else {
       double _a = a[i], _b = b[i], _c = c[i], _d = d[i];
       if (P->Q[i].E_n == 0) R[i][0] = _a, R[i][1] = _b;
@@ -298,8 +319,9 @@ theta_cleanup:
           else R[i][0] = _a/(_a + _d), R[i][1] = _b/(_b + _c);
         }
       }
-      print_query(P->Q+i); wprintf(L" = [%f, %f]\n", R[i][0], R[i][1]);
     }
+    print_query(P->Q+i); wprintf(L" = [%f, %f]\n", R[i][0], R[i][1]);
+  }
 
   exact_num_ok = true;
 cleanup:

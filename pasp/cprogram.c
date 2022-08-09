@@ -28,7 +28,8 @@ static bool print_query_with_buffer(query_t *q, string_t *s) {
 
   fputws(L"ℙ(", stdout);
   for (i = 0; i < q->Q_n; ++i) {
-    if (!q->Q_s[i]) fputws(L"not ", stdout);
+    if (q->Q_s[i] == QUERY_TERM_NEG) fputws(L"not ", stdout);
+    else if (q->Q_s[i] == QUERY_TERM_UND) fputws(L"undef ", stdout);
     if (!string_from_symbol(q->Q[i], s)) return false;
     wprintf(L"%s", s->s, q->Q[i]);
     if (i != q->Q_n-1) fputws(L", ", stdout);
@@ -38,7 +39,8 @@ static bool print_query_with_buffer(query_t *q, string_t *s) {
     }
   }
   for(i = 0; i < q->E_n; ++i) {
-    if (!q->E_s[i]) fputws(L"not ", stdout);
+    if (q->E_s[i] == QUERY_TERM_NEG) fputws(L"not ", stdout);
+    else if (q->E_s[i] == QUERY_TERM_UND) fputws(L"undef ", stdout);
     if (!string_from_symbol(q->E[i], s)) return false;
     wprintf(L"%s", s->s, q->E[i]);
     if (i != q->E_n-1) fputws(L", ", stdout);
@@ -58,8 +60,10 @@ static inline void free_query_contents(query_t *Q) {
   if (!Q) return;
   free(Q->Q);
   free(Q->Q_s);
+  free(Q->Q_u);
   free(Q->E);
   free(Q->E_s);
+  free(Q->E_u);
 }
 static inline void free_query(query_t *Q) { free_query_contents(Q); free(Q); }
 
@@ -295,10 +299,11 @@ cleanup:
   return r;
 }
 
-static bool from_python_query(PyObject *py_q, query_t *q) {
+static bool from_python_query(PyObject *py_q, query_t *q, semantics_t sem) {
   PyObject *py_Q, *py_E, *py_Q_L, *py_E_L = py_Q_L = py_E = py_Q = NULL;
   clingo_symbol_t *Q, *E = Q = NULL;
-  bool *Q_s, *E_s = Q_s = NULL;
+  clingo_symbol_t *Q_u, *E_u = Q_u = NULL;
+  char *Q_s, *E_s = Q_s = NULL;
   size_t i;
 
   py_Q = PyObject_GetAttrString(py_q, "Q");
@@ -324,23 +329,35 @@ static bool from_python_query(PyObject *py_q, query_t *q) {
   if (!Q) goto nomem;
   E = (clingo_symbol_t*) malloc(q->E_n*sizeof(clingo_symbol_t));
   if (!E) goto nomem;
-  Q_s = (bool*) malloc(q->Q_n*sizeof(bool));
+  Q_s = (char*) malloc(q->Q_n*sizeof(char));
   if (!Q_s) goto nomem;
-  E_s = (bool*) malloc(q->E_n*sizeof(bool));
+  E_s = (char*) malloc(q->E_n*sizeof(char));
   if (!E_s) goto nomem;
+  if (sem) {
+    Q_u = (clingo_symbol_t*) malloc(q->Q_n*sizeof(clingo_symbol_t));
+    if (!Q_u) goto nomem;
+    E_u = (clingo_symbol_t*) malloc(q->E_n*sizeof(clingo_symbol_t));
+    if (!E_u) goto nomem;
+  }
 
   for (i = 0; i < q->Q_n; ++i) {
     PyObject *rep = NULL;
     PyObject *t = PySequence_Fast(PySequence_Fast_GET_ITEM(py_Q_L, i), "elements of Query.Q must either be tuples or lists!");
     if (!t) goto cleanup;
-    if (PySequence_Fast_GET_SIZE(t) < 2) {
-      PyErr_SetString(PyExc_ValueError, "Query.Q elements must be tuples (or lists) of size 2!");
+    if (PySequence_Fast_GET_SIZE(t) < 3) {
+      PyErr_SetString(PyExc_ValueError, "Query.Q elements must be tuples (or lists) of size 3!");
       goto cleanup;
     }
     rep = PyObject_GetAttrString(PySequence_Fast_GET_ITEM(t, 0), "_rep");
     if (!rep) goto cleanup;
     Q[i] = PyLong_AsUnsignedLong(rep);
     Q_s[i] = PyLong_AsLong(PySequence_Fast_GET_ITEM(t, 1));
+    if (sem) { /* sem != (STABLE_SEMANTICS = 0) */
+      PyObject *u = PyObject_GetAttrString(PySequence_Fast_GET_ITEM(t, 2), "_rep");
+      if (!u) { Py_DECREF(rep); Py_DECREF(t); goto cleanup; }
+      Q_u[i] = PyLong_AsUnsignedLong(u);
+      Py_DECREF(u);
+    }
     Py_DECREF(rep);
     Py_DECREF(t);
   }
@@ -357,6 +374,12 @@ static bool from_python_query(PyObject *py_q, query_t *q) {
     if (!rep) goto cleanup;
     E[i] = PyLong_AsUnsignedLong(rep);
     E_s[i] = PyLong_AsLong(PySequence_Fast_GET_ITEM(t, 1));
+    if (sem) { /* sem != (STABLE_SEMANTICS = 0) */
+      PyObject *u = PyObject_GetAttrString(PySequence_Fast_GET_ITEM(t, 2), "_rep");
+      if (!u) { Py_DECREF(rep); Py_DECREF(t); goto cleanup; }
+      E_u[i] = PyLong_AsUnsignedLong(u);
+      Py_DECREF(u);
+    }
     Py_DECREF(rep);
     Py_DECREF(t);
   }
@@ -368,8 +391,10 @@ static bool from_python_query(PyObject *py_q, query_t *q) {
 
   q->Q = Q;
   q->Q_s = Q_s;
+  q->Q_u = Q_u;
   q->E = E;
   q->E_s = E_s;
+  q->E_u = E_u;
 
   return true;
 nomem:
@@ -381,17 +406,19 @@ cleanup:
   Py_XDECREF(py_E_L);
   free(Q); free(E);
   free(Q_s); free(E_s);
+  free(Q_u); free(E_u);
   return false;
 }
 
 static bool from_python_program(PyObject *py_P, program_t *P) {
-  PyObject *py_P_P, *py_P_PF, *py_P_PF_L, *py_P_PR, *py_P_PR_L, *py_P_Q, *py_P_Q_L, *py_P_CF;
+  PyObject *py_P_P, *py_P_PF, *py_P_PF_L, *py_P_PR, *py_P_PR_L, *py_P_Q, *py_P_Q_L, *py_P_CF, *py_P_sem = NULL;
   PyObject *py_P_CF_L = py_P_CF = py_P_Q_L = py_P_Q = py_P_PR_L = py_P_PR = py_P_PF_L = py_P_PF = py_P_P = NULL;
   const char *P_P;
   prob_fact_t *PF = NULL;
   prob_rule_t *PR = NULL;
   query_t *Q = NULL;
   credal_fact_t *CF = NULL;
+  semantics_t sem;
   size_t i;
 
   py_P_P = PyObject_GetAttrString(py_P, "P");
@@ -426,6 +453,17 @@ static bool from_python_program(PyObject *py_P, program_t *P) {
     goto cleanup;
   }
 
+  py_P_sem = PyObject_GetAttrString(py_P, "semantics");
+  if (!py_P_sem) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field semantics of supposed Program object!");
+    goto cleanup;
+  }
+  sem = PyLong_AsUnsignedLong(py_P_sem);
+  if ((sem == (unsigned long) -1) && !PyErr_Occurred()) {
+    PyErr_SetString(PyExc_TypeError, "field semantics of Program must be a Semantics!");
+    goto cleanup;
+  }
+
   py_P_PF_L = PySequence_Fast(py_P_PF, "field Program.PF must either be a list or tuple!");
   if (!py_P_PF_L) goto cleanup;
   py_P_PR_L = PySequence_Fast(py_P_PR, "field Program.PR must either be a list or tuple!");
@@ -454,7 +492,7 @@ static bool from_python_program(PyObject *py_P, program_t *P) {
   for (i = 0; i < P->PR_n; ++i)
     if (!from_python_prob_rule(PySequence_Fast_GET_ITEM(py_P_PR_L, i), &PR[i])) goto cleanup;
   for (i = 0; i < P->Q_n; ++i)
-    if (!from_python_query(PySequence_Fast_GET_ITEM(py_P_Q_L, i), &Q[i])) goto cleanup;
+    if (!from_python_query(PySequence_Fast_GET_ITEM(py_P_Q_L, i), &Q[i], sem)) goto cleanup;
   for (i = 0; i < P->CF_n; ++i)
     if (!from_python_credal_fact(PySequence_Fast_GET_ITEM(py_P_CF_L, i), &CF[i])) goto cleanup;
 
@@ -469,6 +507,7 @@ static bool from_python_program(PyObject *py_P, program_t *P) {
   P->gr_P.d = NULL; P->gr_P.n = P->gr_P.c = 0;
   P->gr_pr.d = NULL; P->gr_pr.n = P->gr_pr.c = 0;
 
+  P->sem = sem;
   P->py_P = py_P;
 
   Py_DECREF(py_P_PF);
@@ -479,6 +518,7 @@ static bool from_python_program(PyObject *py_P, program_t *P) {
   Py_DECREF(py_P_PR_L);
   Py_DECREF(py_P_Q_L);
   Py_DECREF(py_P_CF_L);
+  Py_DECREF(py_P_sem);
 
   return true;
 nomem:
@@ -493,6 +533,7 @@ cleanup:
   Py_XDECREF(py_P_PR_L);
   Py_XDECREF(py_P_Q_L);
   Py_XDECREF(py_P_CF_L);
+  Py_XDECREF(py_P_sem);
   free(PF);
   free(PR);
   free(Q);
