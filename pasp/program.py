@@ -116,7 +116,7 @@ class Query:
 
   def __str__(self) -> str:
     qs = f"ℙ({', '.join(_str_query_assignment(q, t) for q, t, _ in self.Q)}"
-    if len(self.E) != 0: return qs + f" | {', '.join(_str_query_assignment(e, t) for e, t in self.E)})"
+    if len(self.E) != 0: return qs + f" | {', '.join(_str_query_assignment(e, t) for e, t, _ in self.E)})"
     return qs + ")"
   def __repr__(self) -> str: return self.__str__()
 
