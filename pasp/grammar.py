@@ -158,8 +158,9 @@ class PLPTransformer(lark.Transformer):
     if prop: return Command.PROB_RULE, ProbRule(r[0], o, is_prop = True)
     h, b = r[1][3], r[2][2]
     # Invariant: len(b) > 0, otherwise the rule is unsafe.
-    h_s, b_s = ", ".join(h) + ", " if len(h) > 0 else "", ", ".join(map(lambda x: f"\"{x}\"", b))
-    u = f"{r[1][2]}(@unify(\"{r[0]}\", {r[1][2]}, {len(h)}, {len(b)}, {h_s}{b_s})) :- {r[2][0]}."
+    h_s = ", ".join(h) + ", " if len(h) > 0 else ""
+    b_s = ", ".join(map(lambda x: f"0, {x[4:]}" if x[:4] == "not " else f"1, {x}", b))
+    u = f"{r[1][2]}(@unify(\"{r[0]}\", {r[1][2]}, {len(h)}, {2*len(b)}, {h_s}{b_s})) :- {r[2][0]}."
     return Command.PROB_RULE, ProbRule(r[0], o, is_prop = False, unify = u)
 
   # Constraint.
@@ -209,14 +210,14 @@ class PartialTransformer(PLPTransformer):
 
   def rule(self, r) -> tuple[Command, str, str, str]:
     b1 = ", ".join(map(lambda x: f"not _{x[4:]}" if x[:4] == "not " else x, r[1][3]))
-    b2 = ", ".join(map(lambda x: x if x[:4] == "not " else f"_{x}", r[1][3]))
+    b2 = ", ".join(map(lambda x: x if (x[:4] == "not ") or ("=" in x) else f"_{x}", r[1][3]))
     h1, h2 = ", ".join(r[0][2]), ", ".join(map(lambda x: f"_{x}", r[0][2]))
     for h in r[0][2]: self.PT.add(h)
     return Command.RULE, f"{h1} :- {b1}.", f"{h2} :- {b2}."
 
   def prule(self, r) -> tuple[Command, str, str, str]:
     tr_negs = lambda x: f"not _{x[4:]}" if x[:4] == "not " else x
-    tr_pos  = lambda x: x if x[:4] == "not " else f"_{x}"
+    tr_pos  = lambda x: x if (x[:4] == "not ") or ("=" in x) else f"_{x}"
     b1 = ", ".join(map(tr_negs, r[2][3]))
     b2 = ", ".join(map(tr_pos, r[2][3]))
     h = r[1][0]
@@ -228,10 +229,10 @@ class PartialTransformer(PLPTransformer):
     h_a, b = r[1][3], r[2][2]
     # Invariant: len(b) > 0, otherwise the rule is unsafe.
     h_s = ", ".join(h_a) + ", " if len(h_a) > 0 else ""
-    b1_s = ", ".join(map(lambda x: f"\"not _{x[4:]}\"" if x[:4] == "not " else f"\"{x}\"", b))
-    b2_s = ", ".join(map(lambda x: f"\"{x}\"" if x[:4] == "not " else f"\"_{x}\"", b))
-    u1 = f"{r[1][2]}(@unify(\"{r[0]}\", {r[1][2]}, {len(h_a)}, {len(b)}, {h_s}{b1_s})) :- {b1}."
-    u2 = f"_{r[1][2]}(@unify(\"{r[0]}\", {r[1][2]}, {len(h_a)}, {len(b)}, {h_s}{b2_s})) :- {b2}."
+    b1_s = ", ".join(map(lambda x: f"0, _{x[4:]}" if x[:4] == "not " else f"1, {x}", b))
+    b2_s = ", ".join(map(lambda x: f"0, {x[4:]}" if x[:4] == "not " else f"1, _{x}", b))
+    u1 = f"{r[1][2]}(@unify(\"{r[0]}\", {r[1][2]}, {len(h_a)}, {2*len(b)}, {h_s}{b1_s})) :- {b1}."
+    u2 = f"_{r[1][2]}(@unify(\"{r[0]}\", _{r[1][2]}, {len(h_a)}, {2*len(b)}, {h_s}{b2_s})) :- {b2}."
     r1 = ProbRule(r[0], o1, is_prop = False, unify = u1, ufact = uid)
     r2 = ProbRule(r[0], o2, is_prop = False, unify = u2, ufact = uid)
     self.PT.add(h)

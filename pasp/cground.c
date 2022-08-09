@@ -52,11 +52,13 @@ static bool unify_callback(const clingo_location_t *loc, const char *name, const
   }
   strcat(line, ") :- "); cursor += 4;
   /* Fill out grounded body subgoals. */
-  for (i = 0, j += h; i < b; ++i) {
-    if (!clingo_symbol_to_string_size(args[i+j], &s_n)) goto error;
-    s_n -= 2;
-    if (!clingo_symbol_string(args[i+j], &cl_str)) goto error;
-    memcpy(line+cursor, cl_str, s_n);
+  for (i = 0, j += h; i < b; i += 2) {
+    int pos;
+    if (!clingo_symbol_number(args[i+j], &pos)) goto error;
+    if (!clingo_symbol_to_string_size(args[i+j+1], &s_n)) goto error;
+    if (!clingo_symbol_to_string(args[i+j+1], s, s_n)) goto error;
+    if (!pos) { memcpy(line+cursor, "not ", 4); cursor += 4; }
+    memcpy(line+cursor, s, s_n);
     cursor += s_n;
     line[cursor-1] = ','; line[cursor++] = ' ';
   }
