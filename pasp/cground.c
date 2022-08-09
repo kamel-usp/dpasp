@@ -182,7 +182,22 @@ static bool needs_ground(program_t *P) {
   return false;
 }
 
+static PyObject* py_ground(PyObject *self, PyObject *args) {
+  program_t p;
+  PyObject *py_P = NULL;
+
+  if (!PyArg_ParseTuple(args, "O", &py_P)) goto cleanup;
+  if (!from_python_program(py_P, &p)) goto cleanup;
+
+  if (needs_ground(&p)) if (!ground(&p)) goto cleanup;
+
+cleanup:
+  free_program_contents(&p);
+  return py_P;
+}
+
 static PyMethodDef CgroundMethods[] = {
+  {"ground", py_ground, METH_VARARGS, "Pre-grounds probabilistic rules."},
   {NULL, NULL, 0, NULL},
 };
 
