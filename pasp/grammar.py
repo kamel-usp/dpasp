@@ -95,6 +95,7 @@ class Command(enum.Enum):
   QUERY = 4
   CRED_FACT = 5
   CONSTRAINT = 6
+  CONSTDEF = 7
 
 class PLPTransformer(lark.Transformer):
   def __init__(self):
@@ -107,6 +108,7 @@ class PLPTransformer(lark.Transformer):
   def NEG(self, a: list[lark.Token]) -> tuple[str, bool]: return a, True
   def VAR(self, a: list[lark.Token]) -> tuple[str, bool]: return a, False
   def ID(self, a: list[lark.Token]) -> tuple[str, bool]: return a, True
+  def OP(self, a: list[lark.Token]) -> tuple[str, bool]: return a, True
 
   # Atoms.
   def atom(self, a: list[lark.Tree]) -> tuple[str, bool]:
@@ -128,7 +130,8 @@ class PLPTransformer(lark.Transformer):
   def grpred(self, p: list[tuple[str, bool]]) -> tuple[str, bool]: return self.pred(p)[0], True
 
   # Binary operations.
-  def bop(self, b: list[lark.Tree]) -> str: return " ".join(getnths(b, 0)), all(getnths(b, 1)), False
+  def bop(self, b: list[lark.Tree]) -> str:
+    return " ".join(getnths(b, 0)), all(getnths(b, 1)), False
 
   # Facts.
   def fact(self, f: list[lark.Tree]) -> tuple[Command, str]:
@@ -173,6 +176,9 @@ class PLPTransformer(lark.Transformer):
   # Queries.
   def query(self, q: list[list[str]]) -> tuple[str, Query]:
     return Command.QUERY, Query(q[0], q[1] if len(q) > 1 else [], semantics = self.semantics)
+
+  def constdef(self, t: list) -> tuple[Command, str]:
+    return Command.CONSTDEF, f"#const {t[0][0]} = {t[1][0]}."
 
   # Probabilistic Logic Program.
   def plp(self, C: list[tuple]) -> Program:

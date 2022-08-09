@@ -6,6 +6,7 @@ SUB: "-"
 DIV: "/"
 MOD: "\\"
 MUL: "*"
+NEQ: "!="
 EQQ: "="
 // Operators.
 OP: ADD
@@ -14,6 +15,7 @@ OP: ADD
   | MOD
   | MUL
   | EQQ
+  | NEQ
 
 // Constants.
 CONST: /[a-z]\w*/
@@ -28,7 +30,7 @@ grpred: (NEG | UND)? CONST "(" (gratom | ID) ("," (gratom | ID | interval))* ")"
 // Atom.
 atom: NEG* (CONST | VAR | pred)
 // Interval.
-interval: ID ".." ID
+interval: (CONST | ID) ".." (CONST | ID)
 // Predicate.
 pred: NEG* CONST "(" (atom | ID | interval) ("," (atom | ID | interval))* ")"
 
@@ -61,7 +63,10 @@ bop: ((ID | VAR | bop) OP (ID | VAR | bop)) | (VAR EQQ interval)
 interp: gratom ("," gratom)*
 query: "#query(" interp ("|" interp)? ")" "."?
 
-plp: (fact | rule | pfact | prule | cfact | constraint | query)*
+// Constant definition.
+constdef: "#const" CONST "=" ID "."
+
+plp: (constdef | fact | rule | pfact | prule | cfact | constraint | query)*
 
 COMMENT: "%" /[^\n]*/ NEWLINE
 
