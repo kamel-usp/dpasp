@@ -27,8 +27,11 @@ static double prob_total_choice(prob_fact_t *phi, size_t n, array_double_t *gr_p
 const clingo_part_t EXACT_DEFAULT_PARTS[] = {{"base", NULL, 0}};
 
 #define IS_TRUE(t, i) (((t) >> (i)) % 2)
+#define PROCS_STR(x) #x ",compete"
+#define PROCS_XSTR(x) PROCS_STR(x)
+#define NUM_PROCS_CONFIG_STR PROCS_XSTR(NUM_PROCS)
 
-static inline bool setup_control(clingo_control_t **C) {
+static inline bool setup_control(clingo_control_t **C, bool parallelize_clingo) {
   clingo_configuration_t *cfg = NULL;
   clingo_id_t cfg_root, cfg_sub;
   /* Create new clingo controller. */
@@ -39,6 +42,11 @@ static inline bool setup_control(clingo_control_t **C) {
   if (!clingo_configuration_root(cfg, &cfg_root)) return false;
   if (!clingo_configuration_map_at(cfg, cfg_root, "solve.models", &cfg_sub)) return false;
   if (!clingo_configuration_value_set(cfg, cfg_sub, "0")) return false;
+  if (parallelize_clingo) {
+    /* Set parallel_mode to "NUM_PROCS,compete", where NUM_PROCS is the #procs in this machine. */
+    if (!clingo_configuration_map_at(cfg, cfg_root, "solve.parallel_mode", &cfg_sub)) return false;
+    if (!clingo_configuration_value_set(cfg, cfg_sub, NUM_PROCS_CONFIG_STR)) return false;
+  }
   return true;
 }
 
@@ -76,6 +84,31 @@ static inline bool setup_abcd(double **a, double **b, double **c, double **d, si
   return true;
 }
 
+static inline bool setup_credal(double **L_CF, double **U_CF, double **X, array_bool_t (**Pn)[4],
+    array_double_t (**K)[4], program_t *P) {
+  size_t i;
+
+  *L_CF = (double*) malloc(P->CF_n*sizeof(double));
+  if (!(*L_CF)) return false;
+  *U_CF = (double*) malloc(P->CF_n*sizeof(double));
+  if (!(*U_CF)) return false;
+  for (i = 0; i < P->CF_n; ++i) (*L_CF)[i] = P->CF[i].l, (*U_CF)[i] = P->CF[i].u;
+
+  *X = (double*) malloc(P->CF_n*sizeof(double));
+  if (!(*X)) return false;
+
+  *Pn = (array_bool_t(*)[4]) malloc(P->Q_n*sizeof(**Pn));
+  if (!(*Pn)) return false;
+  *K = (array_double_t(*)[4]) malloc(P->Q_n*sizeof(**K));
+  if (!(*K)) return false;
+  for (i = 0; i < P->Q_n; ++i)
+    if (!(array_bool_init(&(*Pn)[i][0]) && array_bool_init(&(*Pn)[i][1]) && array_bool_init(&(*Pn)[i][2])
+      && array_bool_init(&(*Pn)[i][3]) && array_double_init(&(*K)[i][0]) && array_double_init(&(*K)[i][1])
+      && array_double_init(&(*K)[i][2]) && array_double_init(&(*K)[i][3]))) return false;
+
+  return true;
+}
+
 static inline bool neg_partial_cmp(bool x, bool _x, char s) {
   /* See page 36 of the lparse manual. This is the negation of the truth value of an atom. */
   if (s == QUERY_TERM_POS)
@@ -98,6 +131,7 @@ static bool exact_enum(program_t *P, double (*R)[2]) {
   double p, *X, *L_CF, *U_CF = L_CF = X = NULL;
   array_bool_t (*Pn)[4] = NULL;
   array_double_t (*K)[4] = NULL;
+  bool parallelize_clingo = total_choice_n < 8;
 
   if (total_choice_n > 62) {
     fputws(L"exact inference only supports up to 62 probabilistic objects (facts or propositional rules)!\n", stdout);
@@ -108,27 +142,8 @@ static bool exact_enum(program_t *P, double (*R)[2]) {
 
   if (!setup_conds(&cond_1, &cond_2, &cond_3, &cond_4, Q_n*sizeof(bool))) goto cleanup;
   if (!setup_counts(&count_q_e, &count_e, &count_partial_q_e, Q_n_bytes)) goto cleanup;
-  if (!has_credal) if (!setup_abcd(&a, &b, &c, &d, Q_n, sizeof(double))) goto cleanup;
-
-  if (has_credal) {
-    L_CF = (double*) malloc(CF_n*sizeof(double));
-    if (!L_CF) goto cleanup;
-    U_CF = (double*) malloc(CF_n*sizeof(double));
-    if (!U_CF) goto cleanup;
-    for (i = 0; i < CF_n; ++i) L_CF[i] = P->CF[i].l, U_CF[i] = P->CF[i].u;
-
-    X = (double*) malloc(CF_n*sizeof(double));
-    if (!X) goto cleanup;
-
-    Pn = (array_bool_t(*)[4]) malloc(Q_n*sizeof(*Pn));
-    if (!Pn) goto cleanup;
-    K = (array_double_t(*)[4]) malloc(Q_n*sizeof(*K));
-    if (!K) goto cleanup;
-    for (i = 0; i < Q_n; ++i)
-      if (!(array_bool_init(&Pn[i][0]) && array_bool_init(&Pn[i][1]) && array_bool_init(&Pn[i][2])
-        && array_bool_init(&Pn[i][3]) && array_double_init(&K[i][0]) && array_double_init(&K[i][1])
-        && array_double_init(&K[i][2]) && array_double_init(&K[i][3]))) goto cleanup;
-  }
+  if (!has_credal) { if (!setup_abcd(&a, &b, &c, &d, Q_n, sizeof(double))) goto cleanup; }
+  else if (!setup_credal(&L_CF, &U_CF, &X, &Pn, &K, P)) goto cleanup;
 
   /* TODO: ground probabilistic rules with free variables. */
 
@@ -139,7 +154,7 @@ static bool exact_enum(program_t *P, double (*R)[2]) {
     unsigned long long int theta_CF = theta & ((1 << CF_n)-1);
 
     err_code = 2;
-    if (!setup_control(&C)) goto theta_cleanup;
+    if (!setup_control(&C, parallelize_clingo)) goto theta_cleanup;
     /* Add the purely logical part. */
     if (!clingo_control_add(C, "base", NULL, 0, P->P)) goto theta_cleanup;
     /* Add grounded probabilistic rules. */
