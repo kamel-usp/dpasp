@@ -96,6 +96,7 @@ static inline void free_program_contents(program_t *P) {
   array_clingo_symbol_t_free_contents(&P->gr_PF);
   array_char_free_contents(&P->gr_P);
   array_double_free_contents(&P->gr_pr);
+  if (P->stable) free_program(P->stable);
 }
 static inline void free_program(program_t *P) { free_program_contents(P); free(P); }
 
@@ -413,11 +414,13 @@ cleanup:
 static bool from_python_program(PyObject *py_P, program_t *P) {
   PyObject *py_P_P, *py_P_PF, *py_P_PF_L, *py_P_PR, *py_P_PR_L, *py_P_Q, *py_P_Q_L, *py_P_CF, *py_P_sem = NULL;
   PyObject *py_P_CF_L = py_P_CF = py_P_Q_L = py_P_Q = py_P_PR_L = py_P_PR = py_P_PF_L = py_P_PF = py_P_P = NULL;
+  PyObject *py_P_stable = NULL;
   const char *P_P;
   prob_fact_t *PF = NULL;
   prob_rule_t *PR = NULL;
   query_t *Q = NULL;
   credal_fact_t *CF = NULL;
+  program_t *stable = NULL;
   semantics_t sem;
   size_t i;
 
@@ -461,6 +464,15 @@ static bool from_python_program(PyObject *py_P, program_t *P) {
   sem = PyLong_AsUnsignedLong(py_P_sem);
   if ((sem == (unsigned long) -1) && !PyErr_Occurred()) {
     PyErr_SetString(PyExc_TypeError, "field semantics of Program must be a Semantics!");
+    goto cleanup;
+  }
+
+  py_P_stable = PyObject_GetAttrString(py_P, "stable");
+  if (py_P_stable != Py_None) {
+    stable = (program_t*) malloc(sizeof(program_t));
+    if (!from_python_program(py_P_stable, stable)) goto cleanup;
+  } else if (!py_P_stable && sem) {
+    PyErr_SetString(PyExc_TypeError, "field stable of Program must be a Program!");
     goto cleanup;
   }
 
@@ -508,6 +520,7 @@ static bool from_python_program(PyObject *py_P, program_t *P) {
   P->gr_pr.d = NULL; P->gr_pr.n = P->gr_pr.c = 0;
 
   P->sem = sem;
+  P->stable = stable;
   P->py_P = py_P;
 
   Py_DECREF(py_P_PF);
@@ -519,6 +532,7 @@ static bool from_python_program(PyObject *py_P, program_t *P) {
   Py_DECREF(py_P_Q_L);
   Py_DECREF(py_P_CF_L);
   Py_DECREF(py_P_sem);
+  Py_XDECREF(py_P_stable);
 
   return true;
 nomem:
@@ -534,10 +548,12 @@ cleanup:
   Py_XDECREF(py_P_Q_L);
   Py_XDECREF(py_P_CF_L);
   Py_XDECREF(py_P_sem);
+  Py_XDECREF(py_P_stable);
   free(PF);
   free(PR);
   free(Q);
   free(CF);
+  free(stable);
   return false;
 }
 

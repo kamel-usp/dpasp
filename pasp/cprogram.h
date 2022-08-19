@@ -71,6 +71,7 @@ typedef struct program {
   array_double_t gr_pr;
 
   semantics_t sem;
+  struct program *stable;
   PyObject *py_P;
 } program_t;
 
