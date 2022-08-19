@@ -7,3 +7,4 @@ villager(a). barber(b). 0.5::villager(b).
 % meaningful in this case.
 #query(shaves(b, a)).
 #query(not shaves(b, b)).
+#query(undef shaves(b, b)).

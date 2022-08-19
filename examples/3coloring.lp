@@ -1,9 +1,10 @@
 % Build a random graph with n vertices.
-#const n = 5.
+#const n = 4.
 v(1..n).
 % The choice of p reflects the sparsity/density of the random graph.
 % A small p produces sparser graphs, while a large p prefers denser graphs.
-0.5::e(X, Y) :- v(X), v(Y), X != Y.
+0.5::e(X, Y) :- v(X), v(Y), X < Y.
+e(X, Y) :- e(Y, X).
 % A color (here the predicate c/2) defines a coloring of a vertex.
 % The next three lines define the uniqueness of a vertex's color.
 c(X, r) :- not c(X, g), not c(X, b), v(X).
