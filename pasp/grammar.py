@@ -209,26 +209,47 @@ class PLPTransformer(lark.Transformer):
     return Program("\n".join(P), PF, PR, Q, CF, semantics = self.semantics)
 
 class PartialTransformer(PLPTransformer):
-  def __init__(self):
+  def __init__(self, sem: str):
     super().__init__()
     self.PT = set()
-    self.semantics = Semantics.LSTABLE
+    self.semantics = Semantics.LSTABLE if sem == "lstable" else Semantics.PARTIAL
+    self.o_tree = None
+
+  @staticmethod
+  def has_binop(x: str): return ("=" in x) or ("<" in x) or (">" in x)
+
+  def fact(self, f) -> tuple[Command, str]:
+    u = "".join(getnths(f, 0))
+    self.PT.add(u)
+    return Command.FACT, u + "."
+
+  def pfact(self, f) -> tuple[Command, ProbFact]:
+    self.PT.add(f[1][0])
+    return Command.PROB_FACT, ProbFact(f[0], f[1][0])
+
+  def cfact(self, f) -> tuple[Command, CredalFact]:
+    self.PT.add(f[2][0])
+    return Command.CRED_FACT, CredalFact(str(f[0]), str(f[1]), f[2][0])
 
   def rule(self, r) -> tuple[Command, str, str, str]:
     b1 = ", ".join(map(lambda x: f"not _{x[4:]}" if x[:4] == "not " else x, r[1][3]))
-    b2 = ", ".join(map(lambda x: x if (x[:4] == "not ") or ("=" in x) else f"_{x}", r[1][3]))
+    b2 = ", ".join(map(lambda x: x if (x[:4] == "not ") or PartialTransformer.has_binop(x) else f"_{x}", r[1][3]))
     h1, h2 = ", ".join(r[0][2]), ", ".join(map(lambda x: f"_{x}", r[0][2]))
     for h in r[0][2]: self.PT.add(h)
+    # for x in r[1][3]:
+      # if not PartialTransformer.has_binop(x): self.PT.add(x[4:] if x[:4] == "not " else x)
     return Command.RULE, f"{h1} :- {b1}.", f"{h2} :- {b2}."
 
   def prule(self, r) -> tuple[Command, str, str, str]:
     tr_negs = lambda x: f"not _{x[4:]}" if x[:4] == "not " else x
-    tr_pos  = lambda x: x if (x[:4] == "not ") or ("=" in x) else f"_{x}"
+    tr_pos  = lambda x: x if (x[:4] == "not ") or PartialTransformer.has_binop(x) else f"_{x}"
     b1 = ", ".join(map(tr_negs, r[2][3]))
     b2 = ", ".join(map(tr_pos, r[2][3]))
     h = r[1][0]
     o1, o2 = f"{h} :- {b1}", f"_{h} :- {b2}"
     self.PT.add(h)
+    # for x in r[2][3]:
+      # if not PartialTransformer.has_binop(x): self.PT.add(x[4:] if x[:4] == "not " else x)
     prop = r[1][1] and r[2][1]
     uid = unique_fact()
     if prop: return Command.PROB_RULE, ProbRule(r[0], o1, ufact = uid), ProbRule(r[0], o2, ufact = uid)
@@ -241,7 +262,6 @@ class PartialTransformer(PLPTransformer):
     u2 = f"_{r[1][2]}(@unify(\"{r[0]}\", _{r[1][2]}, {len(h_a)}, {2*len(b)}, {h_s}{b2_s})) :- {b2}."
     r1 = ProbRule(r[0], o1, is_prop = False, unify = u1, ufact = uid)
     r2 = ProbRule(r[0], o2, is_prop = False, unify = u2, ufact = uid)
-    self.PT.add(h)
     return Command.PROB_RULE, r1, r2
 
   def plp(self, C: list[tuple]) -> Program:
@@ -272,10 +292,16 @@ class PartialTransformer(PLPTransformer):
       elif t == Command.CONSTRAINT: P.extend(c)
       else: P.extend(c)
     P.extend(f"_{x} :- {x}." for x in self.PT)
-    return Program("\n".join(P), PF, PR, Q, CF, semantics = self.semantics)
+    return Program("\n".join(P), PF, PR, Q, CF, semantics = self.semantics, \
+                   stable_p = self.stable_p)
+
+  def transform(self, tree):
+    self.o_tree = tree
+    self.stable_p = PLPTransformer().transform(tree)
+    return super().transform(tree)
 
 """Either parses `streams` as blocks of text containing the PLP when `from_str = True`, or
 interprets `streams` as filenames to be read and parsed into a `Program`."""
 def parse(*files: str, G: lark.Lark = None, from_str: bool = False, semantics: str = "stable") -> Program:
-  return (PartialTransformer() if semantics == "partial" else PLPTransformer()).transform(read(*files, G = G, from_str = from_str))
+  return (PartialTransformer(semantics) if semantics != "stable" else PLPTransformer()).transform(read(*files, G = G, from_str = from_str))
 
