@@ -41,22 +41,22 @@ const struct timespec TIME_QUARTER_SEC = { .tv_sec = 0, .tv_nsec = 250000000L };
 #define PROCS_XSTR(x) PROCS_STR(x)
 #define NUM_PROCS_CONFIG_STR PROCS_XSTR(NUM_PROCS)
 
-static inline bool setup_control(clingo_control_t **C, bool parallelize_clingo) {
+static inline bool setup_config(clingo_control_t *C, const char *nmodels, bool parallelize_clingo) {
   clingo_configuration_t *cfg = NULL;
   clingo_id_t cfg_root, cfg_sub;
-  /* Create new clingo controller. */
-  if (!clingo_control_new(NULL, 0, undef_atom_ignore, NULL, 20, C)) return false;
+
   /* Get the control's configuration. */
-  if (!clingo_control_configuration(*C, &cfg)) return false;
+  if (!clingo_control_configuration(C, &cfg)) return false;
   /* Set to enumerate all stable models. */
   if (!clingo_configuration_root(cfg, &cfg_root)) return false;
   if (!clingo_configuration_map_at(cfg, cfg_root, "solve.models", &cfg_sub)) return false;
-  if (!clingo_configuration_value_set(cfg, cfg_sub, "0")) return false;
+  if (!clingo_configuration_value_set(cfg, cfg_sub, nmodels)) return false;
   if (parallelize_clingo) {
     /* Set parallel_mode to "NUM_PROCS,compete", where NUM_PROCS is the #procs in this machine. */
     if (!clingo_configuration_map_at(cfg, cfg_root, "solve.parallel_mode", &cfg_sub)) return false;
     if (!clingo_configuration_value_set(cfg, cfg_sub, NUM_PROCS_CONFIG_STR)) return false;
   }
+
   return true;
 }
 
@@ -132,7 +132,7 @@ static inline bool neg_partial_cmp(bool x, bool _x, char s) {
   else if (s == QUERY_TERM_UND)
     return x || !_x; /* ≡ !(!x && _x) */
   /* else s == QUERY_TERM_NEG */
-  return !_x; /* ≡ !(x && _x) && !(!x && _x); */
+  return _x; /* (x && _x) || (!x && _x) ≡ !(x && _x) && !(!x && _x); */
 }
 
 typedef struct storage {
@@ -143,7 +143,7 @@ typedef struct storage {
   array_double_t (*K)[4];
   program_t *P;
   unsigned long long int theta;
-  bool fail, *busy_procs;
+  bool fail, *busy_procs, lstable_sat;
   size_t pid;
   pthread_mutex_t *mu, *wakeup;
   pthread_cond_t *avail;
@@ -151,7 +151,7 @@ typedef struct storage {
 
 static inline bool init_storage(storage_t *s, program_t *P, array_bool_t (*Pn)[4],
     array_double_t (*K)[4], size_t id, bool *busy_procs, pthread_mutex_t *mu,
-    pthread_mutex_t *wakeup, pthread_cond_t *avail) {
+    pthread_mutex_t *wakeup, pthread_cond_t *avail, bool lstable_sat) {
   s->cond_1 = s->cond_2 = s->cond_3 = s->cond_4 = NULL;
   s->count_q_e = s->count_e = s->count_partial_q_e = NULL;
   s->a = s->b = s->c = s->d = NULL;
@@ -160,7 +160,7 @@ static inline bool init_storage(storage_t *s, program_t *P, array_bool_t (*Pn)[4
   if (!setup_conds(&s->cond_1, &s->cond_2, &s->cond_3, &s->cond_4, P->Q_n*sizeof(bool))) goto error;
   if (!setup_counts(&s->count_q_e, &s->count_e, &s->count_partial_q_e, P->Q_n*sizeof(size_t))) goto error;
   if (!P->CF_n) { if (!setup_abcd(&s->a, &s->b, &s->c, &s->d, P->Q_n, sizeof(double))) goto error; }
-  s->busy_procs = busy_procs;
+  s->busy_procs = busy_procs; s->lstable_sat = lstable_sat;
   s->pid = id;
   s->fail = false;
   return true;
@@ -175,58 +175,149 @@ static inline void free_storage_contents(storage_t *s) {
   if (!s->P->CF_n) { free(s->a); free(s->b); free(s->c); free(s->d); }
 }
 
+/* Adds the rule _a :- a. for every grounded atom a in the Herbrand Base, signalling _a as
+ * potentially true. */
+static inline bool add_pt_hb(clingo_control_t *C, clingo_backend_t *B) {
+  const clingo_symbolic_atoms_t *atoms;
+  clingo_symbolic_atom_iterator_t it, end;
+  /* Get symbolic atoms. */
+  if (!clingo_control_symbolic_atoms(C, &atoms)) goto error;
+  /* Get begin iterator. */
+  if (!clingo_symbolic_atoms_begin(atoms, NULL, &it)) goto error;
+  /* Get end iterator. */
+  if (!clingo_symbolic_atoms_end(atoms, &end)) goto error;
+
+  while (true) {
+    bool is_end;
+    clingo_symbol_t s, _s;
+    clingo_atom_t a;
+    clingo_literal_t l;
+    const clingo_symbol_t *args;
+    size_t argc;
+    bool pos;
+    const char *o_name;
+    char name[200];
+    /* Check if end of line. */
+    if (!clingo_symbolic_atoms_iterator_is_equal_to(atoms, it, end, &is_end)) goto error;
+    if (is_end) break;
+    /* Get the associated symbol. */
+    if (!clingo_symbolic_atoms_symbol(atoms, it, &s)) goto error;
+    /* Get s's name. */
+    if (!clingo_symbol_name(s, &o_name)) goto error;
+    /* Get s's arguments. */
+    if (!clingo_symbol_arguments(s, &args, &argc)) goto error;
+    /* Get s's sign. */
+    if (!clingo_symbol_is_positive(s, &pos)) goto error;
+    /* Create _s. */
+    strcpy(name+1, o_name);
+    name[0] = '_';
+    if (!clingo_symbol_create_function(name, args, argc, pos, &_s)) goto error;
+    /* Get s's literal. */
+    if (!clingo_symbolic_atoms_literal(atoms, it, &l)) goto error;
+    /* Add to the backend. */
+    if (!clingo_backend_add_atom(B, &_s, &a)) goto error;
+    if (!clingo_backend_rule(B, false, &a, 1, &l, 1)) return false;
+    /* Next! */
+    if (!clingo_symbolic_atoms_next(atoms, it, &it)) goto error;
+
+    wprintf(L"%s :- %s.\n", name, o_name);
+  }
+
+  return true;
+error:
+  return false;
+}
+
+static inline bool prepare_control(clingo_control_t **C, program_t *P, unsigned long long int theta,
+    const char *nmodels, bool parallelize_clingo) {
+  size_t i, gr_n = P->gr_pr.n;
+  clingo_backend_t *back = NULL;
+  /* Create new clingo controller. */
+  if (!clingo_control_new(NULL, 0, undef_atom_ignore, NULL, 20, C)) return false;
+  /* Config to enumerate all models. */
+  if (!setup_config(*C, nmodels, false)) return false;
+  /* Add the purely logical part. */
+  if (!clingo_control_add(*C, "base", NULL, 0, P->P)) return false;
+  /* Add grounded probabilistic rules. */
+  if (P->gr_P.d) if (!clingo_control_add(*C, "base", NULL, 0, P->gr_P.d)) return false;
+  /* Get the control's backend. */
+  if (!clingo_control_backend(*C, &back)) return false;
+  /* Startup the backend. */
+  if (!clingo_backend_begin(back)) return false;
+  /* Add the credal facts according to the total rule. */
+  for (i = 0; i < P->CF_n; ++i) {
+    clingo_atom_t a;
+    if (!IS_TRUE(theta, i)) continue;
+    if (!clingo_backend_add_atom(back, &P->CF[i].cl_f, &a)) return false;
+    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) return false;
+  }
+  /* Add the probabilistic facts according to the total rule. */
+  for (i = 0; i < P->PF_n; ++i) {
+    clingo_atom_t a;
+    if (!IS_TRUE(theta, i + P->CF_n)) continue;
+    if (!clingo_backend_add_atom(back, &P->PF[i].cl_f, &a)) return false;
+    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) return false;
+  }
+  /* Add the grounded probabilistic rules according to the total rule. */
+  for (i = 0; i < gr_n; ++i) {
+    clingo_atom_t a;
+    if (!IS_TRUE(theta, i + P->CF_n + P->PF_n)) continue;
+    if (!clingo_backend_add_atom(back, &P->gr_PF.d[i], &a)) return false;
+    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) return false;
+  }
+  /* Cleanup backend. */
+  if (!clingo_backend_end(back)) return false;
+  /* Ground atoms. */
+  if(!clingo_control_ground(*C, EXACT_DEFAULT_PARTS, 1, NULL, NULL)) return false;
+  return true;
+}
+
+static inline bool has_total_model(program_t *P, unsigned long long int theta, bool *has) {
+  clingo_control_t *C = NULL;
+  clingo_solve_handle_t *handle;
+  clingo_solve_result_bitset_t res;
+  /* Prepare control according to the stable semantics. */
+  if (!prepare_control(&C, P->stable, theta, "1", false)) goto cleanup;
+  /* Solve and determine if there exists a (total) model. */
+  if (!clingo_control_solve(C, clingo_solve_mode_yield, NULL, 0, NULL, NULL, &handle)) goto cleanup;
+  if (!clingo_solve_handle_get(handle, &res)) goto cleanup;
+  *has = (res & clingo_solve_result_satisfiable);
+  /* Cleanup. */
+  clingo_control_free(C);
+  return true;
+cleanup:
+  clingo_control_free(C);
+  return false;
+}
+
 #define DEBUG_PRINT(pid, msg) wprintf(L"pid %d: " msg "\n", pid);
 
 static void compute_total_choice(void *data) {
   storage_t *st = (storage_t*) data;
   size_t i, m;
   clingo_control_t *C = NULL;
-  clingo_backend_t *back = NULL;
   program_t *P = st->P;
-  size_t CF_n = P->CF_n, PF_n = P->PF_n, gr_n = P->gr_pr.n;
-  size_t Q_n = P->Q_n, Q_n_bytes = Q_n*sizeof(size_t);
-  unsigned long long int theta = st->theta, theta_CF = theta & ((1 << CF_n)-1);
+  unsigned long long int theta = st->theta;
   bool *cond_1 = st->cond_1, *cond_2 = st->cond_2, *cond_3 = st->cond_3, *cond_4 = st->cond_4;
   size_t *count_q_e = st->count_q_e, *count_e = st->count_e, *count_partial_q_e = st->count_partial_q_e;
   double *a = st->a, *b = st->b, *c = st->c, *d = st->d, p;
-  bool is_partial = P->sem, has_credal = P->CF_n;
   array_bool_t (*Pn)[4] = st->Pn;
   array_double_t (*K)[4] = st->K;
 
-  if (!setup_control(&C, false)) goto cleanup;
-  /* Add the purely logical part. */
-  if (!clingo_control_add(C, "base", NULL, 0, P->P)) goto cleanup;
-  /* Add grounded probabilistic rules. */
-  if (P->gr_P.d) if (!clingo_control_add(C, "base", NULL, 0, P->gr_P.d)) goto cleanup;
-  /* Get the control's backend. */
-  if (!clingo_control_backend(C, &back)) goto cleanup;
-  /* Startup the backend. */
-  if (!clingo_backend_begin(back)) goto cleanup;
-  /* Add the credal facts according to the total rule. */
-  for (i = 0; i < CF_n; ++i) {
-    clingo_atom_t a;
-    if (!IS_TRUE(theta, i)) continue;
-    if (!clingo_backend_add_atom(back, &P->CF[i].cl_f, &a)) goto cleanup;
-    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) goto cleanup;
+  /* Check SAT if partial and lstable_sat. */
+  if (P->sem == LSTABLE_SEMANTICS && st->lstable_sat) {
+    bool has;
+    if (!has_total_model(P, theta, &has)) goto cleanup;
+    if (has) P = P->stable;
   }
-  /* Add the probabilistic facts according to the total rule. */
-  for (i = 0; i < PF_n; ++i) {
-    clingo_atom_t a;
-    if (!IS_TRUE(theta, i + CF_n)) continue;
-    if (!clingo_backend_add_atom(back, &P->PF[i].cl_f, &a)) goto cleanup;
-    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) goto cleanup;
-  }
-  /* Add the grounded probabilistic rules according to the total rule. */
-  for (i = 0; i < gr_n; ++i) {
-    clingo_atom_t a;
-    if (!IS_TRUE(theta, i + CF_n + PF_n)) continue;
-    if (!clingo_backend_add_atom(back, &P->gr_PF.d[i], &a)) goto cleanup;
-    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) goto cleanup;
-  }
-  /* Cleanup backend. */
-  if (!clingo_backend_end(back)) goto cleanup;
-  /* Ground atoms. */
-  if(!clingo_control_ground(C, EXACT_DEFAULT_PARTS, 1, NULL, NULL)) goto cleanup;
+
+  size_t CF_n = P->CF_n, PF_n = P->PF_n;
+  size_t Q_n = P->Q_n, Q_n_bytes = Q_n*sizeof(size_t);
+  unsigned long long int theta_CF = theta & ((1 << CF_n)-1);
+  bool is_partial = P->sem, has_credal = P->CF_n;
+
+  /* Add credal, probabilistic, and grounded probabilistic facts. */
+  if (!prepare_control(&C, P, theta, "0", false)) goto cleanup;
   /* Zero-initialize counters and flags. */
   memset(cond_1, 0, Q_n); memset(cond_2, 0, Q_n);
   memset(cond_3, 0, Q_n); memset(cond_4, 0, Q_n);
@@ -340,7 +431,11 @@ cleanup:
   pthread_mutex_unlock(st->wakeup);
 }
 
-static bool exact_enum(program_t *P, double (*R)[2]) {
+#ifndef min
+#define min(x, y) ((x) < (y) ? (x) : (y))
+#endif
+
+static bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat) {
   bool has_credal = P->CF_n > 0;
   double *a, *b, *c, *d = c = b = a = NULL;
   size_t Q_n = P->Q_n, gr_n = P->gr_pr.n, i;
@@ -349,7 +444,8 @@ static bool exact_enum(program_t *P, double (*R)[2]) {
   array_bool_t (*Pn)[4] = NULL;
   array_double_t (*K)[4] = NULL;
   double *X, *L_CF, *U_CF = L_CF = X = NULL;
-  threadpool pool = thpool_init(NUM_PROCS);
+  size_t num_procs = min(NUM_PROCS, 1 << total_choice_n);
+  threadpool pool = thpool_init(num_procs);
   bool busy_procs[NUM_PROCS] = {0}, exact_num_ok;
   storage_t S[NUM_PROCS];
   pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER, wakeup = PTHREAD_MUTEX_INITIALIZER;
@@ -365,8 +461,9 @@ static bool exact_enum(program_t *P, double (*R)[2]) {
     if (!setup_polynomial(&Pn, &K, P)) goto cleanup;
   }
 
-  for (i = 0; i < NUM_PROCS; ++i)
-    if (!init_storage(&S[i], P, Pn, K, i, busy_procs, &mu, &wakeup, &avail)) goto cleanup;
+  for (i = 0; i < num_procs; ++i)
+    if (!init_storage(&S[i], P, Pn, K, i, busy_procs, &mu, &wakeup, &avail, lstable_sat))
+      goto cleanup;
 
   for (theta = 0; theta < theta_max; ++theta) {
     size_t id = (size_t) -1;
@@ -374,7 +471,7 @@ static bool exact_enum(program_t *P, double (*R)[2]) {
      * the i-th busy_procs and have to iterate NUM_PROCS all over again. */
     pthread_mutex_lock(&wakeup);
     while (true) {
-      for (i = 0, id = (size_t) -1; i < NUM_PROCS; ++i) {
+      for (i = 0, id = (size_t) -1; i < num_procs; ++i) {
         if (!busy_procs[i]) { id = i; break; }
       }
       if (id != (size_t) -1) break;
@@ -391,7 +488,7 @@ static bool exact_enum(program_t *P, double (*R)[2]) {
 
   if (!has_credal) {
     a = S[0].a; b = S[0].b; c = S[0].c; d = S[0].d;
-    for (i = 1; i < NUM_PROCS; ++i) {
+    for (i = 1; i < num_procs; ++i) {
       size_t j;
       for (j = 0; j < Q_n; ++j) {
         a[j] += S[i].a[j];
@@ -449,7 +546,7 @@ cleanup:
     wprintf(L"Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
   pthread_mutex_destroy(&mu); pthread_mutex_destroy(&wakeup); pthread_cond_destroy(&avail);
   thpool_destroy(pool);
-  for (i = 0; i < NUM_PROCS; ++i) free_storage_contents(&S[i]);
+  for (i = 0; i < num_procs; ++i) free_storage_contents(&S[i]);
   if (has_credal) {
     free(L_CF); free(U_CF); free(X);
     if (Pn) {
@@ -505,7 +602,9 @@ static bool exact_enum_seq(program_t *P, double (*R)[2]) {
     unsigned long long int theta_CF = theta & ((1 << CF_n)-1);
 
     err_code = 2;
-    if (!setup_control(&C, parallelize_clingo)) goto theta_cleanup;
+    /* Create new clingo controller. */
+    if (!clingo_control_new(NULL, 0, undef_atom_ignore, NULL, 20, &C)) goto cleanup;
+    if (!setup_config(C, "0", parallelize_clingo)) goto cleanup;
     /* Add the purely logical part. */
     if (!clingo_control_add(C, "base", NULL, 0, P->P)) goto theta_cleanup;
     /* Add grounded probabilistic rules. */
@@ -721,10 +820,10 @@ static PyObject* exact_opt(PyObject *self, PyObject *args, PyObject *kwargs, int
   PyObject *py_P, *py_R = NULL;
   double (*R)[2] = NULL;
   size_t i;
-  bool r = false, parallel = true;
-  static char *kwlist[] = { "", "parallel", NULL };
+  bool r = false, parallel = true, lstable_sat = true;
+  static char *kwlist[] = { "", "parallel", "lstable_sat", NULL };
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|b", kwlist, &py_P, &parallel))
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|bb", kwlist, &py_P, &parallel, &lstable_sat))
     return NULL;
   if (!from_python_program(py_P, &p)) return NULL;
 
@@ -736,7 +835,7 @@ static PyObject* exact_opt(PyObject *self, PyObject *args, PyObject *kwargs, int
   }
 
   if (parallel) {
-    if (!exact_enum(&p, R)) goto badval;
+    if (!exact_enum(&p, R, lstable_sat)) goto badval;
   } else {
     if (!exact_enum_seq(&p, R)) goto badval;
   }
