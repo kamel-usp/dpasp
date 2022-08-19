@@ -8,6 +8,11 @@ MOD: "\\"
 MUL: "*"
 NEQ: "!="
 EQQ: "="
+LES: "<"
+GRT: ">"
+LEQ: "<="
+GEQ: ">="
+
 // Operators.
 OP: ADD
   | SUB
@@ -16,6 +21,10 @@ OP: ADD
   | MUL
   | EQQ
   | NEQ
+  | LES
+  | GRT
+  | LEQ
+  | GEQ
 
 // Constants.
 CONST: /[a-z]\w*/
