@@ -832,6 +832,7 @@ static PyObject* exact_opt(PyObject *self, PyObject *args, PyObject *kwargs, int
 
   if (needs_ground(&p)) {
     if (!ground(&p)) goto cleanup;
+    if (p.stable) if (!ground(p.stable)) goto cleanup;
   }
 
   if (parallel) {

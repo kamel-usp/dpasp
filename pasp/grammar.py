@@ -257,12 +257,9 @@ class PartialTransformer(PLPTransformer):
     # Invariant: len(b) > 0, otherwise the rule is unsafe.
     h_s = ", ".join(h_a) + ", " if len(h_a) > 0 else ""
     b1_s = ", ".join(map(lambda x: f"0, _{x[4:]}" if x[:4] == "not " else f"1, {x}", b))
-    b2_s = ", ".join(map(lambda x: f"0, {x[4:]}" if x[:4] == "not " else f"1, _{x}", b))
+    # Let the grounder deal with the _f rule.
     u1 = f"{r[1][2]}(@unify(\"{r[0]}\", {r[1][2]}, {len(h_a)}, {2*len(b)}, {h_s}{b1_s})) :- {b1}."
-    u2 = f"_{r[1][2]}(@unify(\"{r[0]}\", _{r[1][2]}, {len(h_a)}, {2*len(b)}, {h_s}{b2_s})) :- {b2}."
-    r1 = ProbRule(r[0], o1, is_prop = False, unify = u1, ufact = uid)
-    r2 = ProbRule(r[0], o2, is_prop = False, unify = u2, ufact = uid)
-    return Command.PROB_RULE, r1, r2
+    return Command.PROB_RULE, ProbRule(r[0], o1, is_prop = False, unify = u1)
 
   def plp(self, C: list[tuple]) -> Program:
     # Logic Program.
@@ -280,6 +277,9 @@ class PartialTransformer(PLPTransformer):
       elif t == Command.PROB_FACT: PF.extend(c)
       elif t == Command.RULE: P.extend(c)
       elif t == Command.PROB_RULE:
+        if len(c) == 1:
+          PR.append(c[0])
+          continue
         r1, r2 = c
         PR.extend((r1, r2))
         if r1.is_prop:

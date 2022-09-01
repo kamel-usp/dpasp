@@ -20,12 +20,14 @@ const clingo_part_t GROUND_DEFAULT_PARTS[] = {{"base", NULL, 0}};
 static bool unify_callback(const clingo_location_t *loc, const char *name, const clingo_symbol_t *args,
     size_t argc, void* data, clingo_symbol_callback_t sym_callback, void *sym_data) {
   int b, h, i, j;
-  size_t s_n, cursor;
+  size_t s_n, cursor, _cursor;
   char line[GROUND_MAX_PROBRULE_LINE_LEN], s[GROUND_MAX_SYM_LEN];
+  char _line[GROUND_MAX_PROBRULE_LINE_LEN];
   void **pack = (void**) data;
   array_clingo_symbol_t_t *PF = (array_clingo_symbol_t_t*) pack[0];
   array_char_t *S = (array_char_t*) pack[1];
   array_double_t *Pr = (array_double_t*) pack[2];
+  uintptr_t sem = (uintptr_t) pack[3];
   clingo_symbol_t ground_pf;
   const char *cl_str;
   double pr;
@@ -43,24 +45,38 @@ static bool unify_callback(const clingo_location_t *loc, const char *name, const
   if (!clingo_symbol_to_string_size(args[1], &s_n)) goto error;
   if (!clingo_symbol_to_string(args[1], s, s_n)) goto error;
   memcpy(line, s, s_n); line[s_n-1] = '('; cursor = s_n;
+  if (sem) { memcpy(_line+1, s, s_n); _line[0] = '_'; _line[s_n] = '('; _cursor = s_n+1; }
   /* Fill out grounded head arguments. */
   for (i = 0, j = 4; i < h; ++i) {
     if (!clingo_symbol_to_string_size(args[i+j], &s_n)) goto error;
     if (!clingo_symbol_to_string(args[i+j], s, s_n)) goto error;
     if (i != h-1) { s[s_n-1] = ','; s[s_n++] = ' '; }
     memcpy(line+cursor, s, s_n); cursor += s_n;
+    if (sem) { memcpy(_line+_cursor, s, s_n); _cursor += s_n; }
   }
   strcat(line, ") :- "); cursor += 4;
+  if (sem) { strcat(_line,  ") :- "); _cursor += 4; }
   /* Fill out grounded body subgoals. */
   for (i = 0, j += h; i < b; i += 2) {
     int pos;
     if (!clingo_symbol_number(args[i+j], &pos)) goto error;
     if (!clingo_symbol_to_string_size(args[i+j+1], &s_n)) goto error;
     if (!clingo_symbol_to_string(args[i+j+1], s, s_n)) goto error;
-    if (!pos) { memcpy(line+cursor, "not ", 4); cursor += 4; }
+    if (!pos) {
+      memcpy(line+cursor, "not ", 4); cursor += 4;
+      if (sem) { memcpy(_line+_cursor, "not ", 4); _cursor += 4; }
+    }
     memcpy(line+cursor, s, s_n);
     cursor += s_n;
     line[cursor-1] = ','; line[cursor++] = ' ';
+    if (sem) {
+      /* If subgoal is negative, then remove _. */
+      memcpy(_line+_cursor+1, s+(!pos), s_n);
+      /* Otherwise, add _. */
+      if (pos) _line[_cursor] = '_';
+      _cursor += s_n+pos;
+      _line[_cursor-1] = ','; _line[_cursor++] = ' ';
+    }
   }
   /* Add the probabilistic fact. */
   s_n = sprintf(s, "__unique_grid_%lu", unique_ground_pfact_id());
@@ -68,11 +84,13 @@ static bool unify_callback(const clingo_location_t *loc, const char *name, const
   s[s_n++] = '.'; s[s_n++] = '\0';
   memcpy(line+cursor, s, s_n);
   cursor += s_n;
+  if (sem) { memcpy(_line+_cursor, s, s_n); _cursor += s_n; }
 
   /* Add the newly created probabilistic fact to the set of new PFs. */
   if (!array_clingo_symbol_t_append(PF, ground_pf)) goto error;
   /* Add the grounded rule to the logic part. */
   if (!array_char_writeln(S, line, cursor+1)) goto error;
+  if (sem) { if (!array_char_writeln(S, _line, _cursor+1)) goto error; }
   /* Add the probability of this grounded probabilistic rule. */
   if (!array_double_append(Pr, pr)) goto error;
 
@@ -144,7 +162,7 @@ error:
 static bool ground(program_t *P) {
   size_t i;
   clingo_control_t *C = NULL;
-  void *pack[3] = {NULL, NULL, NULL};
+  void *pack[4] = {NULL, NULL, NULL, (void*) ((uintptr_t) P->sem)};
 
   if (!P->gr_PF.d && !array_clingo_symbol_t_init(&P->gr_PF)) goto error;
   if (!P->gr_P.d  && !array_char_init(&P->gr_P)) goto error;
