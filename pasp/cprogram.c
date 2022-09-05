@@ -84,7 +84,7 @@ static void print_program(program_t *P) {
 static inline void free_program_contents(program_t *P) {
   size_t i;
   if (!P) return;
-  Py_DECREF(P->P_obj);
+  Py_XDECREF(P->P_obj);
   for (i = 0; i < P->PF_n; ++i) free_prob_fact_contents(&P->PF[i]);
   free(P->PF);
   for (i = 0; i < P->PR_n; ++i) free_prob_rule_contents(&P->PR[i]);

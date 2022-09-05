@@ -292,6 +292,36 @@ cleanup:
 
 #define DEBUG_PRINT(pid, msg) wprintf(L"pid %d: " msg "\n", pid);
 
+#define MODEL_CONTAINS_QUERY true
+#define MODEL_CONTAINS_EVI   false
+
+inline static bool model_contains(const clingo_model_t *M, query_t *q, size_t i, bool *c, bool query_or_evi, bool is_partial) {
+  clingo_symbol_t x, x_u;
+  char s;
+  bool c_x;
+
+  if (query_or_evi) {
+    /* Query. */
+    x = q->Q[i]; s = q->Q_s[i];
+    if (is_partial) x_u = q->Q_u[i];
+  } else {
+    /* Evidence. */
+    x = q->E[i]; s = q->E_s[i];
+    if (is_partial) x_u = q->E_u[i];
+  }
+
+  if (!clingo_model_contains(M, x, &c_x)) return false;
+  if (is_partial) {
+    bool c_a;
+    if (!clingo_model_contains(M, x_u, &c_a)) return false;
+    if (neg_partial_cmp(c_x, c_a, s)) { *c = false; return true; }
+  } else {
+    if (c_x != s) { *c = false; return true; }
+  }
+  *c = true;
+  return true;
+}
+
 static void compute_total_choice(void *data) {
   storage_t *st = (storage_t*) data;
   size_t i, m;
@@ -344,26 +374,14 @@ static void compute_total_choice(void *data) {
           bool all_e = true, all_q = true, c;
           /* all_e? - are all evidence symbols E from query q in M? */
           for (j = 0; j < q->E_n; ++j) {
-            if (!clingo_model_contains(M, q->E[j], &c)) goto solve_error;
-            if (is_partial) {
-              bool c_a;
-              if (!clingo_model_contains(M, q->E_u[j], &c_a)) goto solve_error;
-              if (neg_partial_cmp(c, c_a, q->E_s[j])) { all_e = false; break; }
-            } else {
-              if (c != q->E_s[j]) { all_e = false; break; }
-            }
+            if (!model_contains(M, q, j, &c, MODEL_CONTAINS_EVI, is_partial)) goto solve_error;
+            if (!c) { all_e = false; break; }
           }
           if (!all_e) continue;
           /* all_q? - are all query symbols Q from query q in M? */
           for (j = 0; j < q->Q_n; ++j) {
-            if (!clingo_model_contains(M, q->Q[j], &c)) goto solve_error;
-            if (is_partial) {
-              bool c_a;
-              if (!clingo_model_contains(M, q->Q_u[j], &c_a)) goto solve_error;
-              if (neg_partial_cmp(c, c_a, q->Q_s[j])) { all_q = false; break; }
-            } else {
-              if (c != q->Q_s[j]) { all_q = false; break; }
-            }
+            if (!model_contains(M, q, j, &c, MODEL_CONTAINS_QUERY, is_partial)) goto solve_error;
+            if (!c) { all_q = false; break; }
           }
           ++count_e[i];
           if (all_q) { cond_2[i] = true; ++count_q_e[i]; }
@@ -431,11 +449,100 @@ cleanup:
   pthread_mutex_unlock(st->wakeup);
 }
 
+typedef enum psemantics {
+  CREDAL_SEMANTICS = 0,
+  PLOG_SEMANTICS   = 1,
+} psemantics_t;
+
+static void compute_total_choice_plog(void *data) {
+  storage_t *st = (storage_t*) data;
+  size_t i, m;
+  clingo_control_t *C = NULL;
+  program_t *P = st->P;
+  unsigned long long int theta = st->theta;
+  size_t *count_q_e = st->count_q_e, *count_e = st->count_e;
+  double *a = st->a, *b = st->b, p;
+
+  if (P->sem == LSTABLE_SEMANTICS && st->lstable_sat) {
+    bool has;
+    if (!has_total_model(P, theta, &has)) goto cleanup;
+    if (has) P = P->stable;
+  }
+
+  size_t PF_n = P->PF_n;
+  size_t Q_n = P->Q_n, Q_n_bytes = Q_n*sizeof(size_t);
+  bool is_partial = P->sem;
+
+  if (!prepare_control(&C, P, theta, "0", false)) goto cleanup;
+
+  memset(count_q_e, 0, Q_n_bytes);
+  memset(count_e, 0, Q_n_bytes);
+  /* Solving. */ {
+    bool ok = true;
+    clingo_solve_handle_t *handle;
+    clingo_solve_result_bitset_t solve_ret;
+    const clingo_model_t *M;
+
+    if (!clingo_control_solve(C, clingo_solve_mode_yield, NULL, 0, NULL, NULL, &handle))
+      goto solve_error;
+
+    for (m = 0; true; ++m) {
+      if (!clingo_solve_handle_resume(handle)) goto solve_error;
+      if (!clingo_solve_handle_model(handle, &M)) goto solve_error;
+      if (M) {
+        for (i = 0; i < Q_n; ++i) {
+          size_t j;
+          query_t *q = (P->Q)+i;
+          bool all_e = true, all_q = true, c;
+          for (j = 0; j < q->E_n; ++j) {
+            if (!model_contains(M, q, j, &c, MODEL_CONTAINS_EVI, is_partial)) goto solve_error;
+            if (!c) { all_e = false; break; }
+          }
+          if (!all_e) continue;
+          for (j = 0; j < q->Q_n; ++j) {
+            if (!model_contains(M, q, j, &c, MODEL_CONTAINS_QUERY, is_partial)) goto solve_error;
+            if (!c) { all_q = false; break; }
+          }
+          ++count_e[i];
+          if (all_q) ++count_q_e[i];
+        }
+      } else break;
+    }
+    if (!clingo_solve_handle_get(handle, &solve_ret)) goto solve_error;
+    goto solve_cleanup;
+solve_error:
+    ok = false;
+solve_cleanup:
+    if (!(clingo_solve_handle_close(handle) && ok)) goto cleanup;
+  }
+
+  p = prob_total_choice(P->PF, PF_n, &P->gr_pr, theta);
+  for (i = 0; i < Q_n; ++i) {
+    a[i] += (count_q_e[i]*p)/m;
+    b[i] += (count_e[i]*p)/m;
+  }
+
+  clingo_control_free(C);
+  st->fail = false;
+  pthread_mutex_lock(st->wakeup);
+  st->busy_procs[st->pid] = false;
+  pthread_cond_signal(st->avail);
+  pthread_mutex_unlock(st->wakeup);
+  return;
+cleanup:
+  clingo_control_free(C);
+  st->fail = true;
+  pthread_mutex_lock(st->wakeup);
+  st->busy_procs[st->pid] = false;
+  pthread_cond_signal(st->avail);
+  pthread_mutex_unlock(st->wakeup);
+}
+
 #ifndef min
 #define min(x, y) ((x) < (y) ? (x) : (y))
 #endif
 
-static bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat) {
+static bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat, psemantics_t psem) {
   bool has_credal = P->CF_n > 0;
   double *a, *b, *c, *d = c = b = a = NULL;
   size_t Q_n = P->Q_n, gr_n = P->gr_pr.n, i;
@@ -450,6 +557,7 @@ static bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat) {
   storage_t S[NUM_PROCS];
   pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER, wakeup = PTHREAD_MUTEX_INITIALIZER;
   pthread_cond_t avail = PTHREAD_COND_INITIALIZER;
+  void (*compute_func)(void*) = psem ? compute_total_choice_plog : compute_total_choice;
 
   if (total_choice_n > 62) {
     fputws(L"exact inference only supports up to 62 probabilistic objects (facts or propositional rules)!\n", stdout);
@@ -480,7 +588,7 @@ static bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat) {
     busy_procs[id] = true;
     pthread_mutex_unlock(&wakeup);
     S[id].theta = theta;
-    if (S[id].fail || thpool_add_work(pool, compute_total_choice, (void*) &S[id])) {
+    if (S[id].fail || thpool_add_work(pool, compute_func, (void*) &S[id])) {
       goto cleanup;
     }
   }
@@ -524,16 +632,21 @@ static bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat) {
         }
       }
     } else {
-      double _a = a[i], _b = b[i], _c = c[i], _d = d[i];
-      if (P->Q[i].E_n == 0) R[i][0] = _a, R[i][1] = _b;
-      else {
-        if (_b + _d == 0) {
-          fputws(L"Fail: ℙ(E) = 0!\n", stdout);
-          R[i][0] = -INFINITY, R[i][1] = INFINITY;
-        } else {
-          if ((_b + _c == 0) && (_d > 0)) R[i][0] = 0, R[i][1] = 0;
-          else if ((_a + _d == 0) && (_b > 0)) R[i][0] = 1, R[i][1] = 1;
-          else R[i][0] = _a/(_a + _d), R[i][1] = _b/(_b + _c);
+      if (psem == PLOG_SEMANTICS) {
+        double _a = a[i], _b = b[i];
+        R[i][0] = R[i][1] = _a/_b;
+      } else {
+        double _a = a[i], _b = b[i], _c = c[i], _d = d[i];
+        if (P->Q[i].E_n == 0) R[i][0] = _a, R[i][1] = _b;
+        else {
+          if (_b + _d == 0) {
+            fputws(L"Fail: ℙ(E) = 0!\n", stdout);
+            R[i][0] = -INFINITY, R[i][1] = INFINITY;
+          } else {
+            if ((_b + _c == 0) && (_d > 0)) R[i][0] = 0, R[i][1] = 0;
+            else if ((_a + _d == 0) && (_b > 0)) R[i][0] = 1, R[i][1] = 1;
+            else R[i][0] = _a/(_a + _d), R[i][1] = _b/(_b + _c);
+          }
         }
       }
     }
@@ -816,15 +929,25 @@ cleanup:
 #define EXACT_ENUM 0
 
 static PyObject* exact_opt(PyObject *self, PyObject *args, PyObject *kwargs, int choice) {
-  program_t p;
+  program_t p = {0};
   PyObject *py_P, *py_R = NULL;
   double (*R)[2] = NULL;
   size_t i;
   bool r = false, parallel = true, lstable_sat = true;
-  static char *kwlist[] = { "", "parallel", "lstable_sat", NULL };
+  const char *psem_arg = "credal";
+  static char *kwlist[] = { "", "parallel", "lstable_sat", "psemantics", NULL };
+  psemantics_t psem = CREDAL_SEMANTICS;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|bb", kwlist, &py_P, &parallel, &lstable_sat))
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|bbs", kwlist, &py_P, &parallel, &lstable_sat,
+        &psem_arg))
     return NULL;
+
+  if (!strcmp(psem_arg, "plog")) { psem = PLOG_SEMANTICS; }
+  else if (strcmp(psem_arg, "credal")) {
+    PyErr_SetString(PyExc_ValueError, "psemantics must either be \"credal\" or \"plog\"!");
+    goto cleanup;
+  }
+
   if (!from_python_program(py_P, &p)) return NULL;
 
   R = (double (*)[2]) malloc(p.Q_n*sizeof(*R));
@@ -836,7 +959,7 @@ static PyObject* exact_opt(PyObject *self, PyObject *args, PyObject *kwargs, int
   }
 
   if (parallel) {
-    if (!exact_enum(&p, R, lstable_sat)) goto badval;
+    if (!exact_enum(&p, R, lstable_sat, psem)) goto badval;
   } else {
     if (!exact_enum_seq(&p, R)) goto badval;
   }

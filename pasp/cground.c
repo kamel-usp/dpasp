@@ -20,7 +20,7 @@ const clingo_part_t GROUND_DEFAULT_PARTS[] = {{"base", NULL, 0}};
 static bool unify_callback(const clingo_location_t *loc, const char *name, const clingo_symbol_t *args,
     size_t argc, void* data, clingo_symbol_callback_t sym_callback, void *sym_data) {
   int b, h, i, j;
-  size_t s_n, cursor, _cursor;
+  size_t s_n, cursor, _cursor = 0;
   char line[GROUND_MAX_PROBRULE_LINE_LEN], s[GROUND_MAX_SYM_LEN];
   char _line[GROUND_MAX_PROBRULE_LINE_LEN];
   void **pack = (void**) data;
