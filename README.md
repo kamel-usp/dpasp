@@ -1,4 +1,4 @@
-# PASP -- Probabilistic Answer Set Programming
+# PASP - Probabilistic Answer Set Programming
 
 Prototype implementation for probabilistic ASP [[1]](#ref-1)[[2]](#ref-2). Example probabilistic
 logic programs may be found in [`examples/`](examples/). Let's take a look at some examples to show
@@ -75,9 +75,9 @@ queries by aggregating atoms with a comma; for instance `#query(tuberculosis, no
 smoking, trip)` asks the probability
 $\mathbb{P}(\texttt{tuberculosis},\neg\texttt{cancer}|\neg\texttt{smoking},\texttt{trip})$.
 
-Since we are working with the credal semantics, each one of these queries will return a tuple of
-lower and upper probabilities. Let's ask the package to provide these probabilities. We first
-inspect our Probabilistic Logic Program (PLP).
+If we are working with the credal semantics (more on this later), then each one of these queries
+will return a tuple of lower and upper probabilities. Let's ask the package to provide these
+probabilities. We first inspect our Probabilistic Logic Program (PLP).
 
 ```python
 import pasp
@@ -86,23 +86,33 @@ P = pasp.parse("examples/asia.lp")
 print(P)
 ```
 ```
-<tuberculosis :- trip, __unique_id_1.
-tuberculosis :- not trip, __unique_id_2.
-cancer :- smoking, __unique_id_3.
-cancer :- not smoking, __unique_id_4.
-or :- tuberculosis. or :- cancer.
-test :- or, __unique_id_5.
-test :- not or, __unique_id_6.,
-[0.01::trip., 0.5::smoking., 0.05::__unique_id_1., 0.01::__unique_id_2., 0.1::__unique_id_3., 0.01::__unique_id_4., 0.98::__unique_id_5., 0.05::__unique_id_6.],
+<Logic Program:
+tuberculosis :- trip, __unique_id_4.
+tuberculosis :- not trip, __unique_id_5.
+cancer :- smoking, __unique_id_6.
+cancer :- not smoking, __unique_id_7.
+or :- tuberculosis.
+or :- cancer.
+test :- or, __unique_id_8.
+test :- not or, __unique_id_9.,
+Probabilistic Facts:
+[0.01::trip, 0.5::smoking, 0.05::__unique_id_4, 0.01::__unique_id_5, 0.1::__unique_id_6, 0.01::__unique_id_7, 0.98::__unique_id_8, 0.05::__unique_id_9],
+Credal Facts:
+[]
+Probabilistic Rules:
+[0.05::tuberculosis :- trip, 0.01::tuberculosis :- not trip, 0.1::cancer :- smoking, 0.01::cancer :- not smoking, 0.98::test :- or, 0.05::test :- not or],
+Queries
 [ℙ(trip), ℙ(tuberculosis | trip), ℙ(cancer | smoking), ℙ(test | or), ℙ(smoking), ℙ(tuberculosis | not trip), ℙ(cancer | not smoking), ℙ(test | not or)]>
 ```
 
-A PLP, here the Python object `P`, is a triple $\langle L,PF,Q \rangle$, where $L$ is the logic program composed
-solely of logic facts and rules, $PF$ are the probabilistic facts, and $Q$ are the queries to be
-asked from the solver. We can see from the output above the generated rules and probabilistic facts
-produced by the unrolling of probabilistic rules as well as the queries to be asked.
+A PLP, here the Python object `P`, is a tuple $\langle L,PF,CF,PR,Q \rangle$, where $L$ is the
+logic program composed solely of logic facts and rules, $PF$ are the probabilistic facts, $CF$ are
+the credal facts (see [`examples/prisoners.lp`](examples/prisoners.lp)), $PR$ are probabilistic
+rules, $and $Q$ are the queries to be asked from the solver. We can see from the output above the
+generated rules and probabilistic facts produced by the unrolling of probabilistic rules as well as
+the queries to be asked.
 
-Let's ask the solver to produce the probabilities we asked exactly. We can do so by running the
+Let's ask the solver to produce the exact probabilities we asked. We can do so by running the
 `exact` function. Note that running exact inference is costly. Approximate inference is planned for
 this package.
 
@@ -110,17 +120,17 @@ this package.
 R = pasp.exact(P)
 ```
 ```
-ℙ(trip) = [0.010000000000000009, 0.010000000000000009]
-ℙ(tuberculosis | trip) = [0.04999999999999998, 0.04999999999999998]
-ℙ(cancer | smoking) = [0.1, 0.1]
-ℙ(test | or) = [0.98, 0.98]
-ℙ(smoking) = [0.5000000000000001, 0.5000000000000001]
-ℙ(tuberculosis | not trip) = [0.010000000000000002, 0.010000000000000002]
-ℙ(cancer | not smoking) = [0.009999999999999995, 0.009999999999999995]
-ℙ(test | not or) = [0.04999999999999998, 0.04999999999999998]
+ℙ(trip) = [0.010000, 0.010000]
+ℙ(tuberculosis | trip) = [0.050000, 0.050000]
+ℙ(cancer | smoking) = [0.100000, 0.100000]
+ℙ(test | or) = [0.980000, 0.980000]
+ℙ(smoking) = [0.500000, 0.500000]
+ℙ(tuberculosis | not trip) = [0.010000, 0.010000]
+ℙ(cancer | not smoking) = [0.010000, 0.010000]
+ℙ(test | not or) = [0.050000, 0.050000]
 ```
 
-Function `pasp.exact` returns the results of the queries as a list of pairs of lower and upper
+Function `pasp.exact` returns the results of the queries as a tuple of pairs of lower and upper
 probabilities in the order the queries are asked for in the PLP code.
 
 Since [`examples/asia.lp`](examples/asia.lp) comes from a Bayesian network and therefore is an
@@ -135,6 +145,7 @@ sleep :- not work, not insomnia. work :- not sleep.
 #query(work)
 #query(sleep)
 #query(not sleep)
+#query(not work)
 ```
 
 Note that `sleep` and `work` produce an even loop when `insomnia` is set to false in the program,
@@ -145,15 +156,189 @@ other where only `sleep` is true, each having different sets of probabilities. L
 pasp.exact(pasp.parse("examples/insomnia.lp"))
 ```
 ```
-ℙ(insomnia) = [0.3, 0.3]
-ℙ(work) = [0.3, 1.0]
-ℙ(sleep) = [0.0, 0.7]
-ℙ(not sleep) = [0.3, 1.0]
+ℙ(insomnia) = [0.300000, 0.300000]
+ℙ(work) = [0.300000, 1.000000]
+ℙ(sleep) = [0.000000, 0.700000]
+ℙ(not sleep) = [0.300000, 1.000000]
+ℙ(not work) = [0.000000, 0.700000]
 ```
 
 We now have the right lower and upper probabilities taking into account all possible stable models
 of the PLP. This shows us that the probability of `sleep`, for instance, can take values low as
 `0.0` and high as `0.7`, while `work` has at least `0.3` mass.
+
+## Semantics
+
+Probabilities and models may change depending on the *semantics* of the language. The semantics of
+the language can be defined around two dimensions: the *logic semantics* and the *probabilistic
+semantics*. We allow different logic and probabilistic semantics, and their different combinations,
+in `pasp`. As of now, the following semantics are implemented:
+
+#### Logic semantics
+
+- Stable semantics;
+- Partial semantics;
+- L-Stable semantics.
+
+#### Probabilistic semantics
+
+- Credal semantics;
+- P-log semantics.
+
+### Examples of logic semantics
+
+Let us first examine the Barber Paradox example (see [`examples/barber.lp`](examples/barber.lp)).
+
+```
+shaves(X, Y) :- barber(X), villager(Y), not shaves(Y, Y).
+villager(a). barber(b). 0.5::villager(b).
+```
+
+Under the stable semantics, we find ourselves in a pickle. With probability half, `villager(b)` is
+chosen (or not) to appear in the program. Suppose it does not; then we know that when grounding the
+program we get
+
+```
+shaves(b, a) :- barber(b), villager(a), not shaves(a, a).
+```
+
+which is fine, since `shaves(a, a)` is not in any model. Now suppose `villager(b)` is, in fact,
+added to the program; then we have
+
+```
+shaves(b, b) :- barber(b), villager(b), not shaves(b, b).
+```
+
+in addition to the previous rule. This presents a problem, since `shaves(b, b) :- ..., not
+shaves(b, b)` is a clear contradiction and so no stable model can be found in this total choice
+under the stable model semantics. Since the credal semantics assumes the existence of a model for
+any given total choice, the computed probabilities will be garbage (for now, ignore the `undef`
+keyword):
+
+```python
+P = pasp.parse("examples/barber.lp")
+pasp.exact(P)
+```
+```
+ℙ(shaves(b,a)) = [1.000000, 0.500000]
+ℙ(not shaves(b,b)) = [1.000000, 0.500000]
+ℙ(undef shaves(b,b)) = [0.500000, 0.000000]
+```
+
+Instead of using the stable semantics, however, we could use the *partial semantics*. The partial
+semantics attributes to every atom three possible values: true, false or undefined (represented by
+the `undef` keyword). Atoms are set to undefined when its value could not be proved either true or
+false, as is the case of contradictions.
+
+Let us, again, analyze the Barber Paradox program, this time under the partial semantics. When
+`villager(b).` is *not* in the program, then the partial semantics computes, in this case, the same
+minimal model as in the stable semantics. However, when `villager(b)` is present in the program,
+then we cannot attribute neither truth nor falsity to `shaves(b, b)`, and thus `shaves(b, b)` must
+be set to undefined. Now, if we compute the credal probabilities again, this time under partial
+semantics, we get
+
+```python
+P = pasp.parse("examples/barber.lp", semantics = "partial")
+pasp.exact(P)
+```
+```
+ℙ(shaves(b,a)) = [1.000000, 1.000000]
+ℙ(not shaves(b,b)) = [0.500000, 0.500000]
+ℙ(undef shaves(b,b)) = [0.500000, 0.500000]
+```
+
+which are correct: in both total choices, there is only a single model; the one with `villager(b)`
+agrees with `not shaves(b, b)`, and the other (without `villager(b)`) sets it to undefined, meaning
+that `shaves(b, b)` is either set to false or undefined with equal probability.
+
+Another interesting semantic is the *L-stable semantics*, which in practice agrees with the stable
+model semantics when there exist stable models and with the partial semantics otherwise. Let us
+take a look at the 3-coloring graph problem (see [`examples/3coloring.lp`](examples/3coloring.lp)).
+
+```
+#const n = 5.
+v(1..n).
+0.5::e(X, Y) :- v(X), v(Y), X < Y.
+e(X, Y) :- e(Y, X).
+c(X, r) :- not c(X, g), not c(X, b), v(X).
+c(X, g) :- not c(X, r), not c(X, b), v(X).
+c(X, b) :- not c(X, r), not c(X, g), v(X).
+f :- not f, e(X, Y), c(X, Z), c(Y, Z).
+```
+
+The program above models the 3-coloring problem of graphs with `n = 5` vertices. Each total choice
+models a different graph based on the presence (or not) of edges `e(X, Y)`. Here, the rule
+
+```
+f :- not f, e(X, Y), c(X, Z), c(Y, Z).
+```
+
+defines whether or not the graph is 3-colorable. Notice the presence of contradiction `f :- not f,
+...`. When no 3-coloring can be achieved, then `f` must be set to `undef`, as the subgoals would
+then hold and thus cause the contradiction. Under the partial semantics, any minimal partial model
+is valid, and thus, even if we do find a 3-colorable graph under a total choice, other partial
+models with `undef` attributions would possibly appear as potential minimal models.
+
+```python
+P = pasp.parse("examples/3coloring.lp", semantics = "partial")
+pasp.exact(P)
+```
+```
+ℙ(c(1,r)) = [0.000000, 1.000000]
+ℙ(e(1,2) | undef f) = [0.090747, 0.971537]
+ℙ(undef f) = [0.064453, 0.999023]
+```
+
+Now, if we choose the L-stable semantics
+
+```python
+P = pasp.parse("examples/3coloring.lp", semantics = "lstable")
+pasp.exact(P)
+```
+```
+ℙ(c(1,r)) = [0.000000, 1.000000]
+ℙ(e(1,2) | undef f) = [0.772727, 0.772727]
+ℙ(undef f) = [0.064453, 0.064453]
+```
+
+we find that the probability of getting non-3-colorable graphs drastically falls, as we discard
+minimal models with `undef` when stable models are found.
+
+### Examples of probabilistic semantics
+
+Consider the game example shown in [`examples/game.lp`](examples/game.lp).
+
+```
+wins(X) :- move(X, Y), not wins(Y).
+move(a, b). move(b, a). move(b, c). 0.3::move(c, d).
+```
+
+If we were to use the credal semantic, we would find that `wins(b)` appears in two of the stable
+models (one when `move(c, d)` is in the program, and the other when it is not), and so by computing
+the total choice probabilities, it either appears with probability 1.0-0.3 or 1.0, producing the
+credal result `[0.7, 1.0]` below.
+
+```python
+P = pasp.parse("examples/game.lp")
+pasp.exact(P)
+```
+```
+ℙ(wins(b)) = [0.700000, 1.000000]
+ℙ(wins(c)) = [0.300000, 0.300000]
+```
+
+When querying under the credal semantics, we account for the lower and upper probabilities of each
+total choice and evaluate the final credal probabilities accordingly. If we wish to, instead,
+uniformly consider models, we might do so by using the P-log semantics [[3]](#ref-1).
+
+```python
+P = pasp.parse("examples/game.lp")
+pasp.exact(P, psemantics = "plog")
+```
+```
+ℙ(wins(b)) = [0.850000, 0.850000]
+ℙ(wins(c)) = [0.300000, 0.300000]
+```
 
 ## Usage
 
@@ -185,4 +370,7 @@ Reasoning 125. 2020.</div>
 
 <div id="ref-2">[2] - On the Semantics and Complexity of Probabilistic Logic Programs. Fabio Gagliardi Cozman and
 Denis Deratani Mauá. In Journal of Artificial Intelligence Research 60. 2017.</div>
+<br>
 
+<div id="ref-3">[3] - Probabilistic Reasoning with Answer Sets. Chitta Baral, Michael Gelfond and
+Nelson Rushton. In International Conference on Logic Programming and Nonmonotonic Reasoning. 2004.</div>

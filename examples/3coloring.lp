@@ -1,5 +1,5 @@
 % Build a random graph with n vertices.
-#const n = 4.
+#const n = 5.
 v(1..n).
 % The choice of p reflects the sparsity/density of the random graph.
 % A small p produces sparser graphs, while a large p prefers denser graphs.
