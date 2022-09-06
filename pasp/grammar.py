@@ -98,7 +98,7 @@ class Command(enum.Enum):
   CONSTDEF = 7
 
 class PLPTransformer(lark.Transformer):
-  def __init__(self):
+  def __init__(self, _):
     super().__init__()
     self.semantics = Semantics.STABLE
 
@@ -210,7 +210,7 @@ class PLPTransformer(lark.Transformer):
 
 class PartialTransformer(PLPTransformer):
   def __init__(self, sem: str):
-    super().__init__()
+    super().__init__(sem)
     self.PT = set()
     self.semantics = Semantics.LSTABLE if sem == "lstable" else Semantics.PARTIAL
     self.o_tree = None
@@ -297,11 +297,17 @@ class PartialTransformer(PLPTransformer):
 
   def transform(self, tree):
     self.o_tree = tree
-    self.stable_p = PLPTransformer().transform(tree)
+    self.stable_p = PLPTransformer(self.semantics).transform(tree)
     return super().transform(tree)
 
 """Either parses `streams` as blocks of text containing the PLP when `from_str = True`, or
 interprets `streams` as filenames to be read and parsed into a `Program`."""
 def parse(*files: str, G: lark.Lark = None, from_str: bool = False, semantics: str = "stable") -> Program:
-  return (PartialTransformer(semantics) if semantics != "stable" else PLPTransformer()).transform(read(*files, G = G, from_str = from_str))
+  if semantics not in parse.trans_map:
+    raise ValueError("semantics not supported (must either be 'stable', 'partial' or 'lstable')!")
+  return parse.trans_map[semantics](semantics).transform(read(*files, G = G, from_str = from_str))
+parse.trans_map = {}
+parse.trans_map["stable"] = PLPTransformer
+parse.trans_map["lstable"] = PartialTransformer
+parse.trans_map["partial"] = PartialTransformer
 
