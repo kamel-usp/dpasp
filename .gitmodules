@@ -1,0 +1,3 @@
+[submodule "bitvector"]
+	path = bitvector
+	url = git@github.com:RenatoGeh/bitvector.git
