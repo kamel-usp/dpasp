@@ -2,14 +2,31 @@
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
-[metadata]
-name = "pasp"
-version = "0.0.1"
+[project]
+name = "pasp-plp"
+version = "0.0.1-1"
+authors = [
+  { name = "Renato Lui Geh", email = "renatogeh@gmail.com" },
+]
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 description = "Probabilistic Answer Set Programming"
 dependencies = [
   "clingo",
-  "scipy",
-  "numpy",
   "lark",
 ]
+
+[project.urls]
+Repository = "https://github.com/RenatoGeh/pasp"
+Issues = "https://github.com/RenatoGeh/pasp/issues"
 
