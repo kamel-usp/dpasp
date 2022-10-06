@@ -1,0 +1,29 @@
+name: Test pasp
+run-name: ${{ github.actor }} is testing pasp
+on: [push]
+jobs:
+  test-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+          cache: "pip"
+      - name: Add system dependencies
+        run: |
+          sudo add-apt-repository ppa:potassco/stable
+          sudo apt update
+          sudo apt install clingo libclingo-dev gcc python3-build
+      - name: Add Python dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools build
+          pip install -r requirements.txt
+      - name: Build pasp
+        run: |
+          python -m build --sdist
+          pip install dist/*.tar.gz
+      - name: Test pasp
+        run: |
+          python setup.py test
