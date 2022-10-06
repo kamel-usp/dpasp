@@ -1,5 +1,7 @@
 include pasp/grammar.lark
-graft pasp
+graft pasp/
 graft tests
 graft thpool
 graft bitvector
+
+prune */__pycache__
