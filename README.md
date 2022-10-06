@@ -340,26 +340,58 @@ pasp.exact(P, psemantics = "plog")
 ℙ(wins(c)) = [0.300000, 0.300000]
 ```
 
-## Usage
+## Installation and requirements
 
-For now, `pasp` is only to be run locally. Clone this repository to a directory of your choice, say
-`pasp/`. The package is written in Python, with the more critical parts written as C extensions. The
-only dependency from the C-side of `pasp` is [clingo](https://potassco.org/), while the only
-dependencies from the Python side are the [clingo](https://potassco.org/) Python API and
+`pasp` requires Python version 3.10 or newer to work and needs access to
+[`clingo`](https://potassco.org/)'s C API. Some Linux distribution packages for `clingo` do not
+expose headers or are outdated. Here are some Linux distribution packages we know work with `pasp`.
+
+### Arch Linux AUR
+
+`clingo` (replace `yay` with your AUR helper or manually install with `makepkg`):
+
+```bash
+yay -S clingo
+```
+
+### Ubuntu PPA
+
+`clingo` and `libclingo-dev`:
+
+```bash
+sudo add-apt-repository ppa:potassco/stable
+sudo apt update
+sudo apt-get install clingo libclingo-dev
+```
+
+### Installation
+
+`pasp` is available from the PyPi repository as `pasp-plp`.
+
+```bash
+pip install pasp-plp
+```
+
+Import the package normally
+
+```python
+import pasp
+```
+
+to have access to the exported symbols of the package.
+
+### Manual installation
+
+Alternatively, you may locally build `pasp`. To do so, clone this repository to a directory of your
+choice, say `pasp/`. The package is written in Python, with the more critical parts written as C
+extensions. The only dependency from the C-side of `pasp` is [clingo](https://potassco.org/), while
+the only dependencies from the Python side are the [clingo](https://potassco.org/) Python API and
 [lark](https://github.com/lark-parser/lark). Change your working directory to `pasp/` and then
 compile the C parts with the following command:
 
 ```bash
 python setup.py build_ext --inplace
 ```
-
-This will build the C modules in the `pasp/` directory. Import the package normally
-
-```python
-import pasp
-```
-
-to have access to the exported symbols in the package.
 
 ## References
 
