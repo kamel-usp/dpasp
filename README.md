@@ -80,10 +80,9 @@ will return a tuple of lower and upper probabilities. Let's ask the package to p
 probabilities. We first inspect our Probabilistic Logic Program (PLP).
 
 ```python
-import pasp
-
-P = pasp.parse("examples/asia.lp")
-print(P)
+>>> import pasp
+>>> P = pasp.parse("examples/asia.lp")
+>>> print(P)
 ```
 ```
 <Logic Program:
@@ -117,7 +116,7 @@ Let's ask the solver to produce the exact probabilities we asked. We can do so b
 this package.
 
 ```python
-R = pasp.exact(P)
+>>> R = pasp.exact(P)
 ```
 ```
 ℙ(trip) = [0.010000, 0.010000]
@@ -153,7 +152,7 @@ essentially resulting in two possible stable models: one where only `work` is se
 other where only `sleep` is true, each having different sets of probabilities. Let's query!
 
 ```python
-pasp.exact(pasp.parse("examples/insomnia.lp"))
+>>> pasp.exact(pasp.parse("examples/insomnia.lp"))
 ```
 ```
 ℙ(insomnia) = [0.300000, 0.300000]
@@ -216,8 +215,8 @@ any given total choice, the computed probabilities will be garbage (for now, ign
 keyword):
 
 ```python
-P = pasp.parse("examples/barber.lp")
-pasp.exact(P)
+>>> P = pasp.parse("examples/barber.lp")
+>>> pasp.exact(P)
 ```
 ```
 ℙ(shaves(b,a)) = [1.000000, 0.500000]
@@ -238,8 +237,8 @@ be set to undefined. Now, if we compute the credal probabilities again, this tim
 semantics, we get
 
 ```python
-P = pasp.parse("examples/barber.lp", semantics = "partial")
-pasp.exact(P)
+>>> P = pasp.parse("examples/barber.lp", semantics = "partial")
+>>> pasp.exact(P)
 ```
 ```
 ℙ(shaves(b,a)) = [1.000000, 1.000000]
@@ -280,8 +279,8 @@ is valid, and thus, even if we do find a 3-colorable graph under a total choice,
 models with `undef` attributions would possibly appear as potential minimal models.
 
 ```python
-P = pasp.parse("examples/3coloring.lp", semantics = "partial")
-pasp.exact(P)
+>>> P = pasp.parse("examples/3coloring.lp", semantics = "partial")
+>>> pasp.exact(P)
 ```
 ```
 ℙ(c(1,r)) = [0.000000, 1.000000]
@@ -292,8 +291,8 @@ pasp.exact(P)
 Now, if we choose the L-stable semantics
 
 ```python
-P = pasp.parse("examples/3coloring.lp", semantics = "lstable")
-pasp.exact(P)
+>>> P = pasp.parse("examples/3coloring.lp", semantics = "lstable")
+>>> pasp.exact(P)
 ```
 ```
 ℙ(c(1,r)) = [0.000000, 1.000000]
@@ -319,8 +318,8 @@ the total choice probabilities, it either appears with probability 1.0-0.3 or 1.
 credal result `[0.7, 1.0]` below.
 
 ```python
-P = pasp.parse("examples/game.lp")
-pasp.exact(P)
+>>> P = pasp.parse("examples/game.lp")
+>>> pasp.exact(P)
 ```
 ```
 ℙ(wins(b)) = [0.700000, 1.000000]
@@ -332,8 +331,8 @@ total choice and evaluate the final credal probabilities accordingly. If we wish
 uniformly consider models, we might do so by using the P-log semantics [[3]](#ref-1).
 
 ```python
-P = pasp.parse("examples/game.lp")
-pasp.exact(P, psemantics = "plog")
+>>> P = pasp.parse("examples/game.lp")
+>>> pasp.exact(P, psemantics = "plog")
 ```
 ```
 ℙ(wins(b)) = [0.850000, 0.850000]
@@ -375,7 +374,7 @@ pip install pasp-plp
 Import the package normally
 
 ```python
-import pasp
+>>> import pasp
 ```
 
 to have access to the exported symbols of the package.
