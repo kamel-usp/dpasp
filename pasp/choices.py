@@ -1,9 +1,9 @@
 from .program import ProbFact
 
-"""
-Returns the probability of the total choice θ asserted through the probabilistic facts ϕ.
-"""
 def pr(phi: list[ProbFact], theta: iter) -> float:
+  """
+  Returns the probability of the total choice θ asserted through the probabilistic facts ϕ.
+  """
   n = len(phi)
   p = 1.0
   for i in range(n):
