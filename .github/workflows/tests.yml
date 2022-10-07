@@ -1,5 +1,4 @@
-name: Test pasp
-run-name: ${{ github.actor }} is testing pasp
+name: Tests
 on: [push]
 jobs:
   test-linux:
