@@ -4,7 +4,8 @@
 ![Docs](https://github.com/RenatoGeh/pasp/actions/workflows/docs.yml/badge.svg)
 
 Prototype implementation for probabilistic ASP [[1]](#ref-1)[[2]](#ref-2). Example probabilistic
-logic programs may be found in [`examples/`](examples/). Let's take a look at some examples to show
+logic programs may be found in [`examples/`](examples/). See full API documentation
+[here](https://renatogeh.github.io/pasp/pasp.html). Let's take a look at some examples to show
 how to do inference with this package.
 
 ## Examples
