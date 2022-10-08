@@ -2,6 +2,8 @@
 
 ![Tests](https://github.com/RenatoGeh/pasp/actions/workflows/tests.yml/badge.svg)
 ![Docs](https://github.com/RenatoGeh/pasp/actions/workflows/docs.yml/badge.svg)
+[![](https://img.shields.io/badge/docs-master-blue.svg)](https://renatogeh.github.io/pasp)
+![GitHub](https://img.shields.io/github/license/RenatoGeh/pasp?color=blue&label=License)
 
 Prototype implementation for probabilistic ASP [[1]](#ref-1)[[2]](#ref-2). Example probabilistic
 logic programs may be found in [`examples/`](examples/). See full API documentation

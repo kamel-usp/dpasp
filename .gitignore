@@ -127,6 +127,9 @@ instance/
 # Sphinx documentation
 docs/_build/
 
+# Pdoc documentation
+docs/
+
 # PyBuilder
 .pybuilder/
 target/

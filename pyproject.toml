@@ -21,10 +21,10 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 description = "Probabilistic Answer Set Programming"
-dependencies = [
-  "clingo",
-  "lark",
-]
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
 
 [project.urls]
 Repository = "https://github.com/RenatoGeh/pasp"
