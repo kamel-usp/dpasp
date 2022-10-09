@@ -1,9 +1,9 @@
 # PASP - Probabilistic Answer Set Programming
 
-![Tests](https://github.com/RenatoGeh/pasp/actions/workflows/tests.yml/badge.svg)
-![Docs](https://github.com/RenatoGeh/pasp/actions/workflows/docs.yml/badge.svg)
+[![Tests](https://github.com/RenatoGeh/pasp/actions/workflows/tests.yml/badge.svg)](https://github.com/RenatoGeh/pasp/actions/workflows/tests.yml)
+[![Docs](https://github.com/RenatoGeh/pasp/actions/workflows/docs.yml/badge.svg)](https://github.com/RenatoGeh/pasp/actions/workflows/docs.yml)
 [![](https://img.shields.io/badge/docs-master-blue.svg)](https://renatogeh.github.io/pasp)
-![GitHub](https://img.shields.io/github/license/RenatoGeh/pasp?color=blue&label=License)
+[![GitHub](https://img.shields.io/github/license/RenatoGeh/pasp?color=blue&label=License)](https://github.com/RenatoGeh/pasp/blob/master/LICENSE)
 
 Prototype implementation for probabilistic ASP [[1]](#ref-1)[[2]](#ref-2). Example probabilistic
 logic programs may be found in [`examples/`](examples/). See full API documentation

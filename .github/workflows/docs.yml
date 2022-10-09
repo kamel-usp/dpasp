@@ -30,7 +30,8 @@ jobs:
           python setup.py build_ext --inplace
       - name: Generate docs
         run: |
-          pdoc --math --logo "https://raw.githubusercontent.com/RenatoGeh/pasp/master/logo/logo.svg" pasp -o docs/
+          pdoc --math --logo "https://raw.githubusercontent.com/RenatoGeh/pasp/master/logo/logo.svg" --logo-link "https://github.com/RenatoGeh/pasp" pasp -o docs/
+          cp -r examples/ docs/
       - name: Upload to GitHub Pages
         uses: actions/upload-pages-artifact@v1
         with:
