@@ -361,6 +361,23 @@ sudo apt update
 sudo apt-get install clingo libclingo-dev
 ```
 
+### Mac OS X
+
+Homebrew `clingo`:
+
+```bash
+brew install clingo
+```
+
+You may need to append Homebrew to your paths if you have not done so yet:
+
+```bash
+# Assuming your brew dir is "${HOME}/.brew"
+export LIBRARY_PATH="${LIBRARY_PATH}:${HOME}/.brew/lib"
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${HOME}/.brew/lib"
+export C_INCLUDE_PATH="${C_INCLUDE_PATH}:${HOME}/.brew/include"
+```
+
 ### Installation
 
 `pasp` is available from the PyPi repository as `pasp-plp`. For Arch Linux users, see the
