@@ -35,6 +35,14 @@ typedef struct credal_fact {
   clingo_symbol_t cl_f;
 } credal_fact_t;
 
+typedef struct annot_disj {
+  double *P;
+  const char **F;
+  PyObject **F_obj;
+  clingo_symbol_t *cl_F;
+  size_t n;
+} annot_disj_t;
+
 #define QUERY_TERM_NEG 0
 #define QUERY_TERM_POS 1
 #define QUERY_TERM_UND 2
@@ -68,6 +76,8 @@ typedef struct program {
   size_t Q_n;
   credal_fact_t *CF;
   size_t CF_n;
+  annot_disj_t *AD;
+  size_t AD_n;
 
   array_clingo_symbol_t_t gr_PF;
   array_char_t gr_P;

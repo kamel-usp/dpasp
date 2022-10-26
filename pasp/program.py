@@ -72,6 +72,18 @@ def _str_query_assignment(f: Function, t: bool) -> str:
   """
   return str(f) if t == Query.TERM_POS else ("not " + str(f) if t == Query.TERM_NEG else "undef " + str(f))
 
+class AnnotatedDisjunction:
+  def __init__(self, P: list[float], F: list[str]):
+    self.P = P
+    self.F = F
+    self.cl_F = [clingo.parse_term(f) for f in F]
+
+  def __getitem__(self, i: int) -> tuple[float, str]:
+    return self.P[i], self.F[i]
+  def __str__(self) -> str:
+    return "; ".join([f"{self.P[i]}::{self.F[i]}" for i in range(len(self.P))])
+  def __repr__(self) -> str: return self.__str__()
+
 class Semantics(enum.IntEnum):
   STABLE = 0
   PARTIAL = 1
@@ -150,7 +162,8 @@ class Program:
   """
 
   def __init__(self, P: str, PF: list[ProbFact], PR: list[ProbRule], Q: list[Query], \
-               CF: list[CredalFact], semantics: Semantics = Semantics.STABLE, stable_p = None):
+               CF: list[CredalFact], AD: list[AnnotatedDisjunction], \
+               semantics: Semantics = Semantics.STABLE, stable_p = None):
     """
     Constructs a PLP out of a logic program `P`, probabilistic facts `PF`, credal facts `CF` and
     queries `Q`.
@@ -160,6 +173,7 @@ class Program:
     self.PR = PR
     self.Q = Q
     self.CF = CF
+    self.AD = AD
 
     self.gr_P = None
     self.gr_PF = None
@@ -169,5 +183,5 @@ class Program:
     self.stable = stable_p
 
   def __str__(self) -> str:
-    return f"<Logic Program:\n{self.P},\nProbabilistic Facts:\n{self.PF},\nCredal Facts:\n{self.CF}\nProbabilistic Rules:\n{self.PR},\nQueries\n{self.Q}>"
+    return f"<Logic Program:\n{self.P},\nProbabilistic Facts:\n{self.PF},\nCredal Facts:\n{self.CF},\nAnnotated Disjunctions:\n{self.AD},\nProbabilistic Rules:\n{self.PR},\nQueries\n{self.Q}>"
   def __repr__(self) -> str: return self.__str__()

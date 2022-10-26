@@ -22,7 +22,7 @@ const struct timespec TIME_QUARTER_SEC = { .tv_sec = 0, .tv_nsec = 250000000L };
 #define NUM_PROCS 1
 #endif
 
-#define IS_TRUE(t, i) (((t) >> (i)) % 2)
+#define IS_TRUE(t, i) bitvec_GET(&t->pf, i)
 #define PROCS_STR(x) #x ",compete"
 #define PROCS_XSTR(x) PROCS_STR(x)
 #define NUM_PROCS_CONFIG_STR PROCS_XSTR(NUM_PROCS)
@@ -140,8 +140,8 @@ error:
   return false;
 }
 
-static inline bool prepare_control(clingo_control_t **C, program_t *P, unsigned long long int theta,
-    const char *nmodels, bool parallelize_clingo) {
+static inline bool prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
+    uint8_t *theta_ad, const char *nmodels, bool parallelize_clingo) {
   size_t i, gr_n = P->gr_pr.n;
   clingo_backend_t *back = NULL;
   /* Create new clingo controller. */
@@ -177,6 +177,12 @@ static inline bool prepare_control(clingo_control_t **C, program_t *P, unsigned 
     if (!clingo_backend_add_atom(back, &P->gr_PF.d[i], &a)) return false;
     if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) return false;
   }
+  /* Add the annotated disjunction rules according to the total rule encoded by theta_ad. */
+  for (i = 0; i < theta->ad_n; ++i) {
+    clingo_atom_t a;
+    if (!clingo_backend_add_atom(back, &theta->ad[i].cl_F[theta_ad[i]], &a)) return false;
+    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) return false;
+  }
   /* Cleanup backend. */
   if (!clingo_backend_end(back)) return false;
   /* Ground atoms. */
@@ -184,12 +190,12 @@ static inline bool prepare_control(clingo_control_t **C, program_t *P, unsigned 
   return true;
 }
 
-static inline bool has_total_model(program_t *P, unsigned long long int theta, bool *has) {
+static inline bool has_total_model(program_t *P, total_choice_t *theta, uint8_t *theta_ad, bool *has) {
   clingo_control_t *C = NULL;
   clingo_solve_handle_t *handle;
   clingo_solve_result_bitset_t res;
   /* Prepare control according to the stable semantics. */
-  if (!prepare_control(&C, P->stable, theta, "1", false)) goto cleanup;
+  if (!prepare_control(&C, P->stable, theta, theta_ad, "1", false)) goto cleanup;
   /* Solve and determine if there exists a (total) model. */
   if (!clingo_control_solve(C, clingo_solve_mode_yield, NULL, 0, NULL, NULL, &handle)) goto cleanup;
   if (!clingo_solve_handle_get(handle, &res)) goto cleanup;
@@ -239,7 +245,7 @@ static void compute_total_choice(void *data) {
   size_t i, m;
   clingo_control_t *C = NULL;
   program_t *P = st->P;
-  unsigned long long int theta = st->theta;
+  total_choice_t *theta = &st->theta;
   bool *cond_1 = st->cond_1, *cond_2 = st->cond_2, *cond_3 = st->cond_3, *cond_4 = st->cond_4;
   size_t *count_q_e = st->count_q_e, *count_e = st->count_e, *count_partial_q_e = st->count_partial_q_e;
   double *a = st->a, *b = st->b, *c = st->c, *d = st->d, p;
@@ -249,17 +255,16 @@ static void compute_total_choice(void *data) {
   /* Check SAT if partial and lstable_sat. */
   if (P->sem == LSTABLE_SEMANTICS && st->lstable_sat) {
     bool has;
-    if (!has_total_model(P, theta, &has)) goto cleanup;
+    if (!has_total_model(P, theta, theta->theta_ad, &has)) goto cleanup;
     if (has) P = P->stable;
   }
 
   size_t CF_n = P->CF_n, PF_n = P->PF_n;
   size_t Q_n = P->Q_n, Q_n_bytes = Q_n*sizeof(size_t);
-  unsigned long long int theta_CF = theta & ((1 << CF_n)-1);
   bool is_partial = P->sem, has_credal = P->CF_n;
 
   /* Add credal, probabilistic, and grounded probabilistic facts. */
-  if (!prepare_control(&C, P, theta, "0", false)) goto cleanup;
+  if (!prepare_control(&C, P, theta, theta->theta_ad, "0", false)) goto cleanup;
   /* Zero-initialize counters and flags. */
   memset(cond_1, 0, Q_n); memset(cond_2, 0, Q_n);
   memset(cond_3, 0, Q_n); memset(cond_4, 0, Q_n);
@@ -309,7 +314,7 @@ solve_cleanup:
     if (!(clingo_solve_handle_close(handle) && ok)) goto cleanup;
   }
   /* Compute ℙ(θ). */
-  p = prob_total_choice(P->PF, PF_n, &P->gr_pr, theta >> CF_n);
+  p = prob_total_choice(P->PF, PF_n, &P->gr_pr, CF_n, theta, theta->theta_ad);
   for (i = 0; i < Q_n; ++i) {
     /* Evaluate counts to judge whether cond_1 and/or cond_3 are true. */
     if (count_e[i] == m || P->Q[i].E_n == 0) {
@@ -324,16 +329,16 @@ solve_cleanup:
       if (cond_1[i] || cond_2[i] || cond_3[i] || cond_4[i]) {
         pthread_mutex_lock(st->mu);
         if (cond_1[i]) {
-          for (j = 0; j < CF_n; ++j) if (!array_bool_append(&Pn[i][0], (theta_CF >> j) % 2)) goto cleanup;
+          for (j = 0; j < CF_n; ++j) if (!array_bool_append(&Pn[i][0], IS_TRUE(theta, j))) goto cleanup;
           if (!array_double_append(&K[i][0], p)) goto cleanup;
         } if (cond_2[i]) {
-          for (j = 0; j < CF_n; ++j) if (!array_bool_append(&Pn[i][1], (theta_CF >> j) % 2)) goto cleanup;
+          for (j = 0; j < CF_n; ++j) if (!array_bool_append(&Pn[i][1], IS_TRUE(theta, j))) goto cleanup;
           if (!array_double_append(&K[i][1], p)) goto cleanup;
         } if (cond_3[i]) {
-          for (j = 0; j < CF_n; ++j) if (!array_bool_append(&Pn[i][2], (theta_CF >> j) % 2)) goto cleanup;
+          for (j = 0; j < CF_n; ++j) if (!array_bool_append(&Pn[i][2], IS_TRUE(theta, j))) goto cleanup;
           if (!array_double_append(&K[i][2], p)) goto cleanup;
         } if (cond_4[i]) {
-          for (j = 0; j < CF_n; ++j) if (!array_bool_append(&Pn[i][3], (theta_CF >> j) % 2)) goto cleanup;
+          for (j = 0; j < CF_n; ++j) if (!array_bool_append(&Pn[i][3], IS_TRUE(theta, j))) goto cleanup;
           if (!array_double_append(&K[i][3], p)) goto cleanup;
         }
         pthread_mutex_unlock(st->mu);
@@ -366,13 +371,13 @@ static void compute_total_choice_maxent(void *data) {
   size_t i, m;
   clingo_control_t *C = NULL;
   program_t *P = st->P;
-  unsigned long long int theta = st->theta;
+  total_choice_t *theta = &st->theta;
   size_t *count_q_e = st->count_q_e, *count_e = st->count_e;
   double *a = st->a, *b = st->b, p;
 
   if (P->sem == LSTABLE_SEMANTICS && st->lstable_sat) {
     bool has;
-    if (!has_total_model(P, theta, &has)) goto cleanup;
+    if (!has_total_model(P, theta, theta->theta_ad, &has)) goto cleanup;
     if (has) P = P->stable;
   }
 
@@ -380,7 +385,7 @@ static void compute_total_choice_maxent(void *data) {
   size_t Q_n = P->Q_n, Q_n_bytes = Q_n*sizeof(size_t);
   bool is_partial = P->sem;
 
-  if (!prepare_control(&C, P, theta, "0", false)) goto cleanup;
+  if (!prepare_control(&C, P, theta, theta->theta_ad, "0", false)) goto cleanup;
 
   memset(count_q_e, 0, Q_n_bytes);
   memset(count_e, 0, Q_n_bytes);
@@ -423,7 +428,7 @@ solve_cleanup:
     if (!(clingo_solve_handle_close(handle) && ok)) goto cleanup;
   }
 
-  p = prob_total_choice(P->PF, PF_n, &P->gr_pr, theta);
+  p = prob_total_choice(P->PF, PF_n, &P->gr_pr, 0, theta, theta->theta_ad);
   for (i = 0; i < Q_n; ++i) {
     a[i] += (count_q_e[i]*p)/m;
     b[i] += (count_e[i]*p)/m;
@@ -445,31 +450,46 @@ cleanup:
   pthread_mutex_unlock(st->wakeup);
 }
 
-#ifndef min
-#define min(x, y) ((x) < (y) ? (x) : (y))
-#endif
+static bool dispatch_job(total_choice_t *theta, pthread_mutex_t *wakeup,
+    bool *busy_procs, storage_t *S, size_t num_procs, threadpool pool, pthread_cond_t *avail,
+    void (*compute_func)(void*), bool has_ad, size_t j, size_t c) {
+  size_t i, id = (size_t) -1;
+  /* The line below does not produce a problematic race condition since it will, at worst, skip
+   * the i-th busy_procs and have to iterate NUM_PROCS all over again. */
+  pthread_mutex_lock(wakeup);
+  while (true) {
+    for (i = 0, id = (size_t) -1; i < num_procs; ++i) {
+      if (!busy_procs[i]) { id = i; break; }
+    }
+    if (id != (size_t) -1) break;
+    pthread_cond_wait(avail, wakeup);
+  }
+  busy_procs[id] = true;
+  pthread_mutex_unlock(wakeup);
+  if (has_ad) theta->theta_ad[j] = c;
+  copy_total_choice(theta, &S[id].theta);
+  if (S[id].fail || thpool_add_work(pool, compute_func, (void*) &S[id])) return false;
+  return true;
+}
 
 static bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat, psemantics_t psem) {
-  bool has_credal = P->CF_n > 0;
+  bool has_credal = P->CF_n > 0, has_ad = P->AD_n > 0;
   double *a, *b, *c, *d = c = b = a = NULL;
   size_t Q_n = P->Q_n, gr_n = P->gr_pr.n, i;
   size_t total_choice_n = has_credal ? P->PF_n+P->CF_n+gr_n : P->PF_n+gr_n;
-  unsigned long long int theta, theta_max;
+  total_choice_t theta;
   array_bool_t (*Pn)[4] = NULL;
   array_double_t (*K)[4] = NULL;
   double *X, *L_CF, *U_CF = L_CF = X = NULL;
-  size_t num_procs = min(NUM_PROCS, 1 << total_choice_n);
+  size_t num_procs = (total_choice_n > log2(NUM_PROCS)) ? NUM_PROCS : (1 << total_choice_n);
   threadpool pool = thpool_init(num_procs);
   bool busy_procs[NUM_PROCS] = {0}, exact_num_ok;
-  storage_t S[NUM_PROCS];
+  storage_t S[NUM_PROCS] = {{0}};
   pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER, wakeup = PTHREAD_MUTEX_INITIALIZER;
   pthread_cond_t avail = PTHREAD_COND_INITIALIZER;
   void (*compute_func)(void*) = psem ? compute_total_choice_maxent : compute_total_choice;
 
-  if (total_choice_n > 62) {
-    fputws(L"exact inference only supports up to 62 probabilistic objects (facts or propositional rules)!\n", stdout);
-    return false;
-  } else theta_max = 1 << total_choice_n;
+  if (!init_total_choice(&theta, total_choice_n, P->AD, P->AD_n)) goto cleanup;
 
   if (has_credal) {
     if (!setup_credal(&L_CF, &U_CF, &X, P)) goto cleanup;
@@ -477,28 +497,20 @@ static bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat, psemantic
   }
 
   for (i = 0; i < num_procs; ++i)
-    if (!init_storage(&S[i], P, Pn, K, i, busy_procs, &mu, &wakeup, &avail, lstable_sat))
+    if (!init_storage(&S[i], P, Pn, K, i, busy_procs, &mu, &wakeup, &avail, lstable_sat,
+          total_choice_n, P->AD, P->AD_n))
       goto cleanup;
 
-  for (theta = 0; theta < theta_max; ++theta) {
-    size_t id = (size_t) -1;
-    /* The line below does not produce a problematic race condition since it will, at worst, skip
-     * the i-th busy_procs and have to iterate NUM_PROCS all over again. */
-    pthread_mutex_lock(&wakeup);
-    while (true) {
-      for (i = 0, id = (size_t) -1; i < num_procs; ++i) {
-        if (!busy_procs[i]) { id = i; break; }
-      }
-      if (id != (size_t) -1) break;
-      pthread_cond_wait(&avail, &wakeup);
-    }
-    busy_procs[id] = true;
-    pthread_mutex_unlock(&wakeup);
-    S[id].theta = theta;
-    if (S[id].fail || thpool_add_work(pool, compute_func, (void*) &S[id])) {
-      goto cleanup;
-    }
-  }
+  do {
+    size_t j, c;
+    if (has_ad) {
+      for (j = 0; j < theta.ad_n; ++j)
+        for (c = 0; c < theta.ad[j].n; ++c)
+          if (!dispatch_job(&theta, &wakeup, busy_procs, S, num_procs, pool, &avail, compute_func,
+                true, j, c)) goto cleanup;
+    } else if (!dispatch_job(&theta, &wakeup, busy_procs, S, num_procs, pool, &avail, compute_func,
+          false, 0, 0)) goto cleanup;
+  } while (incr_total_choice(&theta));
   thpool_wait(pool);
 
   if (!has_credal) {

@@ -32,8 +32,10 @@ CONST: /[a-z]\w*/
 VAR: /[A-Z]\w*/
 
 // Ground atom.
+pgratom: (CONST | pgrpred)
 gratom: (NEG | UND)?  (CONST | grpred)
 // Ground predicates.
+pgrpred: CONST "(" (gratom | ID) ("," (gratom | ID))* ")"
 grpred: (NEG | UND)? CONST "(" (gratom | ID) ("," (gratom | ID | interval))* ")"
 
 // Atom.
@@ -62,6 +64,12 @@ rule: _rule
 // Probabilistic rule.
 prule: PROB "::" ohead ":-" body "."
 
+// Annotated disjunction head.
+adhead: PROB "::" pgratom (";" PROB "::" pgratom)*
+// Annotated disjunctions.
+ad: adhead "."
+bad: adhead ":-" body "."
+
 // Constraint.
 constraint: ":-" body "."
 
@@ -75,7 +83,7 @@ query: "#query(" interp ("|" interp)? ")" "."?
 // Constant definition.
 constdef: "#const" CONST "=" ID "."
 
-plp: (constdef | fact | rule | pfact | prule | cfact | constraint | query)*
+plp: (constdef | fact | rule | pfact | prule | cfact | ad | constraint | query)*
 
 COMMENT: "%" /[^\n]*/ NEWLINE
 

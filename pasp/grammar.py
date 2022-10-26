@@ -1,6 +1,7 @@
 import pathlib, enum
 import lark, lark.reconstruct
 from .program import ProbFact, Query, ProbRule, Program, CredalFact, unique_fact, Semantics
+from .program import AnnotatedDisjunction
 
 def is_fact(x: lark.Tree) -> bool:
   "Returns whether a node in the AST is a fact."
@@ -110,6 +111,7 @@ class Command(enum.Enum):
   CRED_FACT = 5
   CONSTRAINT = 6
   CONSTDEF = 7
+  ANNOTATED_DISJUNCTION = 8
 
 class PLPTransformer(lark.Transformer):
   def __init__(self, _):
@@ -128,6 +130,7 @@ class PLPTransformer(lark.Transformer):
   def atom(self, a: list[lark.Tree]) -> tuple[str, bool]:
     return " ".join(getnths(a, 0)), all(getnths(a, 1)), True
   def gratom(self, a: list[lark.Tree]) -> tuple[str, bool]: return self.atom(a)[0], True
+  def pgratom(self, a): return self.atom(a)[0], True
 
   # Intervals.
   def interval(self, i: list[lark.Token]) -> tuple[str, bool]:
@@ -142,6 +145,7 @@ class PLPTransformer(lark.Transformer):
     name, args = p[0], p[1:]
     return f"{name[0]}({', '.join(getnths(args, 0))})", all(getnths(args, 1)), True
   def grpred(self, p: list[tuple[str, bool]]) -> tuple[str, bool]: return self.pred(p)[0], True
+  def pgrpred(self, p): return self.pred(p)[0], True
 
   # Binary operations.
   def bop(self, b: list[lark.Tree]) -> str:
@@ -180,6 +184,13 @@ class PLPTransformer(lark.Transformer):
     u = f"{r[1][2]}(@unify(\"{r[0]}\", {r[1][2]}, {len(h)}, {2*len(b)}, {h_s}{b_s})) :- {r[2][0]}."
     return Command.PROB_RULE, ProbRule(r[0], o, is_prop = False, unify = u)
 
+  # Annotated disjunction head.
+  def adhead(self, h: list):
+    return [float(h[i]) for i in range(0, len(h), 2)], [h[i][0] for i in range(1, len(h), 2)]
+  # Annotated disjunctions.
+  def ad(self, d: list):
+    return Command.ANNOTATED_DISJUNCTION, AnnotatedDisjunction(d[0][0], d[0][1])
+
   # Constraint.
   def constraint(self, b: list[str]) -> tuple[Command, str]:
     return Command.CONSTRAINT, f":- {b[0][0]}."
@@ -206,6 +217,8 @@ class PLPTransformer(lark.Transformer):
     Q  = []
     # Credal Facts.
     CF = []
+    # Annotated Disjunction.
+    AD = []
     for t, *c in C:
       if t == Command.FACT: P.extend(c)
       elif t == Command.PROB_FACT: PF.extend(c)
@@ -219,8 +232,9 @@ class PLPTransformer(lark.Transformer):
       elif t == Command.QUERY: Q.extend(c)
       elif t == Command.CRED_FACT: CF.extend(c)
       elif t == Command.CONSTRAINT: P.extend(c)
+      elif t == Command.ANNOTATED_DISJUNCTION: AD.extend(c)
       else: P.extend(c)
-    return Program("\n".join(P), PF, PR, Q, CF, semantics = self.semantics)
+    return Program("\n".join(P), PF, PR, Q, CF, AD, semantics = self.semantics)
 
 class PartialTransformer(PLPTransformer):
   def __init__(self, sem: str):
@@ -286,6 +300,8 @@ class PartialTransformer(PLPTransformer):
     Q  = []
     # Credal Facts.
     CF = []
+    # Annotated Disjunction.
+    AD = []
     for t, *c in C:
       if t == Command.FACT: P.extend(c)
       elif t == Command.PROB_FACT: PF.extend(c)
@@ -304,9 +320,10 @@ class PartialTransformer(PLPTransformer):
       elif t == Command.QUERY: Q.extend(c)
       elif t == Command.CRED_FACT: CF.extend(c)
       elif t == Command.CONSTRAINT: P.extend(c)
+      elif t == Command.ANNOTATED_DISJUNCTION: AD.extend(c)
       else: P.extend(c)
     P.extend(f"_{x} :- {x}." for x in self.PT)
-    return Program("\n".join(P), PF, PR, Q, CF, semantics = self.semantics, \
+    return Program("\n".join(P), PF, PR, Q, CF, AD, semantics = self.semantics, \
                    stable_p = self.stable_p)
 
   def transform(self, tree):

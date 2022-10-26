@@ -22,6 +22,22 @@ static inline void print_credal_fact(credal_fact_t *cf) { wprintf(L"[%f, %f]::%s
 static inline void free_credal_fact_contents(credal_fact_t *cf) { if (cf) Py_DECREF(cf->f_obj); }
 static inline void free_credal_fact(credal_fact_t *cf) { free_credal_fact_contents(cf); free(cf); }
 
+static inline void print_annot_disj(annot_disj_t *ad) {
+  size_t i;
+  for (i = 0; i < ad->n; ++i) {
+    wprintf(L"%f::%s", ad->P[i], ad->F[i]);
+    if (i != ad->n-1) fputws(L"; ", stdout);
+  }
+}
+static inline void free_annot_disj_contents(annot_disj_t *ad) {
+  if (!ad) return;
+  free(ad->P);
+  free(ad->F);
+  free(ad->F_obj);
+  free(ad->cl_F);
+}
+static inline void free_annot_disj(annot_disj_t *ad) { free_annot_disj_contents(ad); free(ad); }
+
 static bool print_query_with_buffer(query_t *q, string_t *s) {
   size_t i;
   bool has_E = q->E_n > 0;
@@ -74,6 +90,8 @@ static void print_program(program_t *P) {
   for (i = 0; i < P->PF_n; ++i) { print_prob_fact(P->PF + i); fputws(L", ", stdout); }
   fputws(L"\nCredal Facts:\n", stdout);
   for (i = 0; i < P->CF_n; ++i) { print_credal_fact(P->CF + i); fputws(L", ", stdout); }
+  fputws(L"\nAnnotated Disjunctions:\n", stdout);
+  for (i = 0; i < P->AD_n; ++i) { print_annot_disj(P->AD + i); fputws(L", ", stdout); }
   fputws(L"\nProbabilistic Rules:\n", stdout);
   for (i = 0; i < P->PR_n; ++i) { print_prob_rule(P->PR + i); fputws(L", ", stdout); }
   fputws(L"\nQueries:\n", stdout);
@@ -93,6 +111,8 @@ static inline void free_program_contents(program_t *P) {
   free(P->Q);
   for (i = 0; i < P->CF_n; ++i) free_credal_fact_contents(&P->CF[i]);
   free(P->CF);
+  for (i = 0; i < P->AD_n; ++i) free_annot_disj_contents(&P->AD[i]);
+  free(P->AD);
   array_clingo_symbol_t_free_contents(&P->gr_PF);
   array_char_free_contents(&P->gr_P);
   array_double_free_contents(&P->gr_pr);
@@ -233,7 +253,7 @@ static bool from_python_credal_fact(PyObject *py_cf, credal_fact_t *cf) {
   double l, u;
   clingo_symbol_t cl_f;
   const char *f;
-  bool r;
+  bool r = false;
 
   py_l = PyObject_GetAttrString(py_cf, "l");
   if (!py_l) {
@@ -411,15 +431,113 @@ cleanup:
   return false;
 }
 
+static bool from_python_ad(PyObject *py_ad, annot_disj_t *ad) {
+  PyObject *py_P, *py_F, *py_cl_F = py_F = py_P = NULL;
+  PyObject *py_P_L, *py_F_L, *py_cl_F_L = py_F_L = py_P_L = NULL;
+  PyObject **F_obj = NULL;
+  double *P = NULL;
+  const char **F = NULL;
+  clingo_symbol_t *cl_F = NULL;
+  size_t i, n;
+
+  py_P = PyObject_GetAttrString(py_ad, "P");
+  if (!py_P) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field P of supposed AnnotatedDisjunction object!");
+    goto cleanup;
+  }
+  py_F = PyObject_GetAttrString(py_ad, "F");
+  if (!py_F) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field F of supposed AnnotatedDisjunction object!");
+    goto cleanup;
+  }
+  py_cl_F = PyObject_GetAttrString(py_ad, "cl_F");
+  if (!py_cl_F) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field cl_F of supposed AnnotatedDisjunction object!");
+    goto cleanup;
+  }
+
+  py_P_L = PySequence_Fast(py_P, "field AnnotatedDisjunction.P must either be a list or tuple!");
+  if (!py_P_L) goto cleanup;
+  py_F_L = PySequence_Fast(py_F, "field AnnotatedDisjunction.F must either be a list or tuple!");
+  if (!py_F_L) goto cleanup;
+  py_cl_F_L = PySequence_Fast(py_cl_F, "field AnnotatedDisjunction.cl_F must either be a list or tuple!");
+  if (!py_cl_F_L) goto cleanup;
+
+  n = PySequence_Fast_GET_SIZE(py_P_L);
+  P = (double*) malloc(n*sizeof(double));
+  if (!P) goto nomem;
+  F = (const char**) malloc(n*sizeof(const char*));
+  if (!F) goto nomem;
+  cl_F = (clingo_symbol_t*) malloc(n*sizeof(clingo_symbol_t));
+  if (!cl_F) goto nomem;
+  F_obj = (PyObject**) malloc(n*sizeof(PyObject*));
+  if (!F_obj) goto nomem;
+
+  for (i = 0; i < n; ++i) {
+    PyObject *rep;
+    P[i] = PyFloat_AsDouble(PySequence_Fast_GET_ITEM(py_P_L, i));
+    if ((P[i] == -1) && !PyErr_Occurred()) {
+      PyErr_SetString(PyExc_TypeError, "field P of AnnotatedDisjunction must be a list of floats!");
+      goto cleanup;
+    }
+    F_obj[i] = PySequence_Fast_GET_ITEM(py_F_L, i);
+    F[i] = PyUnicode_AsUTF8(F_obj[i]);
+    if (!F[i]) {
+      PyErr_SetString(PyExc_TypeError, "field F of AnnotatedDisjunction must be a list of strings!");
+      goto cleanup;
+    }
+    rep = PyObject_GetAttrString(PySequence_Fast_GET_ITEM(py_cl_F_L, i), "_rep");
+    if (!rep) {
+      PyErr_SetString(PyExc_AttributeError, "field cl_F of AnnotatedDisjunction must be a list of Symbols!");
+      goto cleanup;
+    }
+    cl_F[i] = PyLong_AsUnsignedLong(rep);
+    if ((cl_F[i] == (clingo_symbol_t) -1) && !PyErr_Occurred()) {
+      PyErr_SetString(PyExc_TypeError, "field _rep of elements in AnnotatedDisjunction.cl_F must be a Symbol!");
+      goto cleanup;
+    }
+    Py_DECREF(rep);
+  }
+
+  ad->P = P;
+  ad->F = F;
+  ad->F_obj = F_obj;
+  ad->cl_F = cl_F;
+  ad->n = n;
+
+  Py_DECREF(py_P);
+  Py_DECREF(py_F);
+  Py_DECREF(py_cl_F);
+  Py_DECREF(py_P_L);
+  Py_DECREF(py_F_L);
+  Py_DECREF(py_cl_F_L);
+
+  return true;
+nomem:
+  PyErr_SetString(PyExc_MemoryError, "no free memory available!");
+cleanup:
+  Py_XDECREF(py_P);
+  Py_XDECREF(py_F);
+  Py_XDECREF(py_cl_F);
+  Py_XDECREF(py_P_L);
+  Py_XDECREF(py_F_L);
+  Py_XDECREF(py_cl_F_L);
+  free(P); free(F);
+  free(cl_F); free(F_obj);
+
+  return false;
+}
+
 static bool from_python_program(PyObject *py_P, program_t *P) {
-  PyObject *py_P_P, *py_P_PF, *py_P_PF_L, *py_P_PR, *py_P_PR_L, *py_P_Q, *py_P_Q_L, *py_P_CF, *py_P_sem = NULL;
-  PyObject *py_P_CF_L = py_P_CF = py_P_Q_L = py_P_Q = py_P_PR_L = py_P_PR = py_P_PF_L = py_P_PF = py_P_P = NULL;
+  PyObject *py_P_P, *py_P_PF, *py_P_PF_L, *py_P_PR, *py_P_PR_L, *py_P_Q, *py_P_Q_L, *py_P_CF, *py_P_AD, *py_P_CF_L, *py_P_sem = NULL;
+  PyObject *py_P_AD_L = py_P_AD = py_P_CF_L = py_P_CF = py_P_Q_L = py_P_Q = py_P_PR_L = py_P_PR = py_P_PF_L = py_P_PF = py_P_P = NULL;
   PyObject *py_P_stable = NULL;
   const char *P_P;
   prob_fact_t *PF = NULL;
   prob_rule_t *PR = NULL;
   query_t *Q = NULL;
   credal_fact_t *CF = NULL;
+  annot_disj_t *AD = NULL;
   program_t *stable = NULL;
   semantics_t sem;
   size_t i;
@@ -455,6 +573,11 @@ static bool from_python_program(PyObject *py_P, program_t *P) {
     PyErr_SetString(PyExc_AttributeError, "could not access field CF of supposed Program object!");
     goto cleanup;
   }
+  py_P_AD = PyObject_GetAttrString(py_P, "AD");
+  if (!py_P_AD) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field AD of supposed Program object!");
+    goto cleanup;
+  }
 
   py_P_sem = PyObject_GetAttrString(py_P, "semantics");
   if (!py_P_sem) {
@@ -484,11 +607,14 @@ static bool from_python_program(PyObject *py_P, program_t *P) {
   if (!py_P_Q_L) goto cleanup;
   py_P_CF_L = PySequence_Fast(py_P_CF, "field Program.CF must either be a list or tuple!");
   if (!py_P_CF_L) goto cleanup;
+  py_P_AD_L = PySequence_Fast(py_P_AD, "field Program.AD must either be a list or tuple!");
+  if (!py_P_AD_L) goto cleanup;
 
   P->PF_n = PySequence_Fast_GET_SIZE(py_P_PF_L);
   P->PR_n = PySequence_Fast_GET_SIZE(py_P_PR_L);
   P->Q_n = PySequence_Fast_GET_SIZE(py_P_Q_L);
   P->CF_n = PySequence_Fast_GET_SIZE(py_P_CF_L);
+  P->AD_n = PySequence_Fast_GET_SIZE(py_P_AD_L);
 
   PF = (prob_fact_t*) malloc(P->PF_n*sizeof(prob_fact_t));
   if (!PF) goto nomem;
@@ -498,6 +624,8 @@ static bool from_python_program(PyObject *py_P, program_t *P) {
   if (!Q) goto nomem;
   CF = (credal_fact_t*) malloc(P->CF_n*sizeof(credal_fact_t));
   if (!CF) goto nomem;
+  AD = (annot_disj_t*) malloc(P->AD_n*sizeof(annot_disj_t));
+  if (!AD) goto nomem;
 
   for (i = 0; i < P->PF_n; ++i)
     if (!from_python_prob_fact(PySequence_Fast_GET_ITEM(py_P_PF_L, i), &PF[i])) goto cleanup;
@@ -507,6 +635,8 @@ static bool from_python_program(PyObject *py_P, program_t *P) {
     if (!from_python_query(PySequence_Fast_GET_ITEM(py_P_Q_L, i), &Q[i], sem)) goto cleanup;
   for (i = 0; i < P->CF_n; ++i)
     if (!from_python_credal_fact(PySequence_Fast_GET_ITEM(py_P_CF_L, i), &CF[i])) goto cleanup;
+  for (i = 0; i < P->AD_n; ++i)
+    if (!from_python_ad(PySequence_Fast_GET_ITEM(py_P_AD_L, i), &AD[i])) goto cleanup;
 
   P->P = P_P;
   P->P_obj = py_P_P;
@@ -514,6 +644,7 @@ static bool from_python_program(PyObject *py_P, program_t *P) {
   P->PR = PR;
   P->Q = Q;
   P->CF = CF;
+  P->AD = AD;
 
   P->gr_PF.d = NULL; P->gr_PF.n = P->gr_PF.c = 0;
   P->gr_P.d = NULL; P->gr_P.n = P->gr_P.c = 0;
@@ -527,10 +658,12 @@ static bool from_python_program(PyObject *py_P, program_t *P) {
   Py_DECREF(py_P_PR);
   Py_DECREF(py_P_Q);
   Py_DECREF(py_P_CF);
+  Py_DECREF(py_P_AD);
   Py_DECREF(py_P_PF_L);
   Py_DECREF(py_P_PR_L);
   Py_DECREF(py_P_Q_L);
   Py_DECREF(py_P_CF_L);
+  Py_DECREF(py_P_AD_L);
   Py_DECREF(py_P_sem);
   Py_XDECREF(py_P_stable);
 
@@ -543,16 +676,19 @@ cleanup:
   Py_XDECREF(py_P_PR);
   Py_XDECREF(py_P_Q);
   Py_XDECREF(py_P_CF);
+  Py_XDECREF(py_P_AD);
   Py_XDECREF(py_P_PF_L);
   Py_XDECREF(py_P_PR_L);
   Py_XDECREF(py_P_Q_L);
   Py_XDECREF(py_P_CF_L);
+  Py_XDECREF(py_P_AD_L);
   Py_XDECREF(py_P_sem);
   Py_XDECREF(py_P_stable);
   free(PF);
   free(PR);
   free(Q);
   free(CF);
+  free(AD);
   free(stable);
   return false;
 }
