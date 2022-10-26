@@ -6,7 +6,7 @@
 
 typedef enum psemantics {
   CREDAL_SEMANTICS = 0,
-  PLOG_SEMANTICS   = 1,
+  MAXENT_SEMANTICS   = 1,
 } psemantics_t;
 
 double prob_total_choice(prob_fact_t *phi, size_t n, array_double_t *gr_pr, unsigned long long int theta);

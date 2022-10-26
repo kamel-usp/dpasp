@@ -115,7 +115,7 @@ class TestLStable(PaspTest):
 class TestPlog(PaspTest):
   def test_asia(self):
     P = pasp.parse("examples/asia.lp")
-    R = pasp.exact(P, psemantics = "plog")
+    R = pasp.exact(P, psemantics = "maxent")
     # ℙ(trip)
     self.assertApproxEqual(R[0], [0.01, 0.01])
     # ℙ(tuberculosis | trip)
@@ -135,7 +135,7 @@ class TestPlog(PaspTest):
 
   def test_earthquake(self):
     P = pasp.parse("examples/earthquake.lp")
-    R = pasp.exact(P, psemantics = "plog")
+    R = pasp.exact(P, psemantics = "maxent")
     # ℙ(alarm | burglary, earthquake)
     self.assertApproxEqual(R[0], [0.9,  0.9])
     # ℙ(alarm | not burglary, earthquake)
@@ -147,7 +147,7 @@ class TestPlog(PaspTest):
 
   def test_simple(self):
     P = pasp.parse("examples/simple.lp")
-    R = pasp.exact(P, psemantics = "plog")
+    R = pasp.exact(P, psemantics = "maxent")
     # ℙ(s(a))
     self.assertApproxEqual(R[0], [0.20, 0.20])
     # ℙ(s(b))
@@ -157,7 +157,7 @@ class TestPlog(PaspTest):
 
   def test_simpler(self):
     P = pasp.parse("examples/simpler.lp")
-    R = pasp.exact(P, psemantics = "plog")
+    R = pasp.exact(P, psemantics = "maxent")
     # ℙ(r)
     self.assertApproxEqual(R[0], [0.5, 0.5])
     # ℙ(v)
@@ -165,7 +165,7 @@ class TestPlog(PaspTest):
 
   def test_smokers(self):
     P = pasp.parse("examples/smokers.lp")
-    R = pasp.exact(P, psemantics = "plog")
+    R = pasp.exact(P, psemantics = "maxent")
     # ℙ(smokes(a))
     self.assertApproxEqual(R[0], [0.06, 0.06])
     # ℙ(smokes(b))
@@ -173,7 +173,7 @@ class TestPlog(PaspTest):
 
   def test_game(self):
     P = pasp.parse("examples/game.lp")
-    R = pasp.exact(P, psemantics = "plog")
+    R = pasp.exact(P, psemantics = "maxent")
     # ℙ(wins(b))
     self.assertApproxEqual(R[0], [1.7/2, 1.7/2])
     # ℙ(wins(c))
@@ -181,7 +181,7 @@ class TestPlog(PaspTest):
 
   def test_insomnia(self):
     P = pasp.parse("examples/insomnia.lp")
-    R = pasp.exact(P, psemantics = "plog")
+    R = pasp.exact(P, psemantics = "maxent")
     # ℙ(insomnia)
     self.assertApproxEqual(R[0], [0.3,  0.3])
     # ℙ(work)
