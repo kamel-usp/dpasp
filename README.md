@@ -188,7 +188,7 @@ in `pasp`. As of now, the following semantics are implemented:
 #### Probabilistic semantics
 
 - Credal semantics;
-- P-log semantics.
+- MaxEnt semantics.
 
 ### Examples of logic semantics
 
@@ -334,11 +334,11 @@ credal result `[0.7, 1.0]` below.
 
 When querying under the credal semantics, we account for the lower and upper probabilities of each
 total choice and evaluate the final credal probabilities accordingly. If we wish to, instead,
-uniformly consider models, we might do so by using the P-log semantics [[3]](#ref-1).
+uniformly consider models, we might do so by using the MaxEnt semantics [[3]](#ref-3).
 
 ```python
 >>> P = pasp.parse("examples/game.lp")
->>> pasp.exact(P, psemantics = "plog")
+>>> pasp.exact(P, psemantics = "maxent")
 ```
 ```
 ℙ(wins(b)) = [0.850000, 0.850000]
@@ -373,9 +373,9 @@ You may need to append Homebrew to your paths if you have not done so yet:
 
 ```bash
 # Assuming your brew dir is "${HOME}/.brew"
-export LIBRARY_PATH="${LIBRARY_PATH}:${HOME}/.brew/lib"
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${HOME}/.brew/lib"
-export C_INCLUDE_PATH="${C_INCLUDE_PATH}:${HOME}/.brew/include"
+export LIBRARY_PATH="${LIBRARY_PATH}:$(brew --prefix)/lib"
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$(brew --prefix)/lib"
+export C_INCLUDE_PATH="${C_INCLUDE_PATH}:$(brew --prefix)/include"
 ```
 
 ### Installation
