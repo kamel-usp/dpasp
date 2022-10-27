@@ -30,3 +30,5 @@ dependencies = [
 Repository = "https://github.com/RenatoGeh/pasp"
 Issues = "https://github.com/RenatoGeh/pasp/issues"
 
+[project.scripts]
+pasp = "pasp.app:main"

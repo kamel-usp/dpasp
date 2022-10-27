@@ -83,7 +83,8 @@ $\mathbb{P}(\texttt{tuberculosis},\neg\texttt{cancer}|\neg\texttt{smoking},\text
 
 If we are working with the credal semantics (more on this later), then each one of these queries
 will return a tuple of lower and upper probabilities. Let's ask the package to provide these
-probabilities. We first inspect our Probabilistic Logic Program (PLP).
+probabilities (for the command-line syntax of `pasp`, see [Usage](#command-line-usage). We first
+inspect our Probabilistic Logic Program (PLP).
 
 ```python
 >>> import pasp
@@ -418,6 +419,41 @@ compile and install the C parts with the following command:
 ```bash
 python setup.py build
 python setup.py install
+```
+
+## Command-line usage
+
+`pasp` is also available as a command:
+
+```bash
+% Prints the help message.
+pasp --help
+
+% Runs the prisoners example with credal inference and stable semantics.
+pasp examples/prisoners.lp
+
+ℙ(e1 | u) = [0.290426, 0.379192]
+ℙ(e1 | not b, u) = [0.450125, 0.549875]
+ℙ(g | e1, u) = [0.000000, 1.000000]
+ℙ(d) = [0.000000, 1.000000]
+ℙ(e1 | g, u) = [0.000000, 0.549875]
+ℙ(e1 | ga, u) = [0.279971, 0.390743]
+
+% Runs the 3-coloring example with credal inference and L-stable semantics.
+pasp --sem=lstable examples/3coloring.lp
+
+ℙ(c(1,r)) = [0.000000, 1.000000]
+ℙ(e(1,2) | undef f) = [0.772727, 0.772727]
+ℙ(undef f) = [0.064453, 0.064453]
+
+% Runs the insomnia example with Max-Entropy inference and stable semantics.
+pasp --psem=maxent examples/insomnia.lp
+
+ℙ(insomnia) = [0.300000, 0.300000]
+ℙ(work) = [0.650000, 0.650000]
+ℙ(sleep) = [0.350000, 0.350000]
+ℙ(not sleep) = [0.650000, 0.650000]
+ℙ(not work) = [0.350000, 0.350000]
 ```
 
 ## References
