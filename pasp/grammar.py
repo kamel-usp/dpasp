@@ -1,4 +1,4 @@
-import pathlib, enum
+import pathlib, enum, fractions, math
 import lark, lark.reconstruct
 from .program import ProbFact, Query, ProbRule, Program, CredalFact, unique_fact, Semantics
 from .program import AnnotatedDisjunction
@@ -125,6 +125,7 @@ class PLPTransformer(lark.Transformer):
   def VAR(self, a: list[lark.Token]) -> tuple[str, bool]: return a, False
   def ID(self, a: list[lark.Token]) -> tuple[str, bool]: return a, True
   def OP(self, a: list[lark.Token]) -> tuple[str, bool]: return a, True
+  def PROB(self, a: list[lark.Token]) -> float: return float(fractions.Fraction(a.value))
 
   # Atoms.
   def atom(self, a: list[lark.Tree]) -> tuple[str, bool]:
@@ -189,6 +190,10 @@ class PLPTransformer(lark.Transformer):
     return [float(h[i]) for i in range(0, len(h), 2)], [h[i][0] for i in range(1, len(h), 2)]
   # Annotated disjunctions.
   def ad(self, d: list):
+    P, F = d[0][0], d[0][1]
+    if not math.isclose(s := sum(P), 0):
+      P.append(1-s)
+      F.append(unique_fact())
     return Command.ANNOTATED_DISJUNCTION, AnnotatedDisjunction(d[0][0], d[0][1])
 
   # Constraint.
