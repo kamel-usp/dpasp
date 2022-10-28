@@ -116,9 +116,6 @@ def parse_args() -> dict:
   args = {k: ARGUMENTS_VALUES[k][0][0] if ARGUMENTS_VALUES[k] is not None else None \
           for k in ARGUMENTS}
   files = []
-  if len(sys.argv) == 1:
-    print_help()
-    sys.exit(0)
   I = enumerate(sys.argv[1:], start = 1)
   for i, a in I:
     # Hack to make sure the second try_arg only occurs when -- does not work.
@@ -132,7 +129,12 @@ def parse_args() -> dict:
 
 def main():
   A, F = parse_args()
-  pasp.exact(pasp.parse(*F, semantics = A["sem"]), psemantics = A["psem"])
+  if len(F) > 0:
+    pasp.exact(pasp.parse(*F, semantics = A["sem"]), psemantics = A["psem"])
+  else:
+    inp = ""
+    for l in sys.stdin: inp += l
+    pasp.exact(pasp.parse(inp, from_str = True, semantics = A["sem"]), psemantics = A["psem"])
   return 0
 
 if __name__ == "__main__": main()
