@@ -191,7 +191,7 @@ class PLPTransformer(lark.Transformer):
   # Annotated disjunctions.
   def ad(self, d: list):
     P, F = d[0][0], d[0][1]
-    if not math.isclose(s := sum(P), 0):
+    if not math.isclose(s := sum(P), 1.0):
       P.append(1-s)
       F.append(unique_fact())
     return Command.ANNOTATED_DISJUNCTION, AnnotatedDisjunction(d[0][0], d[0][1])
