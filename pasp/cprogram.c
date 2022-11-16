@@ -712,8 +712,6 @@ PyMODINIT_FUNC PyInit_cprogram(void) {
 
   m = PyModule_Create(&cprogrammodule);
   if (!m) return NULL;
-  if (import_cutils() < 0) return NULL;
-  if (import_carray() < 0) return NULL;
 
   PyCprogram_API[PyCprogram_print_prob_fact_NUM] = (void*) print_prob_fact;
   PyCprogram_API[PyCprogram_free_prob_fact_contents_NUM] = (void*) free_prob_fact_contents;

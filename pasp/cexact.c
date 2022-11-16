@@ -678,9 +678,6 @@ PyMODINIT_FUNC PyInit_cexact(void) {
   m = PyModule_Create(&cexactmodule);
   if (!m) return NULL;
   if (import_cprogram() < 0) return NULL;
-  if (import_carray() < 0) return NULL;
-  if (import_coptimize() < 0) return NULL;
-  if (import_cutils() < 0) return NULL;
   if (import_cground() < 0) return NULL;
 
   return m;

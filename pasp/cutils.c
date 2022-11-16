@@ -1,10 +1,10 @@
-#define PY_SSIZE_T_CLEAN
-#include <Python.h>
+#include <inttypes.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-#define CUTILS_MODULE
 #include "cutils.h"
 
-static bool char_from_symbol(clingo_symbol_t sym, char *s, size_t n) {
+bool char_from_symbol(clingo_symbol_t sym, char *s, size_t n) {
   size_t k;
   if (!clingo_symbol_to_string_size(sym, &k)) return false;
   if (n < k) return false;
@@ -12,7 +12,7 @@ static bool char_from_symbol(clingo_symbol_t sym, char *s, size_t n) {
   return true;
 }
 
-static bool string_from_symbol(clingo_symbol_t sym, string_t *buf) {
+bool string_from_symbol(clingo_symbol_t sym, string_t *buf) {
   bool r = true;
   char *s;
   size_t n;
@@ -34,7 +34,7 @@ out:
   return r;
 }
 
-static void string_free(string_t *s) {
+void string_free(string_t *s) {
   if (!s->s) return;
   free(s->s);
   s->s = NULL, s->n = 0;
@@ -149,49 +149,8 @@ void print_bin(unsigned long long int x, size_t n) {
   while (n--) printf("%llu", (x >> n) % 2);
 }
 
-static void undef_atom_ignore(clingo_warning_t code, const char *msg, void *data) {
+void undef_atom_ignore(clingo_warning_t code, const char *msg, void *data) {
   if (code == clingo_warning_atom_undefined) return;
   printf("clingo | error code %d: %s\n", code, msg);
   (void) data;
 }
-
-static PyMethodDef CutilsMethods[] = {
-  {NULL, NULL, 0, NULL},
-};
-
-static struct PyModuleDef cutilsmodule = {
-  PyModuleDef_HEAD_INIT,
-  "cutils",
-  "Utility functions from the C side.",
-  -1,
-  CutilsMethods,
-};
-
-PyMODINIT_FUNC PyInit_cutils(void) {
-  PyObject *m;
-  static void* PyCutils_API[PyCutils_API_pointers];
-  PyObject *c_api_object;
-
-  m = PyModule_Create(&cutilsmodule);
-  if (!m) return NULL;
-
-  PyCutils_API[PyCutils_string_from_symbol_NUM] = (void*) string_from_symbol;
-  PyCutils_API[PyCutils_string_free_NUM] = (void*) string_free;
-  PyCutils_API[PyCutils_print_solution_NUM] = (void*) print_solution;
-  PyCutils_API[PyCutils_print_bin_NUM] = (void*) print_bin;
-  PyCutils_API[PyCutils_undef_atom_ignore_NUM] = (void*) undef_atom_ignore;
-  PyCutils_API[PyCutils_char_from_symbol_NUM] = (void*) char_from_symbol;
-
-  c_api_object = PyCapsule_New((void*) PyCutils_API, "cutils._C_API", NULL);
-
-  if (PyModule_AddObject(m, "_C_API", c_api_object) < 0) {
-    Py_XDECREF(c_api_object);
-    Py_DECREF(m);
-    return NULL;
-  }
-  return m;
-}
-
-#ifdef PASP_DEBUG
-int main() { return 0; }
-#endif

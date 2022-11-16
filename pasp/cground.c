@@ -234,9 +234,7 @@ PyMODINIT_FUNC PyInit_cground(void) {
 
   m = PyModule_Create(&cgroundmodule);
   if (!m) return NULL;
-  if (import_cutils() < 0) return NULL;
   if (import_cprogram() < 0) return NULL;
-  if (import_carray() < 0) return NULL;
 
   PyCground_API[PyCground_ground_NUM] = (void*) ground;
   PyCground_API[PyCground_needs_ground_NUM] = (void*) needs_ground;
