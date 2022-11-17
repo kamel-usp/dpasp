@@ -73,14 +73,17 @@ def _str_query_assignment(f: Function, t: bool) -> str:
   return str(f) if t == Query.TERM_POS else ("not " + str(f) if t == Query.TERM_NEG else "undef " + str(f))
 
 class AnnotatedDisjunction:
-  def __init__(self, P: list[float], F: list[str]):
+  def __init__(self, P: list[float], F: list[str], learnable: bool = False):
     self.P = P
     self.F = F
     self.cl_F = [clingo.parse_term(f) for f in F]
+    self.learnable = learnable
 
   def __getitem__(self, i: int) -> tuple[float, str]:
     return self.P[i], self.F[i]
   def __str__(self) -> str:
+    if self.learnable:
+      return "P::" + "; ".join([f"{self.F[i]}[{self.P[i]}]" for i in range(len(self.P))])
     return "; ".join([f"{self.P[i]}::{self.F[i]}" for i in range(len(self.P))])
   def __repr__(self) -> str: return self.__str__()
 

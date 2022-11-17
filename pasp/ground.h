@@ -29,8 +29,8 @@ static void** PyCground_API;
 #define needs_ground \
   (*(PyCground_needs_ground_RETURN (*)PyCground_needs_ground_PROTO) PyCground_API[PyCground_needs_ground_NUM])
 
-static int import_cground(void) {
-  PyCground_API = (void**) PyCapsule_Import("cground._C_API", 0);
+static int import_ground(void) {
+  PyCground_API = (void**) PyCapsule_Import("ground._C_API", 0);
   return (PyCground_API != NULL) ? 0 : -1;
 }
 

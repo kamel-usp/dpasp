@@ -3,6 +3,10 @@
 
 #include <clingo.h>
 
+extern const clingo_part_t GROUND_DEFAULT_PARTS[];
+extern const char* const CONTROL_DEFAULT_ARGS[];
+extern const size_t CONTROL_DEFAULT_NARGS;
+
 typedef struct string {
   char *s;
   size_t n;

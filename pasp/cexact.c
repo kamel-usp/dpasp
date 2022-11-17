@@ -1,22 +1,11 @@
-#define PY_SSIZE_T_CLEAN
-#include <Python.h>
-
 #include <math.h>
-#include <time.h>
 #include <pthread.h>
 
-#include "cprogram.h"
+#include "cexact.h"
+
 #include "carray.h"
 #include "coptimize.h"
 #include "cutils.h"
-#include "cground.h"
-#include "cinf.h"
-
-#include "../thpool/thpool.h"
-
-const clingo_part_t EXACT_DEFAULT_PARTS[] = {{"base", NULL, 0}};
-const struct timespec TIME_HALF_SEC = { .tv_sec = 0, .tv_nsec = 500000000L };
-const struct timespec TIME_QUARTER_SEC = { .tv_sec = 0, .tv_nsec = 250000000L };
 
 #ifndef NUM_PROCS
 #define NUM_PROCS 1
@@ -27,7 +16,7 @@ const struct timespec TIME_QUARTER_SEC = { .tv_sec = 0, .tv_nsec = 250000000L };
 #define PROCS_XSTR(x) PROCS_STR(x)
 #define NUM_PROCS_CONFIG_STR PROCS_XSTR(NUM_PROCS)
 
-static inline bool setup_config(clingo_control_t *C, const char *nmodels, bool parallelize_clingo) {
+inline bool setup_config(clingo_control_t *C, const char *nmodels, bool parallelize_clingo) {
   clingo_configuration_t *cfg = NULL;
   clingo_id_t cfg_root, cfg_sub;
 
@@ -46,7 +35,7 @@ static inline bool setup_config(clingo_control_t *C, const char *nmodels, bool p
   return true;
 }
 
-static inline bool setup_polynomial(array_bool_t (**Pn)[4], array_double_t (**K)[4], program_t *P) {
+inline bool setup_polynomial(array_bool_t (**Pn)[4], array_double_t (**K)[4], program_t *P) {
   size_t i;
 
   *Pn = (array_bool_t(*)[4]) malloc(P->Q_n*sizeof(**Pn));
@@ -62,7 +51,7 @@ static inline bool setup_polynomial(array_bool_t (**Pn)[4], array_double_t (**K)
   return true;
 }
 
-static inline bool setup_credal(double **L_CF, double **U_CF, double **X, program_t *P) {
+inline bool setup_credal(double **L_CF, double **U_CF, double **X, program_t *P) {
   size_t i;
 
   *L_CF = (double*) malloc(P->CF_n*sizeof(double));
@@ -77,7 +66,7 @@ static inline bool setup_credal(double **L_CF, double **U_CF, double **X, progra
   return true;
 }
 
-static inline bool neg_partial_cmp(bool x, bool _x, char s) {
+inline bool neg_partial_cmp(bool x, bool _x, char s) {
   /* See page 36 of the lparse manual. This is the negation of the truth value of an atom. */
   if (s == QUERY_TERM_POS)
     return !(x && _x);
@@ -89,7 +78,7 @@ static inline bool neg_partial_cmp(bool x, bool _x, char s) {
 
 /* Adds the rule _a :- a. for every grounded atom a in the Herbrand Base, signalling _a as
  * potentially true. */
-static inline bool add_pt_hb(clingo_control_t *C, clingo_backend_t *B) {
+inline bool add_pt_hb(clingo_control_t *C, clingo_backend_t *B) {
   const clingo_symbolic_atoms_t *atoms;
   clingo_symbolic_atom_iterator_t it, end;
   /* Get symbolic atoms. */
@@ -140,7 +129,7 @@ error:
   return false;
 }
 
-static inline bool prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
+inline bool prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
     uint8_t *theta_ad, const char *nmodels, bool parallelize_clingo) {
   size_t i, gr_n = P->gr_pr.n;
   clingo_backend_t *back = NULL;
@@ -186,11 +175,11 @@ static inline bool prepare_control(clingo_control_t **C, program_t *P, total_cho
   /* Cleanup backend. */
   if (!clingo_backend_end(back)) return false;
   /* Ground atoms. */
-  if(!clingo_control_ground(*C, EXACT_DEFAULT_PARTS, 1, NULL, NULL)) return false;
+  if(!clingo_control_ground(*C, GROUND_DEFAULT_PARTS, 1, NULL, NULL)) return false;
   return true;
 }
 
-static inline bool has_total_model(program_t *P, total_choice_t *theta, uint8_t *theta_ad, bool *has) {
+inline bool has_total_model(program_t *P, total_choice_t *theta, uint8_t *theta_ad, bool *has) {
   clingo_control_t *C = NULL;
   clingo_solve_handle_t *handle;
   clingo_solve_result_bitset_t res;
@@ -213,7 +202,7 @@ cleanup:
 #define MODEL_CONTAINS_QUERY true
 #define MODEL_CONTAINS_EVI   false
 
-inline static bool model_contains(const clingo_model_t *M, query_t *q, size_t i, bool *c, bool query_or_evi, bool is_partial) {
+inline bool model_contains(const clingo_model_t *M, query_t *q, size_t i, bool *c, bool query_or_evi, bool is_partial) {
   clingo_symbol_t x, x_u;
   char s;
   bool c_x;
@@ -240,7 +229,7 @@ inline static bool model_contains(const clingo_model_t *M, query_t *q, size_t i,
   return true;
 }
 
-static void compute_total_choice(void *data) {
+void compute_total_choice(void *data) {
   storage_t *st = (storage_t*) data;
   size_t i, m;
   clingo_control_t *C = NULL;
@@ -366,7 +355,7 @@ cleanup:
   pthread_mutex_unlock(st->wakeup);
 }
 
-static void compute_total_choice_maxent(void *data) {
+void compute_total_choice_maxent(void *data) {
   storage_t *st = (storage_t*) data;
   size_t i, m;
   clingo_control_t *C = NULL;
@@ -450,7 +439,7 @@ cleanup:
   pthread_mutex_unlock(st->wakeup);
 }
 
-static bool dispatch_job(total_choice_t *theta, pthread_mutex_t *wakeup,
+bool dispatch_job(total_choice_t *theta, pthread_mutex_t *wakeup,
     bool *busy_procs, storage_t *S, size_t num_procs, threadpool pool, pthread_cond_t *avail,
     void (*compute_func)(void*), bool has_ad, size_t j, size_t c) {
   size_t i, id = (size_t) -1;
@@ -472,7 +461,7 @@ static bool dispatch_job(total_choice_t *theta, pthread_mutex_t *wakeup,
   return true;
 }
 
-static bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat, psemantics_t psem) {
+bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat, psemantics_t psem) {
   bool has_credal = P->CF_n > 0, has_ad = P->AD_n > 0;
   double *a, *b, *c, *d = c = b = a = NULL;
   size_t Q_n = P->Q_n, gr_n = P->gr_pr.n, i;
@@ -593,92 +582,5 @@ cleanup:
     }
   }
   return exact_num_ok;
-}
-
-#define EXACT_ENUM 0
-
-static PyObject* exact_opt(PyObject *self, PyObject *args, PyObject *kwargs, int choice) {
-  program_t p = {0};
-  PyObject *py_P, *py_R = NULL;
-  double (*R)[2] = NULL;
-  size_t i;
-  bool r = false, parallel = true, lstable_sat = true;
-  const char *psem_arg = "credal";
-  static char *kwlist[] = { "", "parallel", "lstable_sat", "psemantics", NULL };
-  psemantics_t psem = CREDAL_SEMANTICS;
-
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|bbs", kwlist, &py_P, &parallel, &lstable_sat,
-        &psem_arg))
-    return NULL;
-
-  if (!strcmp(psem_arg, "maxent")) { psem = MAXENT_SEMANTICS; }
-  else if (strcmp(psem_arg, "credal")) {
-    PyErr_SetString(PyExc_ValueError, "psemantics must either be \"credal\" or \"maxent\"!");
-    goto cleanup;
-  }
-
-  if (!from_python_program(py_P, &p)) return NULL;
-
-  R = (double (*)[2]) malloc(p.Q_n*sizeof(*R));
-  if (!R) goto cleanup;
-
-  if (needs_ground(&p)) {
-    if (!ground(&p)) goto cleanup;
-    if (p.stable) if (!ground(p.stable)) goto cleanup;
-  }
-
-  if (!exact_enum(&p, R, lstable_sat, psem)) goto badval;
-
-  py_R = PyTuple_New(p.Q_n);
-  if (!py_R) {
-    PyErr_SetString(PyExc_MemoryError, "could not create new py_R tuple!");
-    goto cleanup;
-  } for (i = 0; i < p.Q_n; ++i) {
-    PyObject *py_R_i = PyTuple_New(2);
-    if (!py_R_i) {
-      PyErr_SetString(PyExc_MemoryError, "could not create new py_R_i tuple!");
-      goto cleanup;
-    }
-    PyTuple_SET_ITEM(py_R_i, 0, PyFloat_FromDouble(R[i][0]));
-    PyTuple_SET_ITEM(py_R_i, 1, PyFloat_FromDouble(R[i][1]));
-    PyTuple_SET_ITEM(py_R, i, py_R_i);
-  }
-  r = true;
-  goto cleanup;
-badval:
-  PyErr_SetString(PyExc_Exception, "clingo or unknown error!");
-cleanup:
-  free_program_contents(&p);
-  free(R);
-  if (!r) Py_XDECREF(py_R);
-  return r ? py_R : NULL;
-}
-
-static inline PyObject* exact(PyObject *self, PyObject *args, PyObject *kwargs) {
-  return exact_opt(self, args, kwargs, EXACT_ENUM);
-}
-
-static PyMethodDef CexactMethods[] = {
-  {"exact", (PyCFunction)(void(*)(void)) exact, METH_VARARGS | METH_KEYWORDS,
-    "Runs exact inference in order to answer the queries in `P`."},
-  {NULL, NULL, 0, NULL},
-};
-
-static struct PyModuleDef cexactmodule = {
-  PyModuleDef_HEAD_INIT,
-  "cexact",
-  "Exact inference functions from the C side.",
-  -1,
-  CexactMethods,
-};
-
-PyMODINIT_FUNC PyInit_cexact(void) {
-  PyObject *m;
-
-  m = PyModule_Create(&cexactmodule);
-  if (!m) return NULL;
-  if (import_cground() < 0) return NULL;
-
-  return m;
 }
 

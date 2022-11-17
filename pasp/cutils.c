@@ -4,6 +4,10 @@
 
 #include "cutils.h"
 
+const clingo_part_t GROUND_DEFAULT_PARTS[] = {{"base", NULL, 0}};
+const char* const CONTROL_DEFAULT_ARGS[] = {"0"};
+const size_t CONTROL_DEFAULT_NARGS = 1;
+
 bool char_from_symbol(clingo_symbol_t sym, char *s, size_t n) {
   size_t k;
   if (!clingo_symbol_to_string_size(sym, &k)) return false;

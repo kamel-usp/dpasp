@@ -8,11 +8,9 @@
 #include "carray.h"
 
 #define CGROUND_MODULE
-#include "cground.h"
+#include "ground.h"
 
 static inline size_t unique_ground_pfact_id() { static size_t i = 0; return i++; }
-
-const clingo_part_t GROUND_DEFAULT_PARTS[] = {{"base", NULL, 0}};
 
 #define GROUND_MAX_PROBRULE_LINE_LEN 400
 #define GROUND_MAX_SYM_LEN 50
@@ -219,26 +217,26 @@ static PyMethodDef CgroundMethods[] = {
   {NULL, NULL, 0, NULL},
 };
 
-static struct PyModuleDef cgroundmodule = {
+static struct PyModuleDef groundmodule = {
   PyModuleDef_HEAD_INIT,
-  "cground",
+  "ground",
   "Grounding functions from the C side.",
   -1,
   CgroundMethods,
 };
 
-PyMODINIT_FUNC PyInit_cground(void) {
+PyMODINIT_FUNC PyInit_ground(void) {
   PyObject *m;
   static void* PyCground_API[PyCground_API_pointers];
   PyObject *c_api_object;
 
-  m = PyModule_Create(&cgroundmodule);
+  m = PyModule_Create(&groundmodule);
   if (!m) return NULL;
 
   PyCground_API[PyCground_ground_NUM] = (void*) ground;
   PyCground_API[PyCground_needs_ground_NUM] = (void*) needs_ground;
 
-  c_api_object = PyCapsule_New((void*) PyCground_API, "cground._C_API", NULL);
+  c_api_object = PyCapsule_New((void*) PyCground_API, "ground._C_API", NULL);
 
   if (PyModule_AddObject(m, "_C_API", c_api_object) < 0) {
     Py_XDECREF(c_api_object);
