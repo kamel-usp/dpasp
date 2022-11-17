@@ -187,14 +187,45 @@ class PLPTransformer(lark.Transformer):
 
   # Annotated disjunction head.
   def adhead(self, h: list):
-    return [float(h[i]) for i in range(0, len(h), 2)], [h[i][0] for i in range(1, len(h), 2)]
+    return [float(h[i]) for i in range(0, len(h), 2)], [h[i][0] for i in range(1, len(h), 2)], False
+  # Learnable annotated disjunction head.
+  def ladhead(self, h: list):
+    P, F = [], []
+    last = False # track whether last token read was NOT accompanied of a probability
+    last_i = -1
+    o = 0
+    for a in h:
+      print(a)
+      if type(a) is float:
+        P.append(a)
+        last = False
+      else:
+        F.append(a[0])
+        if last:
+          last_i = len(P)
+          P.append(-1)
+          o += 1
+        else: last = True
+    if last:
+      last_i = len(P)
+      P.append(-1)
+      o += 1
+    if o > 0:
+      P_s = sum(P)+o
+      # If probs were not explicitly given, assume maximum uncertainty and set to uniform.
+      s = round((1.0-P_s)/o, ndigits = 15)
+      ts = P_s+s*(o-1)
+      for i, p in enumerate(P):
+        if i == last_i: P[i] = 1.0-ts
+        elif p < 0: P[i] = s
+    return P, F, True
   # Annotated disjunctions.
   def ad(self, d: list):
-    P, F = d[0][0], d[0][1]
+    P, F, learnable = d[0][0], d[0][1], d[0][2]
     if not math.isclose(s := sum(P), 1.0):
       P.append(1-s)
       F.append(unique_fact())
-    return Command.ANNOTATED_DISJUNCTION, AnnotatedDisjunction(d[0][0], d[0][1])
+    return Command.ANNOTATED_DISJUNCTION, AnnotatedDisjunction(d[0][0], d[0][1], learnable)
 
   # Constraint.
   def constraint(self, b: list[str]) -> tuple[Command, str]:

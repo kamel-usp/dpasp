@@ -68,10 +68,12 @@ rule: _rule
 prule: PROB "::" ohead ":-" body "."
 
 // Annotated disjunction head.
-adhead: PROB "::" pgratom (";" PROB "::" pgratom)*
+adhead: PROB "::" pgratom (";" PROB "::" pgratom)+
+// Learnable annotated disjunction head.
+ladhead: "P::" pgratom ("[" PROB "]")? (";" pgratom ("[" PROB "]")?)+
 // Annotated disjunctions.
-ad: adhead "."
-bad: adhead ":-" body "."
+ad: (adhead | ladhead) "."
+bad: (adhead | ladhead) ":-" body "."
 
 // Constraint.
 constraint: ":-" body "."
