@@ -1,44 +1,41 @@
-#define PY_SSIZE_T_CLEAN
-#include <Python.h>
+#include "cprogram.h"
+
 #include <locale.h>
 #include <wchar.h>
 
-#define CPROGRAM_MODULE
-#include "cprogram.h"
-
 #include "cutils.h"
 
-static inline void print_prob_fact(prob_fact_t *pf) { wprintf(L"%f::%s", pf->p, pf->f); }
-static inline void free_prob_fact_contents(prob_fact_t *pf) { if (pf) Py_DECREF(pf->f_obj); }
-static inline void free_prob_fact(prob_fact_t *pf) { free_prob_fact_contents(pf); free(pf); }
+void print_prob_fact(prob_fact_t *pf) { wprintf(L"%f::%s", pf->p, pf->f); }
+void free_prob_fact_contents(prob_fact_t *pf) { if (pf) Py_DECREF(pf->f_obj); }
+void free_prob_fact(prob_fact_t *pf) { free_prob_fact_contents(pf); free(pf); }
 
-static inline void print_prob_rule(prob_rule_t *pr) { wprintf(L"%f::%s", pr->p, pr->f); }
-static inline void free_prob_rule_contents(prob_rule_t *pr) {
+void print_prob_rule(prob_rule_t *pr) { wprintf(L"%f::%s", pr->p, pr->f); }
+void free_prob_rule_contents(prob_rule_t *pr) {
   if (pr) { Py_DECREF(pr->f_obj); Py_XDECREF(pr->unify_obj); }
 }
-static inline void free_prob_rule(prob_rule_t *pr) { free_prob_rule_contents(pr); free(pr); }
+void free_prob_rule(prob_rule_t *pr) { free_prob_rule_contents(pr); free(pr); }
 
-static inline void print_credal_fact(credal_fact_t *cf) { wprintf(L"[%f, %f]::%s", cf->l, cf->u, cf->f); }
-static inline void free_credal_fact_contents(credal_fact_t *cf) { if (cf) Py_DECREF(cf->f_obj); }
-static inline void free_credal_fact(credal_fact_t *cf) { free_credal_fact_contents(cf); free(cf); }
+void print_credal_fact(credal_fact_t *cf) { wprintf(L"[%f, %f]::%s", cf->l, cf->u, cf->f); }
+void free_credal_fact_contents(credal_fact_t *cf) { if (cf) Py_DECREF(cf->f_obj); }
+void free_credal_fact(credal_fact_t *cf) { free_credal_fact_contents(cf); free(cf); }
 
-static inline void print_annot_disj(annot_disj_t *ad) {
+void print_annot_disj(annot_disj_t *ad) {
   size_t i;
   for (i = 0; i < ad->n; ++i) {
     wprintf(L"%f::%s", ad->P[i], ad->F[i]);
     if (i != ad->n-1) fputws(L"; ", stdout);
   }
 }
-static inline void free_annot_disj_contents(annot_disj_t *ad) {
+void free_annot_disj_contents(annot_disj_t *ad) {
   if (!ad) return;
   free(ad->P);
   free(ad->F);
   free(ad->F_obj);
   free(ad->cl_F);
 }
-static inline void free_annot_disj(annot_disj_t *ad) { free_annot_disj_contents(ad); free(ad); }
+void free_annot_disj(annot_disj_t *ad) { free_annot_disj_contents(ad); free(ad); }
 
-static bool print_query_with_buffer(query_t *q, string_t *s) {
+bool print_query_with_buffer(query_t *q, string_t *s) {
   size_t i;
   bool has_E = q->E_n > 0;
 
@@ -65,14 +62,14 @@ static bool print_query_with_buffer(query_t *q, string_t *s) {
 
   return true;
 }
-static inline bool print_query(query_t *Q) {
+bool print_query(query_t *Q) {
   string_t s = {NULL, 0};
   bool r = print_query_with_buffer(Q, &s);
   free (s.s);
   return r;
 }
 
-static inline void free_query_contents(query_t *Q) {
+void free_query_contents(query_t *Q) {
   if (!Q) return;
   free(Q->Q);
   free(Q->Q_s);
@@ -81,9 +78,9 @@ static inline void free_query_contents(query_t *Q) {
   free(Q->E_s);
   free(Q->E_u);
 }
-static inline void free_query(query_t *Q) { free_query_contents(Q); free(Q); }
+void free_query(query_t *Q) { free_query_contents(Q); free(Q); }
 
-static void print_program(program_t *P) {
+void print_program(program_t *P) {
   size_t i;
   string_t s = {NULL, 0};
   wprintf(L"<Logic Program:\n%s,\nProbabilistic Facts:\n", P->P);
@@ -99,7 +96,7 @@ static void print_program(program_t *P) {
   fputws(L">\n", stdout);
   free(s.s);
 }
-static inline void free_program_contents(program_t *P) {
+void free_program_contents(program_t *P) {
   size_t i;
   if (!P) return;
   Py_XDECREF(P->P_obj);
@@ -118,9 +115,9 @@ static inline void free_program_contents(program_t *P) {
   array_double_free_contents(&P->gr_pr);
   if (P->stable) free_program(P->stable);
 }
-static inline void free_program(program_t *P) { free_program_contents(P); free(P); }
+void free_program(program_t *P) { free_program_contents(P); free(P); }
 
-static bool from_python_prob_rule(PyObject *py_pr, prob_rule_t *pr) {
+bool from_python_prob_rule(PyObject *py_pr, prob_rule_t *pr) {
   PyObject *py_p, *py_f, *py_is_prop, *py_unify = py_is_prop = py_f = py_p = NULL;
   double p;
   const char *f;
@@ -189,7 +186,7 @@ cleanup:
   return r;
 }
 
-static bool from_python_prob_fact(PyObject *py_pf, prob_fact_t *pf) {
+bool from_python_prob_fact(PyObject *py_pf, prob_fact_t *pf) {
   PyObject *py_p, *py_f, *py_cl_f, *py_cl_f_rep = py_cl_f = py_f = py_p = NULL;
   double p;
   const char *f;
@@ -248,7 +245,7 @@ cleanup:
   return r;
 }
 
-static bool from_python_credal_fact(PyObject *py_cf, credal_fact_t *cf) {
+bool from_python_credal_fact(PyObject *py_cf, credal_fact_t *cf) {
   PyObject *py_l, *py_u, *py_f, *py_cl_f, *py_cl_f_rep = py_cl_f = py_f = py_u = py_l = NULL;
   double l, u;
   clingo_symbol_t cl_f;
@@ -320,7 +317,7 @@ cleanup:
   return r;
 }
 
-static bool from_python_query(PyObject *py_q, query_t *q, semantics_t sem) {
+bool from_python_query(PyObject *py_q, query_t *q, semantics_t sem) {
   PyObject *py_Q, *py_E, *py_Q_L, *py_E_L = py_Q_L = py_E = py_Q = NULL;
   clingo_symbol_t *Q, *E = Q = NULL;
   clingo_symbol_t *Q_u, *E_u = Q_u = NULL;
@@ -431,7 +428,7 @@ cleanup:
   return false;
 }
 
-static bool from_python_ad(PyObject *py_ad, annot_disj_t *ad) {
+bool from_python_ad(PyObject *py_ad, annot_disj_t *ad) {
   PyObject *py_P, *py_F, *py_cl_F = py_F = py_P = NULL;
   PyObject *py_P_L, *py_F_L, *py_cl_F_L = py_F_L = py_P_L = NULL;
   PyObject **F_obj = NULL;
@@ -528,7 +525,7 @@ cleanup:
   return false;
 }
 
-static bool from_python_program(PyObject *py_P, program_t *P) {
+bool from_python_program(PyObject *py_P, program_t *P) {
   PyObject *py_P_P, *py_P_PF, *py_P_PF_L, *py_P_PR, *py_P_PR_L, *py_P_Q, *py_P_Q_L, *py_P_CF, *py_P_AD, *py_P_CF_L, *py_P_sem = NULL;
   PyObject *py_P_AD_L = py_P_AD = py_P_CF_L = py_P_CF = py_P_Q_L = py_P_Q = py_P_PR_L = py_P_PR = py_P_PF_L = py_P_PF = py_P_P = NULL;
   PyObject *py_P_stable = NULL;
@@ -692,60 +689,3 @@ cleanup:
   free(stable);
   return false;
 }
-
-static PyMethodDef CprogramMethods[] = {
-  {NULL, NULL, 0, NULL},
-};
-
-static struct PyModuleDef cprogrammodule = {
-  PyModuleDef_HEAD_INIT,
-  "cprogram",
-  "Program functions from the C side.",
-  -1,
-  CprogramMethods,
-};
-
-PyMODINIT_FUNC PyInit_cprogram(void) {
-  PyObject *m;
-  static void* PyCprogram_API[PyCprogram_API_pointers];
-  PyObject *c_api_object;
-
-  m = PyModule_Create(&cprogrammodule);
-  if (!m) return NULL;
-
-  PyCprogram_API[PyCprogram_print_prob_fact_NUM] = (void*) print_prob_fact;
-  PyCprogram_API[PyCprogram_free_prob_fact_contents_NUM] = (void*) free_prob_fact_contents;
-  PyCprogram_API[PyCprogram_free_prob_fact_NUM] = (void*) free_prob_fact;
-  PyCprogram_API[PyCprogram_print_credal_fact_NUM] = (void*) print_credal_fact;
-  PyCprogram_API[PyCprogram_free_credal_fact_contents_NUM] = (void*) free_credal_fact_contents;
-  PyCprogram_API[PyCprogram_free_credal_fact_NUM] = (void*) free_credal_fact;
-  PyCprogram_API[PyCprogram_print_query_NUM] = (void*) print_query;
-  PyCprogram_API[PyCprogram_free_query_contents_NUM] = (void*) free_query_contents;
-  PyCprogram_API[PyCprogram_free_query_NUM] = (void*) free_query;
-  PyCprogram_API[PyCprogram_print_program_NUM] = (void*) print_program;
-  PyCprogram_API[PyCprogram_free_program_contents_NUM] = (void*) free_program_contents;
-  PyCprogram_API[PyCprogram_free_program_NUM] = (void*) free_program;
-  PyCprogram_API[PyCprogram_from_python_prob_fact_NUM] = (void*) from_python_prob_fact;
-  PyCprogram_API[PyCprogram_from_python_credal_fact_NUM] = (void*) from_python_credal_fact;
-  PyCprogram_API[PyCprogram_from_python_query_NUM] = (void*) from_python_query;
-  PyCprogram_API[PyCprogram_from_python_program_NUM] = (void*) from_python_program;
-  PyCprogram_API[PyCprogram_print_prob_rule_NUM] = (void*) print_prob_rule;
-  PyCprogram_API[PyCprogram_free_prob_rule_contents_NUM] = (void*) free_prob_rule_contents;
-  PyCprogram_API[PyCprogram_free_prob_rule_NUM] = (void*) free_prob_rule;
-
-  c_api_object = PyCapsule_New((void*) PyCprogram_API, "cprogram._C_API", NULL);
-
-  if (PyModule_AddObject(m, "_C_API", c_api_object) < 0) {
-    Py_XDECREF(c_api_object);
-    Py_DECREF(m);
-    return NULL;
-  }
-
-  setlocale(LC_CTYPE, "");
-
-  return m;
-}
-
-#ifdef PASP_DEBUG
-int main() { return 0; }
-#endif
