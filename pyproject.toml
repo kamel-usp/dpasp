@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "numpy"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -33,3 +33,4 @@ Issues = "https://github.com/RenatoGeh/pasp/issues"
 
 [project.scripts]
 pasp = "pasp.app:main"
+
