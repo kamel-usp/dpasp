@@ -22,8 +22,8 @@ classifiers = [
 ]
 description = "Probabilistic Answer Set Programming"
 dependencies = [
-  "clingo >= 5.6.1",
-  "lark >= 1.1.2",
+  "clingo >= 5.6.2",
+  "lark >= 1.1.5",
   "numpy >= 1.23.5",
 ]
 
