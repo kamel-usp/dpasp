@@ -1,5 +1,6 @@
 import os
 from setuptools import setup, Extension, find_packages, Command
+import numpy as np
 
 class TestCommand(Command):
   description = "Runs unit and functional tests for PASP."
@@ -13,7 +14,8 @@ class TestCommand(Command):
 
   def run(self):
     assert os.getcwd() == self.cwd, f"Must be in package root: {self.cwd}"
-    os.system("python setup.py build_ext --inplace && python -m unittest tests/examples.py -b")
+    os.system("python setup.py build_ext --inplace && python -m unittest tests/examples.py -b && " \
+              "python -m unittest tests/counting.py -b")
 
 exact    = Extension("exact",
                       libraries = ["m", "clingo", "pthread"],
@@ -23,6 +25,7 @@ exact    = Extension("exact",
                       sources = ["pasp/exact.c", "thpool/thpool.c", "pasp/cinf.c",
                                  "bitvector/bitvector.c", "pasp/cutils.c", "pasp/coptimize.c",
                                  "pasp/carray.c", "pasp/cprogram.c", "pasp/cexact.c"],
+                      include_dirs = [np.get_include()],
                       extra_compile_args = ["-Wno-unused-function"],
                       define_macros = [("NUM_PROCS", str(os.cpu_count())), ("_GNU_SOURCE", None)])
 ground   = Extension("ground",

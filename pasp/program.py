@@ -21,14 +21,15 @@ class ProbFact:
   A Probabilistic Fact (PF) is a (Logic Program) fact which is "chosen" with some probability.
   """
 
-  def __init__(self, p: str, f: str):
+  def __init__(self, p: str, f: str, learnable: bool = False):
     "Constructs a PF out of a probability `p` and fact `f`."
     self.p = float(p)
     self.f = f
     # Construct a clingo.symbol.Function from this fact.
     self.cl_f = clingo.parse_term(f)
+    self.learnable = learnable
 
-  def __str__(self) -> str: return f"{self.p}::{self.f}"
+  def __str__(self) -> str: return f"P::{self.f}[{self.p}]" if self.learnable else f"{self.p}::{self.f}"
   def __repr__(self) -> str: return self.__str__()
 
 class ProbRule:
@@ -37,15 +38,13 @@ class ProbRule:
   some probability `p`. A non-propositional PR must be grounded first.
   """
 
-  def __init__(self, p: str, f: str, is_prop: bool = True, unify: str = None, ufact: str = None, \
-               partial: str = None):
+  def __init__(self, p: str, f: str, is_prop: bool = True, unify: str = None, ufact: str = None):
     self.p = p
     self.f = f
     self.is_prop = is_prop
     self.unify = unify
     self.prop_pf = ProbFact(p, unique_fact() if ufact is None else ufact)
     self.prop_f = f"{f}, {self.prop_pf.f}."
-    #self.partial = f"{partial}, {self.prop_pf.f}."
 
   def __str__(self) -> str: return f"{self.p}::{self.f}"
   def __repr__(self) -> str: return self.__str__()

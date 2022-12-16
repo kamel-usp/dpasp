@@ -1,5 +1,7 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#include <numpy/arrayobject.h>
 
 #include "cexact.h"
 
@@ -70,9 +72,62 @@ static inline PyObject* exact(PyObject *self, PyObject *args, PyObject *kwargs) 
   return exact_opt(self, args, kwargs, EXACT_ENUM);
 }
 
+static inline PyObject* count(PyObject *self, PyObject *args) {
+  program_t P = {0};
+  PyObject *py_P = NULL;
+  count_storage_t *C = NULL;
+  bool ok = false;
+  PyObject *py_F, *py_I_F, *py_A, *py_I_A = py_A = py_I_F = py_F = NULL;
+
+  if (!PyArg_ParseTuple(args, "O", &py_P)) return NULL;
+  if (!from_python_program(py_P, &P)) return NULL;
+  C = count_models(&P, true);
+
+  if (!C) goto cleanup;
+
+  npy_intp dims[2] = {C->n, 2};
+  if (C->n > 0) {
+    py_F = PyArray_SimpleNewFromData(2, dims, NPY_UINT16, C->F);
+    if (!py_F) goto cleanup;
+    PyArray_ENABLEFLAGS((PyArrayObject*) py_F, NPY_ARRAY_OWNDATA);
+    py_I_F = PyArray_SimpleNewFromData(1, dims, NPY_UINT16, C->I_F);
+    if (!py_I_F) goto cleanup;
+    PyArray_ENABLEFLAGS((PyArrayObject*) py_I_F, NPY_ARRAY_OWNDATA);
+  }
+  if (C->m > 0) {
+    py_A = PyTuple_New(C->m);
+    if (!py_A) goto cleanup;
+    for (size_t i = 0; i < C->m; ++i) {
+      dims[0] = P.AD[C->I_A[i]].n;
+      PyObject *py_A_i = PyArray_SimpleNewFromData(1, dims, NPY_UINT16, C->A[i]);
+      if (!py_A_i) goto cleanup;
+      PyArray_ENABLEFLAGS((PyArrayObject*) py_A_i, NPY_ARRAY_OWNDATA);
+      PyTuple_SET_ITEM(py_A, i, py_A_i);
+    }
+    dims[0] = C->m;
+    py_I_A = PyArray_SimpleNewFromData(1, dims, NPY_UINT16, C->I_A);
+    if (!py_I_A) goto cleanup;
+    PyArray_ENABLEFLAGS((PyArrayObject*) py_I_A, NPY_ARRAY_OWNDATA);
+  }
+
+  ok = true;
+cleanup:
+  free_program_contents(&P);
+  if (!ok) {
+    if (C) free_count_storage(C);
+    Py_XDECREF(py_F); Py_XDECREF(py_I_F);
+    Py_XDECREF(py_A); Py_XDECREF(py_I_A);
+    return Py_None;
+  }
+  return Py_BuildValue("OOOO", py_F ? py_F : Py_None, py_I_F ? py_I_F : Py_None,
+      py_A ? py_A : Py_None, py_I_A ? py_I_A : Py_None);
+}
+
 static PyMethodDef CexactMethods[] = {
   {"exact", (PyCFunction)(void(*)(void)) exact, METH_VARARGS | METH_KEYWORDS,
     "Runs exact inference in order to answer the queries in `P`."},
+  {"count", (PyCFunction)(void(*)(void)) count, METH_VARARGS,
+    "Counts the number of models for each possible learnable fact or annotated disjunction."},
   {NULL, NULL, 0, NULL},
 };
 
@@ -90,6 +145,7 @@ PyMODINIT_FUNC PyInit_exact(void) {
   m = PyModule_Create(&exactmodule);
   if (!m) return NULL;
   if (import_ground() < 0) return NULL;
+  import_array();
 
   return m;
 }

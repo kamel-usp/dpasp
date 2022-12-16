@@ -5,7 +5,10 @@
 
 #include "cutils.h"
 
-void print_prob_fact(prob_fact_t *pf) { wprintf(L"%f::%s", pf->p, pf->f); }
+void print_prob_fact(prob_fact_t *pf) {
+  if (pf->learnable) wprintf(L"P::%s[%f]", pf->f, pf->p);
+  else wprintf(L"%f::%s", pf->p, pf->f);
+}
 void free_prob_fact_contents(prob_fact_t *pf) { if (pf) Py_DECREF(pf->f_obj); }
 void free_prob_fact(prob_fact_t *pf) { free_prob_fact_contents(pf); free(pf); }
 
@@ -21,8 +24,10 @@ void free_credal_fact(credal_fact_t *cf) { free_credal_fact_contents(cf); free(c
 
 void print_annot_disj(annot_disj_t *ad) {
   size_t i;
+  if (ad->learnable) wprintf(L"P::");
   for (i = 0; i < ad->n; ++i) {
-    wprintf(L"%f::%s", ad->P[i], ad->F[i]);
+    if (ad->learnable) wprintf(L"%s[%f]", ad->F[i], ad->P[i]);
+    else wprintf(L"%f::%s", ad->P[i], ad->F[i]);
     if (i != ad->n-1) fputws(L"; ", stdout);
   }
 }
@@ -187,10 +192,11 @@ cleanup:
 }
 
 bool from_python_prob_fact(PyObject *py_pf, prob_fact_t *pf) {
-  PyObject *py_p, *py_f, *py_cl_f, *py_cl_f_rep = py_cl_f = py_f = py_p = NULL;
+  PyObject *py_p, *py_f, *py_cl_f, *py_cl_f_rep, *py_learnable = py_cl_f_rep = py_cl_f = py_f = py_p = NULL;
   double p;
   const char *f;
   clingo_symbol_t cl_f;
+  long learnable;
   bool r = false;
 
   py_p = PyObject_GetAttrString(py_pf, "p");
@@ -231,10 +237,22 @@ bool from_python_prob_fact(PyObject *py_pf, prob_fact_t *pf) {
     goto cleanup;
   }
 
+  py_learnable = PyObject_GetAttrString(py_pf, "learnable");
+  if (!py_learnable) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field learnable of supposed ProbFact object!");
+    goto cleanup;
+  }
+  learnable = PyLong_AsLong(py_learnable);
+  if ((learnable == (long) -1) && !PyErr_Occurred()) {
+    PyErr_SetString(PyExc_TypeError, "field learnable of ProbFact must be a bool!");
+    goto cleanup;
+  }
+
   pf->p = p;
   pf->f = f;
   pf->f_obj = py_f;
   pf->cl_f = cl_f;
+  pf->learnable = (bool) learnable;
   r = true;
 
 cleanup:
@@ -242,6 +260,7 @@ cleanup:
   if (!r) Py_XDECREF(py_f);
   Py_XDECREF(py_cl_f_rep);
   Py_XDECREF(py_cl_f);
+  Py_XDECREF(py_learnable);
   return r;
 }
 
@@ -431,10 +450,11 @@ cleanup:
 bool from_python_ad(PyObject *py_ad, annot_disj_t *ad) {
   PyObject *py_P, *py_F, *py_cl_F = py_F = py_P = NULL;
   PyObject *py_P_L, *py_F_L, *py_cl_F_L = py_F_L = py_P_L = NULL;
-  PyObject **F_obj = NULL;
+  PyObject **F_obj = NULL, *py_learnable = NULL;
   double *P = NULL;
   const char **F = NULL;
   clingo_symbol_t *cl_F = NULL;
+  long learnable;
   size_t i, n;
 
   py_P = PyObject_GetAttrString(py_ad, "P");
@@ -450,6 +470,16 @@ bool from_python_ad(PyObject *py_ad, annot_disj_t *ad) {
   py_cl_F = PyObject_GetAttrString(py_ad, "cl_F");
   if (!py_cl_F) {
     PyErr_SetString(PyExc_AttributeError, "could not access field cl_F of supposed AnnotatedDisjunction object!");
+    goto cleanup;
+  }
+  py_learnable = PyObject_GetAttrString(py_ad, "learnable");
+  if (!py_learnable) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field learnable of supposed AnnotatedDisjunction object!");
+    goto cleanup;
+  }
+  learnable = PyLong_AsLong(py_learnable);
+  if ((learnable == (long) -1) && !PyErr_Occurred()) {
+    PyErr_SetString(PyExc_TypeError, "field learnable of AnnotatedDisjunction must be a bool!");
     goto cleanup;
   }
 
@@ -501,13 +531,15 @@ bool from_python_ad(PyObject *py_ad, annot_disj_t *ad) {
   ad->F_obj = F_obj;
   ad->cl_F = cl_F;
   ad->n = n;
+  ad->learnable = (bool) learnable;
 
-  Py_DECREF(py_P);
-  Py_DECREF(py_F);
-  Py_DECREF(py_cl_F);
-  Py_DECREF(py_P_L);
-  Py_DECREF(py_F_L);
-  Py_DECREF(py_cl_F_L);
+  Py_XDECREF(py_P);
+  Py_XDECREF(py_F);
+  Py_XDECREF(py_cl_F);
+  Py_XDECREF(py_P_L);
+  Py_XDECREF(py_F_L);
+  Py_XDECREF(py_cl_F_L);
+  Py_XDECREF(py_learnable);
 
   return true;
 nomem:

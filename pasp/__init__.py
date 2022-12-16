@@ -3,5 +3,5 @@
 """
 
 from .grammar import parse
-from exact import exact
+from exact import exact, count
 from ground import ground

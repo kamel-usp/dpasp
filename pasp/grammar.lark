@@ -53,6 +53,7 @@ _fact: atom "."
 fact: _fact
 // Probabilistic fact.
 pfact: PROB "::" _fact
+lpfact: "P::" pgratom ("[" PROB "]")? "."
 // Credal fact.
 cfact: "[" PROB "," PROB "]" "::" _fact
 
@@ -70,7 +71,7 @@ prule: PROB "::" ohead ":-" body "."
 // Annotated disjunction head.
 adhead: PROB "::" pgratom (";" PROB "::" pgratom)+
 // Learnable annotated disjunction head.
-ladhead: "P::" pgratom ("[" PROB "]")? (";" pgratom ("[" PROB "]")?)+
+ladhead: "P::" pgratom ("[" PROB "]")? (";" pgratom ("[" PROB "]")?)+ "."
 // Annotated disjunctions.
 ad: (adhead | ladhead) "."
 bad: (adhead | ladhead) ":-" body "."
@@ -88,7 +89,7 @@ query: "#query(" interp ("|" interp)? ")" "."?
 // Constant definition.
 constdef: "#const" CONST "=" ID "."
 
-plp: (constdef | fact | rule | pfact | prule | cfact | ad | constraint | query)*
+plp: (constdef | fact | rule | pfact | lpfact | prule | cfact | ad | constraint | query)*
 
 COMMENT: "%" /[^\n]*/ NEWLINE
 

@@ -6,13 +6,25 @@
 
 #include "../thpool/thpool.h"
 
-bool dispatch_job(total_choice_t *theta, pthread_mutex_t *wakeup,
-    bool *busy_procs, storage_t *S, size_t num_procs, threadpool pool, pthread_cond_t *avail,
-    void (*compute_func)(void*), bool has_ad, size_t j, size_t c);
+typedef struct {
+  /* Number of learnable probabilistic facts. */
+  size_t n;
+  /* Number of learnable annotated disjunctions. */
+  size_t m;
+  /* Number of models for each learnable probabilistic fact. */
+  uint16_t (*F)[2];
+  /* Indices of learnable PFs within the global PF array. */
+  uint16_t *I_F;
+  /* Number of models for each value of each learnable annotated disjunction. */
+  uint16_t **A;
+  /* Indices of learnable ADs within the global AD array. */
+  uint16_t *I_A;
+} count_storage_t;
 
-void compute_total_choice(void *data);
-void compute_total_choice_maxent(void *data);
+void free_count_storage_contents(count_storage_t *C, bool free_shared);
+void free_count_storage(count_storage_t *C);
 
 bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat, psemantics_t psem);
+count_storage_t* count_models(program_t *P, bool lstable_sat);
 
 #endif

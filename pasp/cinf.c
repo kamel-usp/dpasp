@@ -55,6 +55,7 @@ void free_storage_contents(storage_t *s) {
   free(s->cond_1); free(s->cond_2); free(s->cond_3); free(s->cond_4);
   free(s->count_q_e); free(s->count_e); free(s->count_partial_q_e);
   if (!s->P->CF_n) { free(s->a); free(s->b); free(s->c); free(s->d); }
+  free_total_choice_contents(&s->theta);
 }
 
 bool setup_conds(bool **cond_1, bool **cond_2, bool **cond_3, bool **cond_4, size_t n) {
@@ -115,3 +116,14 @@ total_choice_t* copy_total_choice(total_choice_t *src, total_choice_t *dst) {
 }
 
 bool incr_total_choice(total_choice_t *theta) { return bitvec_incr(&theta->pf); }
+
+void print_total_choice(total_choice_t *theta) {
+  printf("Total choice:\nPF: ");
+  bitvec_print(&theta->pf);
+  for (size_t i = 0; i < theta->ad_n; ++i)
+    printf("AD[%lu] = %u\n", i, theta->theta_ad[i]);
+}
+
+size_t estimate_nprocs(size_t total_choice_n) {
+  return (total_choice_n > log2(NUM_PROCS)) ? NUM_PROCS : (1 << total_choice_n);
+}

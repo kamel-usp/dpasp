@@ -159,6 +159,8 @@ class PLPTransformer(lark.Transformer):
     return Command.PROB_FACT, ProbFact(f[0], f[1][0])
   def cfact(self, f: list[lark.Tree]) -> tuple[Command, CredalFact]:
     return Command.CRED_FACT, CredalFact(str(f[0]), str(f[1]), f[2][0])
+  def lpfact(self, f: list[lark.Tree]) -> tuple[Command, ProbFact]:
+    return Command.PROB_FACT, ProbFact(0.5 if len(f) < 2 else f[1], f[0][0], learnable = True)
 
   # Heads.
   def head(self, h: list[str]) -> str:
