@@ -101,6 +101,28 @@ class TestExamples(PaspTest):
     # ℙ(smokes(b))
     self.assertApproxEqual(R[1], [0.2, 0.2])
 
+  def test_ad(self):
+    P = pasp.parse("examples/ad.lp")
+    R = pasp.exact(P)
+    # ℙ(alarm | burglary, earthquake(heavy))
+    self.assertApproxEqual(R[0], [0.9, 0.9])
+    # ℙ(alarm | not burglary, earthquake(mild))
+    self.assertApproxEqual(R[1], [0.1, 0.1])
+    # ℙ(alarm | burglary, not earthquake(mild))
+    self.assertApproxEqual(R[2], [0.8058823529411767, 0.8058823529411767])
+    # ℙ(alarm | not burglary, earthquake(none))
+    self.assertApproxEqual(R[3], [0.0, 0.0])
+
+  def test_multinsomnia(self):
+    P = pasp.parse("examples/multinsomnia.lp")
+    R = pasp.exact(P)
+    O = [[0.300000, 0.300000], [0.500000, 0.500000], [0.700000, 0.700000], [0.300000, 1.000000],
+         [0.500000, 1.000000], [0.700000, 1.000000], [0.000000, 0.700000], [0.000000, 0.500000],
+         [0.000000, 0.300000], [0.030000, 0.200000], [0.042000, 0.200000], [0.067500, 0.450000],
+         [0.157500, 0.450000], [0.073500, 0.350000], [0.122500, 0.350000]]
+    for i, r in enumerate(R):
+      self.assertApproxEqual(r, O[i])
+
 class TestLStable(PaspTest):
   def test_barber(self):
     P = pasp.parse("examples/barber.lp", semantics = "lstable")
@@ -111,6 +133,16 @@ class TestLStable(PaspTest):
     self.assertApproxEqual(R[1], [0.5, 0.5])
     # ℙ(undef shaves(b, b))
     self.assertApproxEqual(R[2], [0.5, 0.5])
+
+  def test_3coloring(self):
+    P = pasp.parse("examples/3coloring.lp", semantics = "lstable")
+    R = pasp.exact(P)
+    # ℙ(c(1, r))
+    self.assertApproxEqual(R[0], [0.0, 1.0])
+    # ℙ(e(1, 2) | undef f)
+    self.assertApproxEqual(R[1], [0.7727272727272727, 0.7727272727272727])
+    # ℙ(undef f)
+    self.assertApproxEqual(R[2], [0.064453125, 0.064453125])
 
 class TestPlog(PaspTest):
   def test_asia(self):
@@ -192,6 +224,18 @@ class TestPlog(PaspTest):
     self.assertApproxEqual(R[3], [0.3+(1.0-0.3)/2,  0.3+(1.0-0.3)/2])
     # ℙ(not work)
     self.assertApproxEqual(R[4], [0.7/2,  0.7/2])
+
+  def test_ad(self):
+    P = pasp.parse("examples/ad.lp")
+    R = pasp.exact(P, psemantics = "maxent")
+    # ℙ(alarm | burglary, earthquake(heavy))
+    self.assertApproxEqual(R[0], [0.9, 0.9])
+    # ℙ(alarm | not burglary, earthquake(mild))
+    self.assertApproxEqual(R[1], [0.1, 0.1])
+    # ℙ(alarm | burglary, not earthquake(mild))
+    self.assertApproxEqual(R[2], [0.8058823529411767, 0.8058823529411767])
+    # ℙ(alarm | not burglary, earthquake(none))
+    self.assertApproxEqual(R[3], [0.0, 0.0])
 
 if __name__ == "__main__":
   unittest.main()
