@@ -5,7 +5,7 @@ import pasp
 class TestExamples(PaspTest):
   def test_asia(self):
     P = pasp.parse("examples/asia.lp")
-    R = pasp.exact(P)
+    R = pasp.exact(P, quiet = True)
     # ℙ(trip)
     self.assertApproxEqual(R[0], [0.01, 0.01])
     # ℙ(tuberculosis | trip)
@@ -25,7 +25,7 @@ class TestExamples(PaspTest):
 
   def test_earthquake(self):
     P = pasp.parse("examples/earthquake.lp")
-    R = pasp.exact(P)
+    R = pasp.exact(P, quiet = True)
     # ℙ(alarm | burglary, earthquake)
     self.assertApproxEqual(R[0], [0.9,  0.9])
     # ℙ(alarm | not burglary, earthquake)
@@ -37,7 +37,7 @@ class TestExamples(PaspTest):
 
   def test_game(self):
     P = pasp.parse("examples/game.lp")
-    R = pasp.exact(P)
+    R = pasp.exact(P, quiet = True)
     # ℙ(wins(b))
     self.assertApproxEqual(R[0], [0.7,  1.0])
     # ℙ(wins(c))
@@ -45,7 +45,7 @@ class TestExamples(PaspTest):
 
   def test_insomnia(self):
     P = pasp.parse("examples/insomnia.lp")
-    R = pasp.exact(P)
+    R = pasp.exact(P, quiet = True)
     # ℙ(insomnia)
     self.assertApproxEqual(R[0], [0.3,  0.3])
     # ℙ(work)
@@ -59,7 +59,7 @@ class TestExamples(PaspTest):
 
   def test_prisoners(self):
     P = pasp.parse("examples/prisoners.lp")
-    R = pasp.exact(P)
+    R = pasp.exact(P, quiet = True)
     α = 19/40
     # ℙ(e1 | u)
     print(R[0], [1.0/(1+2*(((1-α)/α)**2)), 1.0/(1+2*((α/(1-α))**2))])
@@ -77,7 +77,7 @@ class TestExamples(PaspTest):
 
   def test_simple(self):
     P = pasp.parse("examples/simple.lp")
-    R = pasp.exact(P)
+    R = pasp.exact(P, quiet = True)
     # ℙ(s(a))
     self.assertApproxEqual(R[0], [0.20, 0.20])
     # ℙ(s(b))
@@ -87,7 +87,7 @@ class TestExamples(PaspTest):
 
   def test_simpler(self):
     P = pasp.parse("examples/simpler.lp")
-    R = pasp.exact(P)
+    R = pasp.exact(P, quiet = True)
     # ℙ(r)
     self.assertApproxEqual(R[0], [0.5, 0.5])
     # ℙ(v)
@@ -95,7 +95,7 @@ class TestExamples(PaspTest):
 
   def test_smokers(self):
     P = pasp.parse("examples/smokers.lp")
-    R = pasp.exact(P)
+    R = pasp.exact(P, quiet = True)
     # ℙ(smokes(a))
     self.assertApproxEqual(R[0], [0.06, 0.06])
     # ℙ(smokes(b))
@@ -103,7 +103,7 @@ class TestExamples(PaspTest):
 
   def test_ad(self):
     P = pasp.parse("examples/ad.lp")
-    R = pasp.exact(P)
+    R = pasp.exact(P, quiet = True)
     # ℙ(alarm | burglary, earthquake(heavy))
     self.assertApproxEqual(R[0], [0.9, 0.9])
     # ℙ(alarm | not burglary, earthquake(mild))
@@ -115,7 +115,7 @@ class TestExamples(PaspTest):
 
   def test_multinsomnia(self):
     P = pasp.parse("examples/multinsomnia.lp")
-    R = pasp.exact(P)
+    R = pasp.exact(P, quiet = True)
     O = [[0.300000, 0.300000], [0.500000, 0.500000], [0.700000, 0.700000], [0.300000, 1.000000],
          [0.500000, 1.000000], [0.700000, 1.000000], [0.000000, 0.700000], [0.000000, 0.500000],
          [0.000000, 0.300000], [0.030000, 0.200000], [0.042000, 0.200000], [0.067500, 0.450000],
@@ -126,7 +126,7 @@ class TestExamples(PaspTest):
 class TestLStable(PaspTest):
   def test_barber(self):
     P = pasp.parse("examples/barber.lp", semantics = "lstable")
-    R = pasp.exact(P)
+    R = pasp.exact(P, quiet = True)
     # ℙ(shaves(b, a))
     self.assertApproxEqual(R[0], [1.0, 1.0])
     # ℙ(not shaves(b, b))
@@ -136,7 +136,7 @@ class TestLStable(PaspTest):
 
   def test_3coloring(self):
     P = pasp.parse("examples/3coloring.lp", semantics = "lstable")
-    R = pasp.exact(P)
+    R = pasp.exact(P, quiet = True)
     # ℙ(c(1, r))
     self.assertApproxEqual(R[0], [0.0, 1.0])
     # ℙ(e(1, 2) | undef f)
@@ -147,7 +147,7 @@ class TestLStable(PaspTest):
 class TestPlog(PaspTest):
   def test_asia(self):
     P = pasp.parse("examples/asia.lp")
-    R = pasp.exact(P, psemantics = "maxent")
+    R = pasp.exact(P, psemantics = "maxent", quiet = True)
     # ℙ(trip)
     self.assertApproxEqual(R[0], [0.01, 0.01])
     # ℙ(tuberculosis | trip)
@@ -167,7 +167,7 @@ class TestPlog(PaspTest):
 
   def test_earthquake(self):
     P = pasp.parse("examples/earthquake.lp")
-    R = pasp.exact(P, psemantics = "maxent")
+    R = pasp.exact(P, psemantics = "maxent", quiet = True)
     # ℙ(alarm | burglary, earthquake)
     self.assertApproxEqual(R[0], [0.9,  0.9])
     # ℙ(alarm | not burglary, earthquake)
@@ -179,7 +179,7 @@ class TestPlog(PaspTest):
 
   def test_simple(self):
     P = pasp.parse("examples/simple.lp")
-    R = pasp.exact(P, psemantics = "maxent")
+    R = pasp.exact(P, psemantics = "maxent", quiet = True)
     # ℙ(s(a))
     self.assertApproxEqual(R[0], [0.20, 0.20])
     # ℙ(s(b))
@@ -189,7 +189,7 @@ class TestPlog(PaspTest):
 
   def test_simpler(self):
     P = pasp.parse("examples/simpler.lp")
-    R = pasp.exact(P, psemantics = "maxent")
+    R = pasp.exact(P, psemantics = "maxent", quiet = True)
     # ℙ(r)
     self.assertApproxEqual(R[0], [0.5, 0.5])
     # ℙ(v)
@@ -197,7 +197,7 @@ class TestPlog(PaspTest):
 
   def test_smokers(self):
     P = pasp.parse("examples/smokers.lp")
-    R = pasp.exact(P, psemantics = "maxent")
+    R = pasp.exact(P, psemantics = "maxent", quiet = True)
     # ℙ(smokes(a))
     self.assertApproxEqual(R[0], [0.06, 0.06])
     # ℙ(smokes(b))
@@ -205,7 +205,7 @@ class TestPlog(PaspTest):
 
   def test_game(self):
     P = pasp.parse("examples/game.lp")
-    R = pasp.exact(P, psemantics = "maxent")
+    R = pasp.exact(P, psemantics = "maxent", quiet = True)
     # ℙ(wins(b))
     self.assertApproxEqual(R[0], [1.7/2, 1.7/2])
     # ℙ(wins(c))
@@ -213,7 +213,7 @@ class TestPlog(PaspTest):
 
   def test_insomnia(self):
     P = pasp.parse("examples/insomnia.lp")
-    R = pasp.exact(P, psemantics = "maxent")
+    R = pasp.exact(P, psemantics = "maxent", quiet = True)
     # ℙ(insomnia)
     self.assertApproxEqual(R[0], [0.3,  0.3])
     # ℙ(work)
@@ -227,7 +227,7 @@ class TestPlog(PaspTest):
 
   def test_ad(self):
     P = pasp.parse("examples/ad.lp")
-    R = pasp.exact(P, psemantics = "maxent")
+    R = pasp.exact(P, psemantics = "maxent", quiet = True)
     # ℙ(alarm | burglary, earthquake(heavy))
     self.assertApproxEqual(R[0], [0.9, 0.9])
     # ℙ(alarm | not burglary, earthquake(mild))

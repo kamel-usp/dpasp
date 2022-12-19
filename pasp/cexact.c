@@ -460,7 +460,7 @@ bool dispatch_job(total_choice_t *theta, pthread_mutex_t *wakeup,
   return !(S[id].fail || thpool_add_work(pool, compute_func, &S[id]));
 }
 
-bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat, psemantics_t psem) {
+bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat, psemantics_t psem, bool quiet) {
   bool has_credal = P->CF_n > 0, has_ad = P->AD_n > 0;
   double *a, *b, *c, *d = c = b = a = NULL;
   size_t Q_n = P->Q_n, gr_n = P->gr_pr.n, i;
@@ -556,7 +556,7 @@ bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat, psemantics_t pse
         }
       }
     }
-    print_query(P->Q+i); wprintf(L" = [%f, %f]\n", R[i][0], R[i][1]);
+    if (!quiet) { print_query(P->Q+i); wprintf(L" = [%f, %f]\n", R[i][0], R[i][1]); }
   }
 
   exact_num_ok = true;

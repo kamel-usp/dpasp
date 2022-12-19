@@ -16,13 +16,13 @@ static PyObject* exact_opt(PyObject *self, PyObject *args, PyObject *kwargs, int
   PyObject *py_P, *py_R = NULL;
   double (*R)[2] = NULL;
   size_t i;
-  bool r = false, parallel = true, lstable_sat = true;
+  bool r = false, parallel = true, lstable_sat = true, quiet = false;
   const char *psem_arg = "credal";
-  static char *kwlist[] = { "", "parallel", "lstable_sat", "psemantics", NULL };
+  static char *kwlist[] = { "", "parallel", "lstable_sat", "psemantics", "quiet", NULL };
   psemantics_t psem = CREDAL_SEMANTICS;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|bbs", kwlist, &py_P, &parallel, &lstable_sat,
-        &psem_arg))
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|bbsb", kwlist, &py_P, &parallel, &lstable_sat,
+        &psem_arg, &quiet))
     return NULL;
 
   if (!strcmp(psem_arg, "maxent")) { psem = MAXENT_SEMANTICS; }
@@ -41,7 +41,7 @@ static PyObject* exact_opt(PyObject *self, PyObject *args, PyObject *kwargs, int
     if (p.stable) if (!ground(p.stable)) goto cleanup;
   }
 
-  if (!exact_enum(&p, R, lstable_sat, psem)) goto badval;
+  if (!exact_enum(&p, R, lstable_sat, psem, quiet)) goto badval;
 
   py_R = PyTuple_New(p.Q_n);
   if (!py_R) {
