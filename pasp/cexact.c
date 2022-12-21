@@ -126,7 +126,7 @@ error:
 }
 
 bool prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
-    uint8_t *theta_ad, const char *nmodels, bool parallelize_clingo) {
+    uint8_t *theta_ad, const char *nmodels, bool parallelize_clingo, const char *append) {
   size_t i, gr_n = P->gr_pr.n;
   clingo_backend_t *back = NULL;
   /* Create new clingo controller. */
@@ -135,6 +135,7 @@ bool prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
   if (!setup_config(*C, nmodels, false)) return false;
   /* Add the purely logical part. */
   if (!clingo_control_add(*C, "base", NULL, 0, P->P)) return false;
+  if (append) if (!clingo_control_add(*C, "base", NULL, 0, append)) return false;
   /* Add grounded probabilistic rules. */
   if (P->gr_P.d) if (!clingo_control_add(*C, "base", NULL, 0, P->gr_P.d)) return false;
   /* Get the control's backend. */
@@ -180,7 +181,7 @@ bool has_total_model(program_t *P, total_choice_t *theta, uint8_t *theta_ad, boo
   clingo_solve_handle_t *handle;
   clingo_solve_result_bitset_t res;
   /* Prepare control according to the stable semantics. */
-  if (!prepare_control(&C, P->stable, theta, theta_ad, "1", false)) goto cleanup;
+  if (!prepare_control(&C, P->stable, theta, theta_ad, "1", false, NULL)) goto cleanup;
   /* Solve and determine if there exists a (total) model. */
   if (!clingo_control_solve(C, clingo_solve_mode_yield, NULL, 0, NULL, NULL, &handle)) goto cleanup;
   if (!clingo_solve_handle_get(handle, &res)) goto cleanup;
@@ -249,7 +250,7 @@ void compute_total_choice(void *data) {
   bool is_partial = P->sem, has_credal = P->CF_n;
 
   /* Add credal, probabilistic, and grounded probabilistic facts. */
-  if (!prepare_control(&C, P, theta, theta->theta_ad, "0", false)) goto cleanup;
+  if (!prepare_control(&C, P, theta, theta->theta_ad, "0", false, NULL)) goto cleanup;
   /* Zero-initialize counters and flags. */
   memset(cond_1, 0, Q_n); memset(cond_2, 0, Q_n);
   memset(cond_3, 0, Q_n); memset(cond_4, 0, Q_n);
@@ -367,7 +368,7 @@ void compute_total_choice_maxent(void *data) {
   size_t Q_n = P->Q_n, Q_n_bytes = Q_n*sizeof(size_t);
   bool is_partial = P->sem;
 
-  if (!prepare_control(&C, P, theta, theta->theta_ad, "0", false)) goto cleanup;
+  if (!prepare_control(&C, P, theta, theta->theta_ad, "0", false, NULL)) goto cleanup;
 
   memset(count_q_e, 0, Q_n_bytes);
   memset(count_e, 0, Q_n_bytes);
@@ -463,8 +464,8 @@ bool dispatch_job(total_choice_t *theta, pthread_mutex_t *wakeup,
 bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat, psemantics_t psem, bool quiet) {
   bool has_credal = P->CF_n > 0, has_ad = P->AD_n > 0;
   double *a, *b, *c, *d = c = b = a = NULL;
-  size_t Q_n = P->Q_n, gr_n = P->gr_pr.n, i;
-  size_t total_choice_n = has_credal ? P->PF_n+P->CF_n+gr_n : P->PF_n+gr_n;
+  size_t Q_n = P->Q_n, i;
+  size_t total_choice_n = has_credal ? TOTAL_CHOICE_NCREDAL(P) : TOTAL_CHOICE_N(P);
   total_choice_t theta;
   array_bool_t (*Pn)[4] = NULL;
   array_double_t (*K)[4] = NULL;
@@ -583,53 +584,55 @@ cleanup:
   return exact_num_ok;
 }
 
+/* Initializes learnable indices I_F and I_A in storage S according to PF and AD of size n and m
+ * respectively. If fail, goto fail. */
+#define init_learnable_indices(PF, n, I_F, AD, m, I_A, n_lpf, n_lad, S, fail) \
+  if (!(I_F && I_A)) { \
+    size_t __i; \
+    n_lpf = n_lad = 0; \
+    for (__i = n_lpf = 0; __i < n; ++__i) if (PF[__i].learnable) ++n_lpf; \
+    if (n_lpf) { \
+      S->I_F = (uint16_t*) malloc(n_lpf*sizeof(uint16_t)); \
+      if (!S->I_F) goto fail; \
+      for (size_t __j = __i = 0; __i < n; ++__i) if (PF[__i].learnable) S->I_F[__j++] = __i; \
+    } else S->I_F = NULL; \
+    for (__i = n_lad = 0; __i < m; ++__i) if (AD[__i].learnable) ++n_lad; \
+    if (n_lad) { \
+      S->I_A = (uint16_t*) malloc(n_lad*sizeof(uint16_t)); \
+      if (!S->I_A) { free(S->I_F); goto fail; } \
+      for (size_t __j = __i = 0; __i < m; ++__i) if (PF[__i].learnable) S->I_A[__j++] = __i; \
+    } else S->I_A = NULL; \
+  } else { \
+    S->I_F = I_F; S->I_A = I_A; \
+  } \
+  S->n = n_lpf; S->m = n_lad;
+
+/* Initializes learnable statements F and A in storage S according to PF and AD of size n and m
+ * respectively. Initialized data is of type type_t. If fail, goto fail. */
+#define init_learnable_storage(PF, n, I_F, AD, m, I_A, n_lpf, n_lad, S, type_t, fail) \
+  if (n_lpf) { \
+    S->F = (type_t(*)[2]) calloc(n_lpf, sizeof(type_t[2])); \
+    if (!S->F) goto fail; \
+  } else S->F = NULL; \
+  if (n_lad) { \
+    S->A = (type_t**) malloc(n_lad*sizeof(type_t*)); \
+    if (!S->A) goto fail; \
+    for (size_t __i = 0; __i < n_lad; ++__i) { \
+      S->A[__i] = (type_t*) calloc(AD[S->I_A[__i]].n, sizeof(type_t)); \
+      if (!S->A[__i]) { \
+        for (size_t __j = 0; __j < __i; ++__j) free(S->A[__j]); \
+        goto fail; \
+      } \
+    } \
+  } else S->A = NULL; \
+
 bool init_count_storage(count_storage_t *C, prob_fact_t *PF, size_t n, annot_disj_t *AD, size_t m,
     uint16_t *I_F, size_t n_lpf, uint16_t *I_A, size_t n_lad) {
-  size_t i;
-
-  if (!(I_F && I_A)) {
-    n_lpf = n_lad = 0;
-    for (i = n_lpf = 0; i < n; ++i) if (PF[i].learnable) ++n_lpf;
-    if (n_lpf) {
-      C->I_F = (uint16_t*) malloc(n_lpf*sizeof(uint16_t));
-      if (!C->I_F) goto cleanup;
-      for (size_t j = i = 0; i < n; ++i) if (PF[i].learnable) C->I_F[j++] = i;
-    } else C->I_F = NULL;
-
-    for (i = n_lad = 0; i < m; ++i) if (AD[i].learnable) ++n_lad;
-    if (n_lad) {
-      C->I_A = (uint16_t*) malloc(n_lad*sizeof(uint16_t));
-      if (!C->I_A) { free(C->I_F); goto cleanup; }
-      for (size_t j = i = 0; i < m; ++i) if (PF[i].learnable) C->I_A[j++] = i;
-    } else C->I_A = NULL;
-  } else {
-    C->I_F = I_F;
-    C->I_A = I_A;
-  }
-
-  C->n = n_lpf;
-  C->m = n_lad;
-  if (n_lpf) {
-    C->F = (uint16_t(*)[2]) calloc(n_lpf, sizeof(uint16_t[2]));
-    if (!C->F) goto cleanup;
-  } else C->F = NULL;
-  if (n_lad) {
-    C->A = (uint16_t**) malloc(n_lad*sizeof(uint16_t*));
-    if (!C->A) goto cleanup;
-    for (i = 0; i < n_lad; ++i) {
-      C->A[i] = (uint16_t*) calloc(AD[C->I_A[i]].n, sizeof(uint16_t));
-      if (!C->A[i]) {
-        size_t j;
-        for (j = 0; j < i; ++j) free(C->A[j]);
-        goto cleanup;
-      }
-    }
-  } else C->A = NULL;
-
+  init_learnable_indices(PF, n, I_F, AD, m, I_A, n_lpf, n_lad, C, cleanup);
+  init_learnable_storage(PF, n, I_F, AD, m, I_A, n_lpf, n_lad, C, uint16_t, cleanup);
   return true;
 cleanup:
   PyErr_SetString(PyExc_MemoryError, "no free memory available!");
-  /* Assume count_storage_t has been zero-initialized. */
   free(C->F);
   free(C->A);
   return false;
@@ -660,7 +663,7 @@ void compute_model_count(void *args) {
     if (has) P = P->stable;
   }
 
-  if (!prepare_control(&C, P, theta, theta->theta_ad, "0", false)) goto cleanup;
+  if (!prepare_control(&C, P, theta, theta->theta_ad, "0", false, NULL)) goto cleanup;
 
   {
     bool ok = true;
@@ -698,9 +701,9 @@ noerr:
   pthread_mutex_unlock(st->wakeup);
 }
 
-count_storage_t* count_models(program_t *P, bool lstable_sat) {
+bool count_models(program_t *P, bool lstable_sat, count_storage_t *ret) {
   total_choice_t theta;
-  size_t total_choice_n = P->PF_n+P->gr_pr.n;
+  size_t total_choice_n = TOTAL_CHOICE_N(P);
   size_t num_procs = estimate_nprocs(total_choice_n);
   bool busy_procs[NUM_PROCS] = {0};
   count_storage_t C[NUM_PROCS] = {{0}};
@@ -711,8 +714,11 @@ count_storage_t* count_models(program_t *P, bool lstable_sat) {
   pthread_cond_t avail = PTHREAD_COND_INITIALIZER;
   threadpool pool = thpool_init(num_procs);
   struct { count_storage_t *C; storage_t *S; } pairs[NUM_PROCS] = {{0}};
-  count_storage_t *ret = NULL;
 
+  if (!ret) {
+    PyErr_SetString(PyExc_ValueError, "received NULL count_storage_t as argument!");
+    goto cleanup;
+  }
   if (!init_total_choice(&theta, total_choice_n, P->AD, P->AD_n)) goto cleanup;
 
   for (i = 0; i < num_procs; ++i) {
@@ -759,21 +765,213 @@ count_storage_t* count_models(program_t *P, bool lstable_sat) {
         C[0].A[j][c] += C[i].A[j][c];
   }
 
-  ret = (count_storage_t*) malloc(sizeof(count_storage_t));
   ret->n = C[0].n; ret->m = C[0].m;
   ret->F = C[0].F; ret->A = C[0].A;
   ret->I_F = C[0].I_F; ret->I_A = C[0].I_A;
-  if (!ret) goto cleanup;
 
   ok = true;
 cleanup:
+  if (clingo_error_code() != clingo_error_success)
+    wprintf(L"Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
   pthread_mutex_destroy(&mu);
   pthread_mutex_destroy(&wakeup);
   pthread_cond_destroy(&avail);
   thpool_destroy(pool);
-  /* First count_storage_t is returned value. */
+  /* First count_storage_t has returned values. */
   for (i = 1; i < num_procs; ++i) free_count_storage_contents(&C[i], false);
   if (!ok) free_count_storage_contents(&C[0], true);
-  return ret;
+  return ok;
+}
+
+bool init_prob_storage(prob_storage_t *Q, prob_fact_t *PF, size_t n, annot_disj_t *AD, size_t m,
+    uint16_t *I_F, size_t n_lpf, uint16_t *I_A, size_t n_lad) {
+  init_learnable_indices(PF, n, I_F, AD, m, I_A, n_lpf, n_lad, Q, cleanup);
+  init_learnable_storage(PF, n, I_F, AD, m, I_A, n_lpf, n_lad, Q, double, cleanup);
+cleanup:
+  PyErr_SetString(PyExc_MemoryError, "no free memory available!");
+  free(Q->F);
+  free(Q->A);
+  return false;
+}
+
+size_t init_prob_storage_seq(prob_storage_t Q[NUM_PROCS], program_t *P) {
+  size_t total_choice_n = TOTAL_CHOICE_N(P);
+  size_t num_procs = estimate_nprocs(total_choice_n);
+  size_t i = 0;
+
+  for (i = 0; i < num_procs; ++i) {
+    uint16_t *I_F = Q[0].I_F, *I_A = Q[0].I_A;
+    size_t n_lpf = Q[0].n, n_lad = Q[0].m;
+    if (!init_prob_storage(&Q[i], P->PF, total_choice_n, P->AD, P->AD_n, I_F, n_lpf, I_A, n_lad))
+      goto cleanup;
+    if (!(Q[0].n || Q[0].m)) goto cleanup;
+  }
+
+  return num_procs;
+cleanup:
+  for (size_t j = 1; j < i; ++j) free_prob_storage_contents(&Q[j], false);
+  free_prob_storage_contents(&Q[0], true);
+  return 0;
+}
+
+void free_prob_storage_contents(prob_storage_t *Q, bool free_shared) {
+  free(Q->F);
+  free(Q->A);
+  if (free_shared) {
+    free(Q->I_F);
+    free(Q->I_A);
+  }
+}
+void free_prob_storage(prob_storage_t *Q) { free_prob_storage_contents(Q, true); free(Q); }
+
+void compute_prob_obs(void *args) {
+  struct { prob_storage_t *C; storage_t *S; const char *O; } *triple = args;
+  prob_storage_t *prob = triple->C;
+  storage_t *st = triple->S;
+  const char *obs = triple->O;
+  total_choice_t *theta = &st->theta;
+  program_t *P = st->P;
+  size_t i, m;
+  clingo_control_t *C = NULL;
+
+  if (P->sem == LSTABLE_SEMANTICS && st->lstable_sat) {
+    bool has;
+    if (!has_total_model(P, theta, theta->theta_ad, &has)) goto cleanup;
+    if (has) P = P->stable;
+  }
+
+  if (!prepare_control(&C, P, theta, theta->theta_ad, "0", false, obs)) goto cleanup;
+
+  {
+    bool ok = true;
+    clingo_solve_handle_t *handle;
+    clingo_solve_result_bitset_t solve_ret;
+
+    if (!clingo_control_solve(C, clingo_solve_mode_yield, NULL, 0, NULL, NULL, &handle))
+      goto solve_error;
+
+    for (m = 0; true; ++m) {
+      if (!clingo_solve_handle_resume(handle)) goto solve_error;
+      if (!clingo_solve_handle_get(handle, &solve_ret)) goto solve_error;
+      if (solve_ret & clingo_solve_result_exhausted) goto solve_cleanup;
+    }
+solve_error:
+    ok = false;
+solve_cleanup:
+    if (!(clingo_solve_handle_close(handle) && ok)) goto cleanup;
+  }
+
+  double p = prob_total_choice(P->PF, P->PF_n, &P->gr_pr, 0, theta, theta->theta_ad);
+  /* Add probs to probabilistic facts that agree with total choice theta. */
+  for (i = 0; i < prob->n; ++i) prob->F[i][bitvec_GET(&theta->pf, i)] += m*p;
+  /* Add probs to annotated disjunctions that agree with total choice theta. */
+  for (i = 0; i < prob->m; ++i) prob->A[i][theta->theta_ad[prob->I_A[i]]] += m*p;
+
+  goto noerr;
+cleanup:
+  st->fail = true;
+noerr:
+  clingo_control_free(C);
+  st->fail = false;
+  pthread_mutex_lock(st->wakeup);
+  st->busy_procs[st->pid] = false;
+  pthread_cond_signal(st->avail);
+  pthread_mutex_unlock(st->wakeup);
+}
+
+bool prob_obs(program_t *P, const char *obs, bool lstables_sat, prob_storage_t *ret) {
+  prob_storage_t Q[NUM_PROCS] = {{0}};
+  size_t num_procs = init_prob_storage_seq(Q, P);
+
+  if (!num_procs) goto cleanup;
+  if (!ret) {
+    PyErr_SetString(PyExc_ValueError, "received NULL prob_storage_t as argument!");
+    goto cleanup;
+  }
+  if (!prob_obs_reuse(P, obs, lstables_sat, ret, Q)) goto cleanup;
+
+  return true;
+cleanup:
+  /* First prob_storage_t has returned values. */
+  for (size_t i = 1; i < num_procs; ++i) free_prob_storage_contents(&Q[i], false);
+  /* If num_procs = 0, then Q has already been cleaned up by init_prob_storage_seq. Otherwise, the
+   * error comes from elsewhere (e.g. prob_obs_reuse), and so the freeing must be done. */
+  if (num_procs) free_prob_storage_contents(&Q[0], true);
+  return false;
+}
+
+bool prob_obs_reuse(program_t *P, const char *obs, bool lstable_sat, prob_storage_t *ret,
+    prob_storage_t Q[NUM_PROCS]) {
+  total_choice_t theta;
+  size_t total_choice_n = TOTAL_CHOICE_N(P);
+  size_t num_procs = estimate_nprocs(total_choice_n);
+  bool busy_procs[NUM_PROCS] = {0};
+  storage_t S[NUM_PROCS] = {{0}};
+  size_t i;
+  bool has_ad = P->AD_n > 0, ok = false;
+  pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER, wakeup = PTHREAD_MUTEX_INITIALIZER;
+  pthread_cond_t avail = PTHREAD_COND_INITIALIZER;
+  threadpool pool = thpool_init(num_procs);
+  struct { prob_storage_t *Q; storage_t *S; const char *O; } triples[NUM_PROCS] = {{0}};
+
+  if (!init_total_choice(&theta, total_choice_n, P->AD, P->AD_n)) goto cleanup;
+
+  for (i = 0; i < num_procs; ++i) {
+    S[i].pid = i; S[i].mu = &mu; S[i].wakeup = &wakeup; S[i].avail = &avail;
+    S[i].busy_procs = busy_procs; S[i].lstable_sat = lstable_sat;
+    S[i].P = P;
+    if (!init_total_choice(&S[i].theta, total_choice_n, P->AD, P->AD_n)) goto cleanup;
+    triples[i].Q = &Q[i];
+    triples[i].S = &S[i];
+    triples[i].O = obs;
+    /* Fill probs with zero. */
+    memset(Q[i].F, 0, Q[i].n*sizeof(double(*)[2]));
+    for (size_t j = 0; j < Q[i].m; ++j) memset(Q[i].A[j], 0, STORAGE_AD_DIM(P, Q+i, j)*sizeof(double));
+  }
+
+  do {
+    size_t j, c;
+    if (has_ad) {
+      for (j = 0; j < theta.ad_n; ++j)
+        for (c = 0; c < theta.ad[j].n; ++c) {
+          int id = retr_free_proc(busy_procs, num_procs, &wakeup, &avail);
+          theta.theta_ad[j] = c;
+          copy_total_choice(&theta, &S[id].theta);
+          if (S[id].fail || thpool_add_work(pool, compute_prob_obs, &triples[id])) goto cleanup;
+        }
+    } else {
+      int id = retr_free_proc(busy_procs, num_procs, &wakeup, &avail);
+      copy_total_choice(&theta, &S[id].theta);
+      if (S[id].fail || thpool_add_work(pool, compute_prob_obs, &triples[id])) goto cleanup;
+    }
+
+  } while (incr_total_choice(&theta));
+  thpool_wait(pool);
+
+  for (i = 1; i < num_procs; ++i) {
+    for (size_t j = 0; j < Q[0].n; ++j) {
+      Q[0].F[j][0] += Q[i].F[j][0];
+      Q[0].F[j][1] += Q[i].F[j][1];
+    }
+    for (size_t j = 0; j < Q[0].m; ++j)
+      for (size_t c = 0; c < P->AD[Q[0].I_A[j]].n; ++c)
+        Q[0].A[j][c] += Q[i].A[j][c];
+  }
+
+  if (ret) {
+    ret->n = Q[0].n; ret->m = Q[0].m;
+    ret->F = Q[0].F; ret->A = Q[0].A;
+    ret->I_F = Q[0].I_F; ret->I_A = Q[0].I_A;
+  }
+
+  ok = true;
+cleanup:
+  if (clingo_error_code() != clingo_error_success)
+    wprintf(L"Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
+  pthread_mutex_destroy(&mu);
+  pthread_mutex_destroy(&wakeup);
+  pthread_cond_destroy(&avail);
+  thpool_destroy(pool);
+  return ok;
 }
 

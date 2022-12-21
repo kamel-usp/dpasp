@@ -75,37 +75,35 @@ static inline PyObject* exact(PyObject *self, PyObject *args, PyObject *kwargs) 
 static inline PyObject* count(PyObject *self, PyObject *args) {
   program_t P = {0};
   PyObject *py_P = NULL;
-  count_storage_t *C = NULL;
+  count_storage_t C = {0};
   bool ok = false;
   PyObject *py_F, *py_I_F, *py_A, *py_I_A = py_A = py_I_F = py_F = NULL;
 
   if (!PyArg_ParseTuple(args, "O", &py_P)) return NULL;
   if (!from_python_program(py_P, &P)) return NULL;
-  C = count_models(&P, true);
+  if (!count_models(&P, true, &C)) goto cleanup;
 
-  if (!C) goto cleanup;
-
-  npy_intp dims[2] = {C->n, 2};
-  if (C->n > 0) {
-    py_F = PyArray_SimpleNewFromData(2, dims, NPY_UINT16, C->F);
+  npy_intp dims[2] = {C.n, 2};
+  if (C.n > 0) {
+    py_F = PyArray_SimpleNewFromData(2, dims, NPY_UINT16, C.F);
     if (!py_F) goto cleanup;
     PyArray_ENABLEFLAGS((PyArrayObject*) py_F, NPY_ARRAY_OWNDATA);
-    py_I_F = PyArray_SimpleNewFromData(1, dims, NPY_UINT16, C->I_F);
+    py_I_F = PyArray_SimpleNewFromData(1, dims, NPY_UINT16, C.I_F);
     if (!py_I_F) goto cleanup;
     PyArray_ENABLEFLAGS((PyArrayObject*) py_I_F, NPY_ARRAY_OWNDATA);
   }
-  if (C->m > 0) {
-    py_A = PyTuple_New(C->m);
+  if (C.m > 0) {
+    py_A = PyTuple_New(C.m);
     if (!py_A) goto cleanup;
-    for (size_t i = 0; i < C->m; ++i) {
-      dims[0] = P.AD[C->I_A[i]].n;
-      PyObject *py_A_i = PyArray_SimpleNewFromData(1, dims, NPY_UINT16, C->A[i]);
+    for (size_t i = 0; i < C.m; ++i) {
+      dims[0] = P.AD[C.I_A[i]].n;
+      PyObject *py_A_i = PyArray_SimpleNewFromData(1, dims, NPY_UINT16, C.A[i]);
       if (!py_A_i) goto cleanup;
       PyArray_ENABLEFLAGS((PyArrayObject*) py_A_i, NPY_ARRAY_OWNDATA);
       PyTuple_SET_ITEM(py_A, i, py_A_i);
     }
-    dims[0] = C->m;
-    py_I_A = PyArray_SimpleNewFromData(1, dims, NPY_UINT16, C->I_A);
+    dims[0] = C.m;
+    py_I_A = PyArray_SimpleNewFromData(1, dims, NPY_UINT16, C.I_A);
     if (!py_I_A) goto cleanup;
     PyArray_ENABLEFLAGS((PyArrayObject*) py_I_A, NPY_ARRAY_OWNDATA);
   }
@@ -114,7 +112,7 @@ static inline PyObject* count(PyObject *self, PyObject *args) {
 cleanup:
   free_program_contents(&P);
   if (!ok) {
-    if (C) free_count_storage(C);
+    free_count_storage_contents(&C, true);
     Py_XDECREF(py_F); Py_XDECREF(py_I_F);
     Py_XDECREF(py_A); Py_XDECREF(py_I_A);
     return Py_None;
