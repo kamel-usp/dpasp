@@ -109,6 +109,7 @@ bool array_char_from(array_char_t *a, const char *s) {
   return true;
 }
 bool array_char_writeln(array_char_t *a, char *s, size_t n) {
+  if (!n) n = strlen(s)+1;
   if ((a->n + n) > a->c) {
     size_t c = a->n + n;
     char *z;
