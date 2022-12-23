@@ -71,7 +71,7 @@ prule: PROB "::" ohead ":-" body "."
 // Annotated disjunction head.
 adhead: PROB "::" pgratom (";" PROB "::" pgratom)+
 // Learnable annotated disjunction head.
-ladhead: "P::" pgratom ("[" PROB "]")? (";" pgratom ("[" PROB "]")?)+ "."
+ladhead: "P::" pgratom ("[" PROB "]")? (";" pgratom ("[" PROB "]")?)+
 // Annotated disjunctions.
 ad: (adhead | ladhead) "."
 bad: (adhead | ladhead) ":-" body "."
