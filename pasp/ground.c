@@ -98,7 +98,7 @@ error:
   return false;
 }
 
-static bool update_program(program_t *P) {
+static bool partial_update_program(program_t *P) {
   PyObject *py_gr_P, *py_gr_PF, *py_gr_pr = py_gr_PF = py_gr_P = NULL;
   size_t i;
 
@@ -149,6 +149,9 @@ static bool update_program(program_t *P) {
     goto error;
   }
 
+  Py_DECREF(py_gr_P);
+  Py_DECREF(py_gr_PF);
+  Py_DECREF(py_gr_pr);
   return true;
 error:
   Py_XDECREF(py_gr_P);
@@ -179,7 +182,7 @@ static bool ground(program_t *P) {
 
   clingo_control_free(C);
 
-  if (!update_program(P)) goto error;
+  if (!partial_update_program(P)) goto error;
 
   return true;
 error:
