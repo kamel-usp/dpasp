@@ -253,6 +253,10 @@ bool from_python_prob_fact(PyObject *py_pf, prob_fact_t *pf) {
   pf->f_obj = py_f;
   pf->cl_f = cl_f;
   pf->learnable = (bool) learnable;
+  /* This might introduce a bug if py_pf expires during a C call (same with AD). Should keep this
+   * in mind going forward. For now it won't... Probably. The solution would be to Py_INCREF(py_pf)
+   * here and later Py_DECREF(py_pf) when freeing PF. */
+  pf->self = py_pf;
   r = true;
 
 cleanup:
@@ -532,6 +536,7 @@ bool from_python_ad(PyObject *py_ad, annot_disj_t *ad) {
   ad->cl_F = cl_F;
   ad->n = n;
   ad->learnable = (bool) learnable;
+  ad->self = py_ad;
 
   Py_XDECREF(py_P);
   Py_XDECREF(py_F);

@@ -13,6 +13,7 @@ typedef struct prob_fact {
   PyObject *f_obj;
   clingo_symbol_t cl_f;
   bool learnable;
+  PyObject *self;
 } prob_fact_t;
 
 typedef struct prob_rule {
@@ -39,6 +40,7 @@ typedef struct annot_disj {
   clingo_symbol_t *cl_F;
   size_t n;
   bool learnable;
+  PyObject *self;
 } annot_disj_t;
 
 #define QUERY_TERM_NEG 0
