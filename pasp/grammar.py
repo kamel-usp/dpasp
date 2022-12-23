@@ -197,7 +197,6 @@ class PLPTransformer(lark.Transformer):
     last_i = -1
     o = 0
     for a in h:
-      print(a)
       if type(a) is float:
         P.append(a)
         last = False
