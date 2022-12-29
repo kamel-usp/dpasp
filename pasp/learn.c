@@ -40,6 +40,17 @@ static PyObject* learn(PyObject *self, PyObject *args, PyObject *kwargs) {
   obs_counts = (PyArrayObject*) py_obs_counts;
   atoms = (PyArrayObject*) py_atoms;
 
+  npy_intp *obs_dims = PyArray_DIMS(obs);
+  size_t atoms_n = (size_t) PyArray_SIZE(atoms);
+
+  if ((PyArray_NDIM(obs) != 2) || (PyArray_NDIM(obs_counts) != 1) || (PyArray_NDIM(atoms) != 1) ||
+      (atoms_n != (size_t) obs_dims[1]) || (PyArray_SIZE(obs_counts) != obs_dims[0]) ||
+      (atoms_n == 0)) {
+    PyErr_SetString(PyExc_ValueError, "unexpected size dimension for obs, obs_counts and/or atoms "
+        "in learn_fixpoint!");
+    goto cleanup;
+  }
+
   {
     PyArray_Descr *obs_counts_descr = PyArray_DESCR(obs_counts);
     if (PyArray_TYPE(obs) != NPY_BOOL) {
@@ -59,7 +70,7 @@ static PyObject* learn(PyObject *self, PyObject *args, PyObject *kwargs) {
   else if (!strcmp(alg_s, ALG_NEURASP_S)) alg = ALG_NEURASP;
   else {
     PyErr_SetString(PyExc_ValueError, "alg must either be \"fixpoint\", \"lagrange\" or \"neurasp\"!");
-    goto cleanup;
+    return NULL;
   }
 
   if (!from_python_program(py_P, &P)) return NULL;
@@ -69,6 +80,7 @@ static PyObject* learn(PyObject *self, PyObject *args, PyObject *kwargs) {
     if (P.stable) if (!ground(P.stable)) goto cleanup;
   }
 
+  lstable_sat = lstable_sat && (P.sem == LSTABLE_SEMANTICS);
   switch(alg) {
     case ALG_FIXPOINT:
       if (!learn_fixpoint(&P, obs, obs_counts, atoms, niters, lstable_sat)) goto cleanup;

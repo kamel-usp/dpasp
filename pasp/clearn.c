@@ -80,19 +80,11 @@ void free_parameters(parameters_t *W) { free_parameters_contents(W); free(W); }
 
 bool learn_fixpoint(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
     PyArrayObject *atoms, size_t niters, bool lstable_sat) {
-  /* Initialize numpy. */
-  import_array();
-  npy_intp* obs_dims = PyArray_DIMS(obs);
-  size_t atoms_n = (size_t) PyArray_SIZE(atoms);
   observations_t O = {0}; /* Observations as a C type. */
   prob_storage_t Q[NUM_PROCS] = {{0}}; /* Storage for observation probabilities. */
   indices_t I = {0};
   size_t num_procs = 0, N = 0;
 
-  if ((PyArray_NDIM(obs) != 2) || (PyArray_NDIM(obs_counts) != 1) || (PyArray_NDIM(atoms) != 1) ||
-      (atoms_n != (size_t) obs_dims[1]) || (PyArray_SIZE(obs_counts) != obs_dims[0])) {
-    PyErr_SetString(PyExc_ValueError, "unexpected size dimension for obs, obs_counts and/or atoms "
-        "in learn_fixpoint!");
     goto cleanup;
   }
 
