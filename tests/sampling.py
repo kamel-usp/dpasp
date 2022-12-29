@@ -1,25 +1,18 @@
 import unittest
 
-from .utils import PaspTest
+from .utils import PaspTest, hoeffding
 import pasp
 import numpy as np
 import math
 
-CONFIDENCE = 0.99
 N_SAMPLES  = 2000
-
-def hoeffding(n: int) -> float:
-  """ Hoeffding Inequality.
-
-  Takes the number of samples `n` and returns the probability error ϵ."""
-  return math.sqrt(math.log(2/(1-CONFIDENCE))/(2*n))
-
 "Epsilon for all test cases based on the number of samples."
 EPS = hoeffding(N_SAMPLES)
+
 #print("Hoeffding tolerance:", EPS)
 
 class SamplingCases(PaspTest):
-  def test_ad_multinsomnia(self):
+  def test_insomnia_ad(self):
     W = [[0.3, 0.2, 0.5], [0.1, 0.6, 0.3], [0.9, 0.1, 0.0], [0.0, 0.5, 0.5]]
     P = pasp.parse("examples/insomnia_ad.lp")
     A = ["insomnia(anna)", "insomnia(bill)", "work(anna)", "work(bill)", "sleep(anna)",
