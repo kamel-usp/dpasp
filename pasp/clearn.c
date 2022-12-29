@@ -84,9 +84,7 @@ bool learn_fixpoint(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
   prob_storage_t Q[NUM_PROCS] = {{0}}; /* Storage for observation probabilities. */
   indices_t I = {0};
   size_t num_procs = 0, N = 0;
-
-    goto cleanup;
-  }
+  bool ok = false;
 
   if (!init_observations(&O, obs, atoms)) goto cleanup;
   if (!init_indices(&I, P)) goto cleanup;
@@ -154,11 +152,12 @@ bool learn_fixpoint(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
     goto cleanup;
   }
 
-  return true;
+  ok = true;
 cleanup:
+  free_observations_contents(&O);
   for (size_t i = 0; i < num_procs; ++i) free_prob_storage_contents(&Q[i], false);
   free_indices_contents(&I);
-  return false;
+  return ok;
 }
 
 bool update_program_parameters(program_t *P, indices_t *I) {
