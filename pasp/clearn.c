@@ -15,9 +15,11 @@ bool init_indices(indices_t *I, program_t *P) {
   } else I_F = NULL;
 
   for (size_t i = 0; i < P->AD_n; ++i) if (P->AD[i].learnable) ++m;
-  I_A = (uint16_t*) malloc(m*sizeof(uint16_t));
-  if (!I_A) goto cleanup;
-  for (size_t i, j = i = 0; i < P->AD_n; ++i) if (P->AD[i].learnable) I_A[j++] = i;
+  if (m) {
+    I_A = (uint16_t*) malloc(m*sizeof(uint16_t));
+    if (!I_A) goto cleanup;
+    for (size_t i, j = i = 0; i < P->AD_n; ++i) if (P->AD[i].learnable) I_A[j++] = i;
+  } else I_A = NULL;
 
   I->n = n; I->m = m;
   I->F = I_F; I->A = I_A;
