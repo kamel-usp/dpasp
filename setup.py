@@ -17,9 +17,9 @@ class TestCommand(Command):
     os.system("python setup.py build_ext --inplace && python -m unittest tests/examples.py -b && " \
               "python -m unittest tests/counting.py -b")
 
-STD_MACROS = [("NUM_PROCS", str(os.cpu_count())), ("_GNU_SOURCE", None)]
 # Debug concurrency problems by forcing sequential running.
 # STD_MACROS = [("NUM_PROCS", str(1)), ("_GNU_SOURCE", None)]
+STD_MACROS = [("NUM_PROCS", str(os.cpu_count())), ("_GNU_SOURCE", None)]
 
 exact    = Extension("exact",
                      libraries = ["m", "clingo", "pthread"],
@@ -49,9 +49,20 @@ learn    = Extension("learn",
                      extra_compile_args = ["-Wno-unused-function"],
                      define_macros = STD_MACROS)
 
+sample   = Extension("sample",
+                     libraries = ["clingo", "pthread"],
+                     depends = ["pasp/cprogram.c", "pasp/cinf.c", "pasp/cutils.c", "pasp/carray.c",
+                                "pasp.ground.c", "pasp/csample.c"],
+                     sources = ["pasp/sample.c", "thpool/thpool.c", "pasp/cinf.c", "pasp/cprogram.c",
+                                "bitvector/bitvector.c", "pasp/cutils.c", "pasp/csample.c",
+                                "pasp/carray.c"],
+                     include_dirs = [np.get_include()],
+                     extra_compile_args = ["-Wno-unused-function"],
+                     define_macros = STD_MACROS)
+
 setup(
   packages = find_packages(where = ".", include = ["pasp*"]),
   include_package_data = True,
-  ext_modules = [exact, ground, learn],
+  ext_modules = [exact, ground, learn, sample],
   cmdclass = {"test": TestCommand},
 )

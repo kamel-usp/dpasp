@@ -6,6 +6,7 @@ from .grammar import parse
 from exact import exact, count
 from ground import ground
 from .program import Program
+from sample import sample
 
 import numpy as np
 
