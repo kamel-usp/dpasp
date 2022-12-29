@@ -9,9 +9,7 @@
 #include "ground.h"
 #include "cinf.h"
 
-#define EXACT_ENUM 0
-
-static PyObject* exact_opt(PyObject *self, PyObject *args, PyObject *kwargs, int choice) {
+static PyObject* exact(PyObject *self, PyObject *args, PyObject *kwargs) {
   program_t p = {0};
   PyObject *py_P, *py_R = NULL;
   double (*R)[2] = NULL;
@@ -41,6 +39,7 @@ static PyObject* exact_opt(PyObject *self, PyObject *args, PyObject *kwargs, int
     if (p.stable) if (!ground(p.stable)) goto cleanup;
   }
 
+  lstable_sat = lstable_sat && (p.sem == LSTABLE_SEMANTICS);
   if (!exact_enum(&p, R, lstable_sat, psem, quiet)) goto badval;
 
   py_R = PyTuple_New(p.Q_n);
@@ -68,20 +67,20 @@ cleanup:
   return r ? py_R : NULL;
 }
 
-static inline PyObject* exact(PyObject *self, PyObject *args, PyObject *kwargs) {
-  return exact_opt(self, args, kwargs, EXACT_ENUM);
-}
-
-static inline PyObject* count(PyObject *self, PyObject *args) {
+static inline PyObject* count(PyObject *self, PyObject *args, PyObject *kwargs) {
   program_t P = {0};
   PyObject *py_P = NULL;
   count_storage_t C = {0};
   bool ok = false;
+  bool lstable_sat = true;
+  static char *kwlist[] = { "", "lstable_sat", NULL };
   PyObject *py_F, *py_I_F, *py_A, *py_I_A = py_A = py_I_F = py_F = NULL;
 
-  if (!PyArg_ParseTuple(args, "O", &py_P)) return NULL;
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|b", kwlist, &py_P, &lstable_sat)) return NULL;
   if (!from_python_program(py_P, &P)) return NULL;
-  if (!count_models(&P, true, &C)) goto cleanup;
+
+  lstable_sat = lstable_sat && (P.sem == LSTABLE_SEMANTICS);
+  if (!count_models(&P, lstable_sat, &C)) goto cleanup;
 
   npy_intp dims[2] = {C.n, 2};
   if (C.n > 0) {
@@ -124,7 +123,7 @@ cleanup:
 static PyMethodDef CexactMethods[] = {
   {"exact", (PyCFunction)(void(*)(void)) exact, METH_VARARGS | METH_KEYWORDS,
     "Runs exact inference in order to answer the queries in `P`."},
-  {"count", (PyCFunction)(void(*)(void)) count, METH_VARARGS,
+  {"count", (PyCFunction)(void(*)(void)) count, METH_VARARGS | METH_KEYWORDS,
     "Counts the number of models for each possible learnable fact or annotated disjunction."},
   {NULL, NULL, 0, NULL},
 };
