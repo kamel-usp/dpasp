@@ -1,4 +1,5 @@
 #include "cinf.h"
+#include "cutils.h"
 
 double prob_total_choice(prob_fact_t *phi, size_t n, array_double_t *gr_pr, size_t CF_n,
     total_choice_t *theta, uint8_t *theta_ad) {
@@ -13,20 +14,8 @@ double prob_total_choice(prob_fact_t *phi, size_t n, array_double_t *gr_pr, size
     t = bitvec_GET(&theta->pf, n + i + CF_n);
     p *= t*(gr_pr->d[i]) + (!t)*(1.0-(gr_pr->d[i]));
   }
-  if (ad_n > 0) for (i = 0; i < ad_n; ++i) p *= theta->ad[i].P[theta_ad[i]];
+  for (i = 0; i < ad_n; ++i) p *= theta->ad[i].P[theta_ad[i]];
   return p;
-}
-
-static inline bool sample_pf(double p) { return (((double) rand())/RAND_MAX) <= p; }
-
-unsigned long long int sample_total_choice(prob_fact_t *phi, size_t n, array_double_t *gr_pr) {
-  unsigned long long int theta = 0;
-  size_t i, m = gr_pr->n;
-
-  for (i = 0; i < n; ++i) theta |= sample_pf(phi[i].p) << i;
-  for (i = 0; i < m; ++i) theta |= sample_pf(gr_pr->d[i]) << (n + i);
-
-  return theta;
 }
 
 bool init_storage(storage_t *s, program_t *P, array_bool_t (*Pn)[4],
@@ -127,3 +116,125 @@ void print_total_choice(total_choice_t *theta) {
 size_t estimate_nprocs(size_t total_choice_n) {
   return (total_choice_n > log2(NUM_PROCS)) ? NUM_PROCS : (1 << total_choice_n);
 }
+
+int retr_free_proc(bool *busy_procs, size_t num_procs, pthread_mutex_t *wakeup,
+    pthread_cond_t *avail) {
+  size_t i;
+  int id = -1;
+  /* The line below does not produce a problematic race condition since it will, at worst, skip
+   * the i-th busy_procs and have to iterate NUM_PROCS all over again. */
+  pthread_mutex_lock(wakeup);
+  while (true) {
+    for (i = 0, id = -1; i < num_procs; ++i) {
+      if (!busy_procs[i]) { id = i; break; }
+    }
+    if (id != -1) break;
+    pthread_cond_wait(avail, wakeup);
+  }
+  busy_procs[id] = true;
+  pthread_mutex_unlock(wakeup);
+  return id;
+}
+
+bool dispatch_job(total_choice_t *theta, pthread_mutex_t *wakeup,
+    bool *busy_procs, storage_t *S, size_t num_procs, threadpool pool, pthread_cond_t *avail,
+    void (*compute_func)(void*), bool has_ad, size_t j, size_t c) {
+  int id = retr_free_proc(busy_procs, num_procs, wakeup, avail);
+  if (has_ad) theta->theta_ad[j] = c;
+  copy_total_choice(theta, &S[id].theta);
+  return !(S[id].fail || thpool_add_work(pool, compute_func, &S[id]));
+}
+
+#define PROCS_STR(x) #x ",compete"
+#define PROCS_XSTR(x) PROCS_STR(x)
+#define NUM_PROCS_CONFIG_STR PROCS_XSTR(NUM_PROCS)
+
+bool prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
+    uint8_t *theta_ad, const char *nmodels, bool parallelize_clingo, const char *append) {
+  size_t i, gr_n = P->gr_pr.n;
+  clingo_backend_t *back = NULL;
+  /* Create new clingo controller. */
+  if (!clingo_control_new(NULL, 0, undef_atom_ignore, NULL, 20, C)) return false;
+  /* Config to enumerate all models. */
+  if (!setup_config(*C, nmodels, false)) return false;
+  /* Add the purely logical part. */
+  if (!clingo_control_add(*C, "base", NULL, 0, P->P)) return false;
+  if (append) if (!clingo_control_add(*C, "base", NULL, 0, append)) return false;
+  /* Add grounded probabilistic rules. */
+  if (P->gr_P.d) if (!clingo_control_add(*C, "base", NULL, 0, P->gr_P.d)) return false;
+  /* Get the control's backend. */
+  if (!clingo_control_backend(*C, &back)) return false;
+  /* Startup the backend. */
+  if (!clingo_backend_begin(back)) return false;
+  /* Add the credal facts according to the total rule. */
+  for (i = 0; i < P->CF_n; ++i) {
+    clingo_atom_t a;
+    if (!CHOICE_IS_TRUE(theta, i)) continue;
+    if (!clingo_backend_add_atom(back, &P->CF[i].cl_f, &a)) return false;
+    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) return false;
+  }
+  /* Add the probabilistic facts according to the total rule. */
+  for (i = 0; i < P->PF_n; ++i) {
+    clingo_atom_t a;
+    if (!CHOICE_IS_TRUE(theta, i + P->CF_n)) continue;
+    if (!clingo_backend_add_atom(back, &P->PF[i].cl_f, &a)) return false;
+    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) return false;
+  }
+  /* Add the grounded probabilistic rules according to the total rule. */
+  for (i = 0; i < gr_n; ++i) {
+    clingo_atom_t a;
+    if (!CHOICE_IS_TRUE(theta, i + P->CF_n + P->PF_n)) continue;
+    if (!clingo_backend_add_atom(back, &P->gr_PF.d[i], &a)) return false;
+    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) return false;
+  }
+  /* Add the annotated disjunction rules according to the total rule encoded by theta_ad. */
+  for (i = 0; i < theta->ad_n; ++i) {
+    clingo_atom_t a;
+    if (!clingo_backend_add_atom(back, &theta->ad[i].cl_F[theta_ad[i]], &a)) return false;
+    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) return false;
+  }
+  /* Cleanup backend. */
+  if (!clingo_backend_end(back)) return false;
+  /* Ground atoms. */
+  if(!clingo_control_ground(*C, GROUND_DEFAULT_PARTS, 1, NULL, NULL)) return false;
+  return true;
+}
+
+bool setup_config(clingo_control_t *C, const char *nmodels, bool parallelize_clingo) {
+  clingo_configuration_t *cfg = NULL;
+  clingo_id_t cfg_root, cfg_sub;
+
+  /* Get the control's configuration. */
+  if (!clingo_control_configuration(C, &cfg)) return false;
+  /* Set to enumerate all stable models. */
+  if (!clingo_configuration_root(cfg, &cfg_root)) return false;
+  if (!clingo_configuration_map_at(cfg, cfg_root, "solve.models", &cfg_sub)) return false;
+  if (!clingo_configuration_value_set(cfg, cfg_sub, nmodels)) return false;
+  if (parallelize_clingo) {
+    /* Set parallel_mode to "NUM_PROCS,compete", where NUM_PROCS is the #procs in this machine. */
+    if (!clingo_configuration_map_at(cfg, cfg_root, "solve.parallel_mode", &cfg_sub)) return false;
+    if (!clingo_configuration_value_set(cfg, cfg_sub, NUM_PROCS_CONFIG_STR)) return false;
+  }
+
+  return true;
+}
+
+bool has_total_model(program_t *P, total_choice_t *theta, uint8_t *theta_ad, bool *has) {
+  clingo_control_t *C = NULL;
+  clingo_solve_handle_t *handle;
+  clingo_solve_result_bitset_t res;
+  /* Prepare control according to the stable semantics. */
+  if (!prepare_control(&C, P->stable, theta, theta_ad, "1", false, NULL)) goto cleanup;
+  /* Solve and determine if there exists a (total) model. */
+  if (!clingo_control_solve(C, clingo_solve_mode_yield, NULL, 0, NULL, NULL, &handle)) goto cleanup;
+  if (!clingo_solve_handle_get(handle, &res)) goto cleanup;
+  *has = (res & clingo_solve_result_satisfiable);
+  /* Cleanup. */
+  clingo_control_free(C);
+  return true;
+cleanup:
+  clingo_control_free(C);
+  return false;
+}
+
+

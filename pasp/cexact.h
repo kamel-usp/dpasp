@@ -5,15 +5,6 @@
 #include "cprogram.h"
 #include "cinf.h"
 
-#include "../thpool/thpool.h"
-
-/* Total choice size. */
-#define TOTAL_CHOICE_N(P) (P)->PF_n+(P)->gr_pr.n
-#define TOTAL_CHOICE_NCREDAL(P) (P)->PF_n+(P)->gr_pr.n+(P)->CF_n
-
-/* Get dimension (number of classes) of the i-th learnable AD in storage S. */
-#define STORAGE_AD_DIM(P, S, i) ((P)->AD[(S)->I_A[(i)]].n)
-
 typedef struct {
   /* Number of learnable probabilistic facts. */
   size_t n;
