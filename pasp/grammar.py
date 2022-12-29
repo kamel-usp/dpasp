@@ -160,7 +160,9 @@ class PLPTransformer(lark.Transformer):
   def cfact(self, f: list[lark.Tree]) -> tuple[Command, CredalFact]:
     return Command.CRED_FACT, CredalFact(str(f[0]), str(f[1]), f[2][0])
   def lpfact(self, f: list[lark.Tree]) -> tuple[Command, ProbFact]:
-    return Command.PROB_FACT, ProbFact(0.5 if len(f) < 2 else f[1], f[0][0], learnable = True)
+    if len(f) < 2:
+      return Command.PROB_FACT, ProbFact(0.5, f[0][0], learnable = True)
+    return Command.PROB_FACT, ProbFact(f[0], f[1][0], learnable = True)
 
   # Heads.
   def head(self, h: list[str]) -> str:
@@ -193,31 +195,27 @@ class PLPTransformer(lark.Transformer):
   # Learnable annotated disjunction head.
   def ladhead(self, h: list):
     P, F = [], []
-    last = False # track whether last token read was NOT accompanied of a probability
-    last_i = -1
-    o = 0
-    for a in h:
+    i, o, j = 0, 0, 0
+    last = None
+    while i < len(h):
+      a = h[i]
       if type(a) is float:
         P.append(a)
-        last = False
+        F.append(h[i+1][0])
+        i += 2
       else:
+        P.append(-1)
         F.append(a[0])
-        if last:
-          last_i = len(P)
-          P.append(-1)
-          o += 1
-        else: last = True
-    if last:
-      last_i = len(P)
-      P.append(-1)
-      o += 1
+        i += 1; o += 1
+        last = j
+      j += 1
     if o > 0:
       P_s = sum(P)+o
       # If probs were not explicitly given, assume maximum uncertainty and set to uniform.
       s = round((1.0-P_s)/o, ndigits = 15)
       ts = P_s+s*(o-1)
       for i, p in enumerate(P):
-        if i == last_i: P[i] = 1.0-ts
+        if i == last: P[i] = 1.0-ts
         elif p < 0: P[i] = s
     return P, F, True
   # Annotated disjunctions.

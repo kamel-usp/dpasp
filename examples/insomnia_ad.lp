@@ -4,7 +4,7 @@ work(X) :- not sleep(X), person(X).
 person(anna).
 person(bill).
 
-P::insomnia(anna); insomnia(bill); insomnia(noone).
+?::insomnia(anna); ?::insomnia(bill); ?::insomnia(noone).
 
 #query(insomnia(anna)).
 #query(insomnia(bill)).

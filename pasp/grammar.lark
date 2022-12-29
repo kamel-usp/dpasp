@@ -53,7 +53,7 @@ _fact: atom "."
 fact: _fact
 // Probabilistic fact.
 pfact: PROB "::" _fact
-lpfact: "P::" pgratom ("[" PROB "]")? "."
+lpfact: PROB? "?" "::" pgratom "."
 // Credal fact.
 cfact: "[" PROB "," PROB "]" "::" _fact
 
@@ -71,7 +71,7 @@ prule: PROB "::" ohead ":-" body "."
 // Annotated disjunction head.
 adhead: PROB "::" pgratom (";" PROB "::" pgratom)+
 // Learnable annotated disjunction head.
-ladhead: "P::" pgratom ("[" PROB "]")? (";" pgratom ("[" PROB "]")?)+
+ladhead: PROB? "?" "::" pgratom (";" PROB? "?" "::" pgratom)+
 // Annotated disjunctions.
 ad: (adhead | ladhead) "."
 bad: (adhead | ladhead) ":-" body "."

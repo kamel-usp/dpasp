@@ -27,7 +27,7 @@ class ProbFact:
     self.cl_f = clingo.parse_term(f)
     self.learnable = learnable
 
-  def __str__(self) -> str: return f"P::{self.f}[{self.p}]" if self.learnable else f"{self.p}::{self.f}"
+  def __str__(self) -> str: return f"{round(self.p, ndigits = 3)}{'?' if self.learnable else ''}::{self.f}"
   def __repr__(self) -> str: return self.__str__()
 
 class ProbRule:
@@ -79,9 +79,7 @@ class AnnotatedDisjunction:
   def __getitem__(self, i: int) -> tuple[float, str]:
     return self.P[i], self.F[i]
   def __str__(self) -> str:
-    if self.learnable:
-      return "P::" + "; ".join([f"{self.F[i]}[{self.P[i]}]" for i in range(len(self.P))])
-    return "; ".join([f"{self.P[i]}::{self.F[i]}" for i in range(len(self.P))])
+    return "; ".join([f"{round(self.P[i], ndigits = 3)}{'?' if self.learnable else ''}::{self.F[i]}" for i in range(len(self.P))])
   def __repr__(self) -> str: return self.__str__()
 
 class Semantics(enum.IntEnum):
