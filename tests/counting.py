@@ -3,7 +3,7 @@ from .utils import PaspTest
 import pasp
 import numpy as np
 
-class CountingExamples(PaspTest):
+class TestCounting(PaspTest):
   @staticmethod
   def all_learnable(P: pasp.program.Program):
     for pf in P.PF: pf.learnable = True
@@ -12,7 +12,7 @@ class CountingExamples(PaspTest):
   @staticmethod
   def init_example(eg: str, semantics = "stable"):
     P = pasp.parse("examples/" + eg + ".lp", semantics = semantics)
-    CountingExamples.all_learnable(P)
+    TestCounting.all_learnable(P)
     return P, pasp.count(P)
 
   def assert_strat(self, P: pasp.program.Program, C: tuple):
