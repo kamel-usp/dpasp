@@ -102,7 +102,7 @@ class TestExamples(PaspTest):
     self.assertApproxEqual(R[1], [0.2, 0.2])
 
   def test_ad(self):
-    P = pasp.parse("examples/ad.lp")
+    P = pasp.parse("examples/earthquake_ad.lp")
     R = pasp.exact(P, quiet = True)
     # ℙ(alarm | burglary, earthquake(heavy))
     self.assertApproxEqual(R[0], [0.9, 0.9])
@@ -226,7 +226,7 @@ class TestPlog(PaspTest):
     self.assertApproxEqual(R[4], [0.7/2,  0.7/2])
 
   def test_ad(self):
-    P = pasp.parse("examples/ad.lp")
+    P = pasp.parse("examples/earthquake_ad.lp")
     R = pasp.exact(P, psemantics = "maxent", quiet = True)
     # ℙ(alarm | burglary, earthquake(heavy))
     self.assertApproxEqual(R[0], [0.9, 0.9])

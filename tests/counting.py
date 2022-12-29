@@ -48,8 +48,8 @@ class TestCounting(PaspTest):
     P, C = self.init_example("smokers")
     self.assert_strat(P, C)
 
-  def test_ad(self):
-    P, C = self.init_example("ad")
+  def test_earthquake_ad(self):
+    P, C = self.init_example("earthquake_ad")
     self.assert_strat(P, C)
 
   def test_multinsomnia(self):
