@@ -853,7 +853,7 @@ bool prob_obs_reuse(program_t *P, observations_t *obs, bool lstable_sat, prob_st
     /* Fill probs with zero. */
     for (size_t j = 0; j < obs->n; ++j) {
       prob_obs_storage_t *pr = &Q[i].P[j];
-      memset(pr->F, 0, Q[i].n*sizeof(double(*)[2]));
+      memset(pr->F, 0, Q[i].n*sizeof(double[2]));
       for (size_t j = 0; j < Q[i].m; ++j) memset(pr->A[j], 0, STORAGE_AD_DIM(P, &Q[0], j)*sizeof(double));
       pr->o = 0.0;
     }
