@@ -21,7 +21,7 @@ jobs:
         run: |
           sudo add-apt-repository ppa:potassco/stable
           sudo apt update
-          sudo apt install clingo libclingo-dev gcc python3-build
+          sudo apt install clingo libclingo-dev gcc python3-build doxygen
       - name: Add Python dependencies
         run: |
           python -m pip install --upgrade pip setuptools build pdoc
@@ -32,8 +32,9 @@ jobs:
           python setup.py build_ext --inplace
       - name: Generate docs
         run: |
-          pdoc --math --logo "https://raw.githubusercontent.com/RenatoGeh/pasp/master/logo/logo.svg" --logo-link "https://github.com/RenatoGeh/pasp" pasp -o docs/
-          cp -r examples/ docs/
+          pdoc --math --logo "https://raw.githubusercontent.com/RenatoGeh/pasp/master/logo/logo.svg" --logo-link "https://github.com/RenatoGeh/pasp" pasp -o _site/
+          doxygen
+          cp -r examples/ _site/
       - name: Upload to GitHub Pages
         uses: actions/upload-pages-artifact@v1
         with:
