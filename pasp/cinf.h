@@ -15,12 +15,12 @@
 /* Get dimension (number of classes) of the i-th learnable AD in storage S. */
 #define STORAGE_AD_DIM(P, S, i) ((P)->AD[(S)->I_A[(i)]].n)
 
-typedef enum psemantics {
+typedef enum {
   CREDAL_SEMANTICS = 0,
   MAXENT_SEMANTICS   = 1,
 } psemantics_t;
 
-typedef struct _total_choice {
+typedef struct {
   bitvec_t pf;
   annot_disj_t *ad;
   size_t ad_n;
@@ -36,7 +36,7 @@ void print_total_choice(total_choice_t *theta);
 double prob_total_choice(prob_fact_t *phi, size_t n, array_double_t *gr_pr, size_t CF_n,
     total_choice_t *theta, uint8_t *ad_i);
 
-typedef struct storage {
+typedef struct {
   bool *cond_1, *cond_2, *cond_3, *cond_4;
   size_t *count_q_e, *count_e, *count_partial_q_e;
   double *a, *b, *c, *d;
