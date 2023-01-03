@@ -1,5 +1,8 @@
 #include "clearn.h"
 
+/*#include <wchar.h>*/
+/*#include <locale.h>*/
+
 #include "carray.h"
 #include "cdata.h"
 
@@ -145,6 +148,118 @@ bool learn_fixpoint(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
       for (size_t j = 0; j < AD->n; ++j)
         AD->P[j] /= N;
     }
+  }
+
+  if (!update_program_parameters(P, &I)) {
+    PyErr_SetString(PyExc_AttributeError, "could not update program parameters!");
+    goto cleanup;
+  }
+
+  ok = true;
+cleanup:
+  free_observations_contents(&O);
+  for (size_t i = 0; i < num_procs; ++i) free_prob_storage_contents(&Q[i], false);
+  free_indices_contents(&I);
+  return ok;
+}
+
+bool learn_lagrange(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
+    PyArrayObject *atoms, size_t niters, double eta, bool lstable_sat) {
+  observations_t O = {0}; /* Observations as a C type. */
+  prob_storage_t Q[NUM_PROCS] = {{0}}; /* Storage for observation probabilities. */
+  indices_t I = {0};
+  size_t num_procs = 0;
+  bool ok = false;
+
+  if (!init_observations(&O, obs, atoms)) goto cleanup;
+  if (!init_indices(&I, P)) goto cleanup;
+  Q[0].I_F = I.F; Q[0].n = I.n; Q[0].I_A = I.A; Q[0].m = I.m;
+  if (!I.n && !I.m) {
+    PyErr_SetString(PyExc_ValueError, "program is not learnable!");
+    return false;
+  }
+  if (!(num_procs = init_prob_storage_seq(Q, P, &O))) goto cleanup;
+
+  for (size_t i = 0; i < niters; ++i) {
+    /* Compute probabilities. */
+    if (!prob_obs_reuse(P, &O, lstable_sat, NULL, Q, true)) goto cleanup;
+
+    /* Update parameters. */
+    for (size_t i_o = 0; i_o < O.n; ++i_o) {
+      prob_obs_storage_t *W = &Q[0].P[i_o];
+      int c = (int) *((int*) PyArray_GETPTR1(obs_counts, i_o));
+
+      /* Update probabilistic facts. */
+      for (size_t i_pf = 0; i_pf < I.n; ++i_pf)
+        P->PF[I.F[i_pf]].p += eta*c*(((W->F[i_pf][1] - W->F[i_pf][0])*0.5)/W->o);
+      /* Update annotated disjunctions. */
+      for (size_t i_ad = 0; i_ad < I.m; ++i_ad) {
+        annot_disj_t *AD = &P->AD[I.A[i_ad]];
+        double dP = 0.0;
+        for (size_t j = 0; j < AD->n; ++j) dP += W->A[i_ad][j];
+        for (size_t j = 0; j < AD->n; ++j) AD->P[j] += eta*c*((W->A[i_ad][j] - dP/AD->n)/W->o);
+      }
+    }
+    /*print_annot_disj(&P->AD[0]);*/
+    /*double p = 0;*/
+    /*for (size_t j = 0; j < P->AD[0].n; ++j) p += P->AD[0].P[j];*/
+    /*wprintf(L"\n  sum = %f\n", p); fflush(stdout);*/
+  }
+
+  if (!update_program_parameters(P, &I)) {
+    PyErr_SetString(PyExc_AttributeError, "could not update program parameters!");
+    goto cleanup;
+  }
+
+  ok = true;
+cleanup:
+  free_observations_contents(&O);
+  for (size_t i = 0; i < num_procs; ++i) free_prob_storage_contents(&Q[i], false);
+  free_indices_contents(&I);
+  return ok;
+}
+
+bool learn_neurasp(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
+    PyArrayObject *atoms, size_t niters, double eta, bool lstable_sat) {
+  observations_t O = {0}; /* Observations as a C type. */
+  prob_storage_t Q[NUM_PROCS] = {{0}}; /* Storage for observation probabilities. */
+  indices_t I = {0};
+  size_t num_procs = 0;
+  bool ok = false;
+
+  if (!init_observations(&O, obs, atoms)) goto cleanup;
+  if (!init_indices(&I, P)) goto cleanup;
+  Q[0].I_F = I.F; Q[0].n = I.n; Q[0].I_A = I.A; Q[0].m = I.m;
+  if (!I.n && !I.m) {
+    PyErr_SetString(PyExc_ValueError, "program is not learnable!");
+    return false;
+  }
+  if (!(num_procs = init_prob_storage_seq(Q, P, &O))) goto cleanup;
+
+  for (size_t i = 0; i < niters; ++i) {
+    /* Compute probabilities. */
+    if (!prob_obs_reuse(P, &O, lstable_sat, NULL, Q, true)) goto cleanup;
+
+    /* Update parameters. */
+    for (size_t i_o = 0; i_o < O.n; ++i_o) {
+      prob_obs_storage_t *W = &Q[0].P[i_o];
+      int c = (int) *((int*) PyArray_GETPTR1(obs_counts, i_o));
+
+      /* Update probabilistic facts. */
+      for (size_t i_pf = 0; i_pf < I.n; ++i_pf)
+        P->PF[I.F[i_pf]].p += eta*c*((W->F[i_pf][1] - W->F[i_pf][0])/W->o);
+      /* Update annotated disjunctions. */
+      for (size_t i_ad = 0; i_ad < I.m; ++i_ad) {
+        annot_disj_t *AD = &P->AD[I.A[i_ad]];
+        double dP = 0.0;
+        for (size_t j = 0; j < AD->n; ++j) dP += W->A[i_ad][j];
+        for (size_t j = 0; j < AD->n; ++j) AD->P[j] += eta*c*((W->A[i_ad][j] - dP)/W->o);
+      }
+    }
+    /*print_annot_disj(&P->AD[0]);*/
+    /*double p = 0;*/
+    /*for (size_t j = 0; j < P->AD[0].n; ++j) p += P->AD[0].P[j];*/
+    /*wprintf(L"\n  sum = %f\n", p); fflush(stdout);*/
   }
 
   if (!update_program_parameters(P, &I)) {

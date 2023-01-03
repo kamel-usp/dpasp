@@ -45,6 +45,10 @@ void free_indices_contents(indices_t *I);
 
 bool learn_fixpoint(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
     PyArrayObject *atoms, size_t niters, bool lstable_sat);
+bool learn_lagrange(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
+    PyArrayObject *atoms, size_t niters, double eta, bool lstable_sat);
+bool learn_neurasp(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
+    PyArrayObject *atoms, size_t niters, double eta, bool lstable_sat);
 
 bool update_program_parameters(program_t *P, indices_t *I);
 

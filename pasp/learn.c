@@ -25,10 +25,11 @@ static PyObject* learn(PyObject *self, PyObject *args, PyObject *kwargs) {
   size_t niters = 30;
   const char *alg_s = ALG_FIXPOINT_S;
   uint8_t alg = ALG_FIXPOINT;
-  static char *kwlist[] = { "", "", "", "", "niters", "alg", "lstable_sat", NULL };
+  double eta = 0.1;
+  static char *kwlist[] = { "", "", "", "", "niters", "alg", "eta", "lstable_sat", NULL };
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOO|nsb", kwlist, &py_P, &py_obs,
-        &py_obs_counts, &py_atoms, &niters, &alg_s, &lstable_sat))
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOO|nsdb", kwlist, &py_P, &py_obs,
+        &py_obs_counts, &py_atoms, &niters, &alg_s, &eta, &lstable_sat))
     return NULL;
 
   if (!PyArray_Check(py_obs) || !PyArray_Check(py_obs_counts) || !PyArray_Check(py_atoms)) {
@@ -86,12 +87,10 @@ static PyObject* learn(PyObject *self, PyObject *args, PyObject *kwargs) {
       if (!learn_fixpoint(&P, obs, obs_counts, atoms, niters, lstable_sat)) goto cleanup;
       break;
     case ALG_LAGRANGE:
-      PyErr_SetString(PyExc_NotImplementedError, "Lagrange learning not yet implemented!");
-      goto cleanup;
+      if (!learn_lagrange(&P, obs, obs_counts, atoms, niters, eta, lstable_sat)) goto cleanup;
       break;
     case ALG_NEURASP:
-      PyErr_SetString(PyExc_NotImplementedError, "NeurASP learning not yet implemented!");
-      goto cleanup;
+      if (!learn_neurasp(&P, obs, obs_counts, atoms, niters, eta, lstable_sat)) goto cleanup;
       break;
   }
 
