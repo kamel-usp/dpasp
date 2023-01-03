@@ -733,10 +733,10 @@ void free_prob_storage_contents(prob_storage_t *Q, bool free_shared) {
 void free_prob_storage(prob_storage_t *Q) { free_prob_storage_contents(Q, true); free(Q); }
 
 void compute_prob_obs(void *args) {
-  struct { prob_storage_t *C; storage_t *S; observations_t *O; } *triple = args;
-  prob_storage_t *prob = triple->C;
-  storage_t *st = triple->S;
-  observations_t *obs = triple->O;
+  struct { prob_storage_t *C; storage_t *S; observations_t *O; bool derive; } *tuple = args;
+  prob_storage_t *prob = tuple->C;
+  storage_t *st = tuple->S;
+  observations_t *obs = tuple->O;
   total_choice_t *theta = &st->theta;
   program_t *P = st->P;
   size_t i, N;
@@ -792,8 +792,22 @@ solve_cleanup:
     prob_obs_storage_t *pr = &prob->P[i];
     double p_o = pr->N * p;
     pr->o += p_o;
-    for (size_t j = 0; j < prob->n; ++j) pr->F[j][bitvec_GET(&theta->pf, j)] += p_o;
-    for (size_t j = 0; j < prob->m; ++j) pr->A[j][theta->theta_ad[prob->I_A[j]]] += p_o;
+    if (tuple->derive) {
+      for (size_t j = 0; j < prob->n; ++j) {
+        bool u = bitvec_GET(&theta->pf, j);
+        double q = P->PF[prob->I_F[j]].p;
+        pr->F[j][u] += p_o/(u*q + (!u)*(1-q));
+      }
+      for (size_t j = 0; j < prob->m; ++j) {
+        uint8_t u = theta->theta_ad[prob->I_A[j]];
+        pr->A[j][u] += p_o/(P->AD[prob->I_A[j]].P[u]);
+      }
+    } else {
+      for (size_t j = 0; j < prob->n; ++j)
+        pr->F[j][bitvec_GET(&theta->pf, j)] += p_o;
+      for (size_t j = 0; j < prob->m; ++j)
+        pr->A[j][theta->theta_ad[prob->I_A[j]]] += p_o;
+    }
   }
 
   st->fail = false;
@@ -805,7 +819,7 @@ cleanup:
   pthread_mutex_unlock(st->wakeup);
 }
 
-bool prob_obs(program_t *P, observations_t *obs, bool lstables_sat, prob_storage_t *ret) {
+bool prob_obs(program_t *P, observations_t *obs, bool lstables_sat, prob_storage_t *ret, bool derive) {
   prob_storage_t Q[NUM_PROCS] = {0};
   size_t num_procs = init_prob_storage_seq(Q, P, obs);
 
@@ -814,7 +828,7 @@ bool prob_obs(program_t *P, observations_t *obs, bool lstables_sat, prob_storage
     PyErr_SetString(PyExc_ValueError, "received NULL prob_storage_t as argument!");
     goto cleanup;
   }
-  if (!prob_obs_reuse(P, obs, lstables_sat, ret, Q)) goto cleanup;
+  if (!prob_obs_reuse(P, obs, lstables_sat, ret, Q, derive)) goto cleanup;
 
   return true;
 cleanup:
@@ -827,7 +841,7 @@ cleanup:
 }
 
 bool prob_obs_reuse(program_t *P, observations_t *obs, bool lstable_sat, prob_storage_t *ret,
-    prob_storage_t Q[NUM_PROCS]) {
+    prob_storage_t Q[NUM_PROCS], bool derive) {
   total_choice_t theta;
   size_t total_choice_n = TOTAL_CHOICE_N(P);
   size_t num_procs = estimate_nprocs(total_choice_n + P->AD_n);
@@ -838,7 +852,7 @@ bool prob_obs_reuse(program_t *P, observations_t *obs, bool lstable_sat, prob_st
   pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER, wakeup = PTHREAD_MUTEX_INITIALIZER;
   pthread_cond_t avail = PTHREAD_COND_INITIALIZER;
   threadpool pool = thpool_init(num_procs);
-  struct { prob_storage_t *Q; storage_t *S; observations_t *O; } triples[NUM_PROCS] = {{0}};
+  struct { prob_storage_t *Q; storage_t *S; observations_t *O; bool derive; } tuple[NUM_PROCS] = {{0}};
 
   if (!init_total_choice(&theta, total_choice_n, P->AD, P->AD_n)) goto cleanup;
 
@@ -847,9 +861,8 @@ bool prob_obs_reuse(program_t *P, observations_t *obs, bool lstable_sat, prob_st
     S[i].busy_procs = busy_procs; S[i].lstable_sat = lstable_sat;
     S[i].P = P;
     if (!init_total_choice(&S[i].theta, total_choice_n, P->AD, P->AD_n)) goto cleanup;
-    triples[i].Q = &Q[i];
-    triples[i].S = &S[i];
-    triples[i].O = obs;
+    tuple[i].Q = &Q[i]; tuple[i].S = &S[i];
+    tuple[i].O = obs; tuple[i].derive = derive;
     /* Fill probs with zero. */
     for (size_t j = 0; j < obs->n; ++j) {
       prob_obs_storage_t *pr = &Q[i].P[j];
@@ -867,12 +880,12 @@ bool prob_obs_reuse(program_t *P, observations_t *obs, bool lstable_sat, prob_st
           int id = retr_free_proc(busy_procs, num_procs, &wakeup, &avail);
           theta.theta_ad[j] = c;
           copy_total_choice(&theta, &S[id].theta);
-          if (S[id].fail || thpool_add_work(pool, compute_prob_obs, &triples[id])) goto cleanup;
+          if (S[id].fail || thpool_add_work(pool, compute_prob_obs, &tuple[id])) goto cleanup;
         }
     } else {
       int id = retr_free_proc(busy_procs, num_procs, &wakeup, &avail);
       copy_total_choice(&theta, &S[id].theta);
-      if (S[id].fail || thpool_add_work(pool, compute_prob_obs, &triples[id])) goto cleanup;
+      if (S[id].fail || thpool_add_work(pool, compute_prob_obs, &tuple[id])) goto cleanup;
     }
 
   } while (incr_total_choice(&theta));

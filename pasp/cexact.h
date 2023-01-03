@@ -66,10 +66,10 @@ void free_prob_storage(prob_storage_t *Q);
  * probability ℙ(θ, O) and ℙ(O), where θ covers learnable PFs and ADs. The probabilities are not
  * normalized - e.g. if using the maxent semantic, then these have to be divided by the number of
  * models (i.e. the output of count_models). */
-bool prob_obs(program_t *P, observations_t *obs, bool lstables_sat, prob_storage_t *ret);
+bool prob_obs(program_t *P, observations_t *obs, bool lstables_sat, prob_storage_t *ret, bool derive);
 /* Same as prob_obs, but reuse the prob_storage_t's in Q. It's memory safe to assign ret to &Q[0]
  * or NULL; the latter used if the user prefers to access data directly from Q. */
 bool prob_obs_reuse(program_t *P, observations_t *obs, bool lstable_sat, prob_storage_t *ret,
-    prob_storage_t Q[NUM_PROCS]);
+    prob_storage_t Q[NUM_PROCS], bool derive);
 
 #endif

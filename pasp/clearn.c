@@ -101,7 +101,7 @@ bool learn_fixpoint(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
 
   for (size_t i = 0; i < niters; ++i) {
     /* Compute probabilities. */
-    if (!prob_obs_reuse(P, &O, lstable_sat, NULL, Q)) goto cleanup;
+    if (!prob_obs_reuse(P, &O, lstable_sat, NULL, Q, false)) goto cleanup;
 
     /* Learning rule by soft-max is:
      *
