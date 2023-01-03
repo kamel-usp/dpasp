@@ -6,7 +6,7 @@
 #include "cutils.h"
 
 void print_prob_fact(prob_fact_t *pf) {
-  if (pf->learnable) wprintf(L"P::%s[%f]", pf->f, pf->p);
+  if (pf->learnable) wprintf(L"%f?::%s", pf->p, pf->f);
   else wprintf(L"%f::%s", pf->p, pf->f);
 }
 void free_prob_fact_contents(prob_fact_t *pf) { if (pf) Py_DECREF(pf->f_obj); }
@@ -24,9 +24,8 @@ void free_credal_fact(credal_fact_t *cf) { free_credal_fact_contents(cf); free(c
 
 void print_annot_disj(annot_disj_t *ad) {
   size_t i;
-  if (ad->learnable) wprintf(L"P::");
   for (i = 0; i < ad->n; ++i) {
-    if (ad->learnable) wprintf(L"%s[%f]", ad->F[i], ad->P[i]);
+    if (ad->learnable) wprintf(L"%f?::%s", ad->P[i], ad->F[i]);
     else wprintf(L"%f::%s", ad->P[i], ad->F[i]);
     if (i != ad->n-1) fputws(L"; ", stdout);
   }
