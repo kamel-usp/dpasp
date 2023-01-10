@@ -3,15 +3,16 @@
 #define MAX_ATOM_SIZE 256
 #define POS_RULE ":- not %s."
 #define NEG_RULE ":- not not %s."
+#define MIS_RULE " "
 
 bool obs_to_char(PyArrayObject *obs, size_t j, PyArrayObject *atoms, array_char_t *O) {
   size_t n = (size_t) PyArray_SIZE(atoms);
 
   for (size_t i = 0; i < n; ++i) {
-    npy_bool *o = (npy_bool*) PyArray_GETPTR2(obs, j, i);
+    uint8_t *o = (uint8_t*) PyArray_GETPTR2(obs, j, i);
     char *a = (char*) PyArray_GETPTR1(atoms, i);
     char rule[MAX_ATOM_SIZE];
-    int l = snprintf(rule, MAX_ATOM_SIZE, *o ? POS_RULE : NEG_RULE, a);
+    int l = snprintf(rule, MAX_ATOM_SIZE, !(*o) ? NEG_RULE : ((*o == 1) ? POS_RULE : MIS_RULE), a);
     if (l < 0 || l > MAX_ATOM_SIZE) {
       PyErr_SetString(PyExc_ValueError, "could not interpolate atom in observation rule!");
       goto cleanup;
@@ -31,7 +32,7 @@ bool init_observations(observations_t *O, PyArrayObject *obs, PyArrayObject *ato
   size_t m = (size_t) PyArray_SIZE(atoms);
   size_t len = (size_t) PyArray_ITEMSIZE(atoms);
   clingo_symbol_t *A = NULL;
-  bool **S = NULL;
+  uint8_t **S = NULL;
 
   A = (clingo_symbol_t*) malloc(m*sizeof(clingo_symbol_t));
   if (!A) goto cleanup;
@@ -41,17 +42,17 @@ bool init_observations(observations_t *O, PyArrayObject *obs, PyArrayObject *ato
     if (!clingo_parse_term(a, NULL, NULL, 20, &A[i])) goto clingo_err;
   }
 
-  S = (bool**) malloc(n*sizeof(bool*));
+  S = (uint8_t**) malloc(n*sizeof(uint8_t*));
   if (!S) goto cleanup;
   for (size_t i = 0; i < n; ++i) {
-    S[i] = (bool*) malloc(m*sizeof(bool));
+    S[i] = (uint8_t*) malloc(m*sizeof(uint8_t));
     if (!S[i]) {
       for (size_t j = 0; j < i; ++j) free(S[j]);
       goto cleanup;
     }
     for (size_t j = 0; j < m; ++j) {
-      npy_bool *o = (npy_bool*) PyArray_GETPTR2(obs, i, j);
-      S[i][j] = (bool) *o;
+      uint8_t *o = (uint8_t*) PyArray_GETPTR2(obs, i, j);
+      S[i][j] = (uint8_t) *o;
     }
   }
 

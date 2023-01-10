@@ -14,8 +14,8 @@ def learn(P: Program, D: np.ndarray, A: np.ndarray, niters: int = 30, alg: str =
           eta: float = 0.001, lstable_sat: bool = True):
   if type(A) is not np.ndarray: atoms = np.array(A, dtype = bytes)
   else: atoms = A if np.issubdtype(A.dtype, bytes) else A.astype(bytes)
-  if type(D) is not np.ndarray: data = np.array(D, dtype = bool)
-  else: data = D if np.issubdtype(D.dtype, bool) else D.astype(bool)
+  if type(D) is not np.ndarray: data = np.array(D, dtype = np.uint8)
+  else: data = D if np.issubdtype(D.dtype, np.uint8) else D.astype(np.uint8)
 
   obs, obs_counts = np.unique(data, axis = 0, return_counts = True)
   from learn import learn as clearn

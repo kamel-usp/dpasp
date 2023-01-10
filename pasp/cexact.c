@@ -769,6 +769,7 @@ void compute_prob_obs(void *args) {
       if (M) {
         for (i = 0; i < obs->n; ++i) {
           for (size_t j = 0; j < obs->m; ++j) {
+            if (obs->S[i][j] == OBSERVATION_MIS) continue;
             bool contains_atom;
             if (!clingo_model_contains(M, obs->A[j], &contains_atom)) goto solve_error;
             if (contains_atom != obs->S[i][j]) goto next_obs;

@@ -11,6 +11,10 @@
 #include <stdbool.h>
 #include "carray.h"
 
+#define OBSERVATION_NEG 0
+#define OBSERVATION_POS 1
+#define OBSERVATION_MIS 2
+
 /* Write constraint restrictions into string O consistent with the observation in obs and atoms.
  * Assumes obs and atoms dimensions and sizes are correct. */
 bool obs_to_char(PyArrayObject *obs, size_t j, PyArrayObject *atoms, array_char_t *O);
@@ -19,7 +23,7 @@ typedef struct {
   /* Atoms in observations. */
   clingo_symbol_t *A;
   /* Signs of observations. */
-  bool **S;
+  uint8_t **S;
   /* Number of observations. */
   size_t n;
   /* Number of atoms within each observation. */

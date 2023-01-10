@@ -54,8 +54,8 @@ static PyObject* learn(PyObject *self, PyObject *args, PyObject *kwargs) {
 
   {
     PyArray_Descr *obs_counts_descr = PyArray_DESCR(obs_counts);
-    if (PyArray_TYPE(obs) != NPY_BOOL) {
-      PyErr_SetString(PyExc_TypeError, "obs must be a numpy.ndarray of type bool!");
+    if (PyArray_TYPE(obs) != NPY_UINT8) {
+      PyErr_SetString(PyExc_TypeError, "obs must be a numpy.ndarray of type uint8!");
       return NULL;
     } if (obs_counts_descr->kind != 'i' && obs_counts_descr->kind != 'u') {
       PyErr_SetString(PyExc_TypeError, "obs_counts must be a numpy.ndarray of type int!");
