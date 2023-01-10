@@ -437,6 +437,7 @@ bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat, psemantics_t pse
 cleanup:
   if (clingo_error_code() != clingo_error_success)
     wprintf(L"Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
+  free_total_choice_contents(&theta);
   pthread_mutex_destroy(&mu); pthread_mutex_destroy(&wakeup); pthread_cond_destroy(&avail);
   thpool_destroy(pool);
   for (i = 0; i < num_procs; ++i) free_storage_contents(&S[i]);
@@ -659,6 +660,7 @@ bool count_models(program_t *P, bool lstable_sat, count_storage_t *ret) {
 cleanup:
   if (clingo_error_code() != clingo_error_success)
     wprintf(L"Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
+  free_total_choice_contents(&theta);
   pthread_mutex_destroy(&mu);
   pthread_mutex_destroy(&wakeup);
   pthread_cond_destroy(&avail);
@@ -924,6 +926,8 @@ bool prob_obs_reuse(program_t *P, observations_t *obs, bool lstable_sat, prob_st
 cleanup:
   if (clingo_error_code() != clingo_error_success)
     wprintf(L"Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
+  free_total_choice_contents(&theta);
+  for (size_t i = 0; i < num_procs; ++i) free_storage_contents(&S[i]);
   pthread_mutex_destroy(&mu);
   pthread_mutex_destroy(&wakeup);
   pthread_cond_destroy(&avail);

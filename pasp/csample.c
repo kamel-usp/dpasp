@@ -217,6 +217,7 @@ cleanup:
   if (clingo_error_code() != clingo_error_success)
     wprintf(L"Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
   thpool_destroy(pool);
+  for (size_t i = 0; i < num_procs; ++i) free_total_choice_contents(&S[i].theta);
   free(S[0].A);
   if (!ok) free(samples);
   return ok;

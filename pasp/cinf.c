@@ -49,36 +49,55 @@ void free_storage_contents(storage_t *s) {
 
 bool setup_conds(bool **cond_1, bool **cond_2, bool **cond_3, bool **cond_4, size_t n) {
   *cond_1 = (bool*) malloc(n);
-  if (!(*cond_1)) return false;
+  if (!(*cond_1)) goto nomem;
   *cond_2 = (bool*) malloc(n);
-  if (!(*cond_2)) return false;
+  if (!(*cond_2)) goto nomem;
   *cond_3 = (bool*) malloc(n);
-  if (!(*cond_3)) return false;
+  if (!(*cond_3)) goto nomem;
   *cond_4 = (bool*) malloc(n);
-  if (!(*cond_4)) return false;
+  if (!(*cond_4)) goto nomem;
   return true;
+nomem:
+  free(*cond_1); free(*cond_2);
+  free(*cond_3); free(*cond_4);
+  *cond_1 = *cond_2 = *cond_3 = *cond_4 = NULL;
+  goto nomem;
 }
 
 bool setup_counts(size_t **count_q_e, size_t **count_e, size_t **count_partial_q_e, size_t n) {
   *count_q_e = (size_t*) malloc(n);
-  if (!(*count_q_e)) return false;
+  if (!(*count_q_e)) goto nomem;
   *count_e = (size_t*) malloc(n);
-  if (!(*count_e)) return false;
-  *count_partial_q_e = (size_t*) malloc(n);
-  if (!(*count_partial_q_e)) return false;
+  if (!(*count_e)) goto nomem;
+  if (count_partial_q_e) {
+    *count_partial_q_e = (size_t*) malloc(n);
+    if (!(*count_partial_q_e)) goto nomem;
+  }
   return true;
+nomem:
+  free(*count_q_e); free(*count_e); free(*count_partial_q_e);
+  *count_q_e = *count_e = *count_partial_q_e = NULL;
+  return false;
 }
 
 bool setup_abcd(double **a, double **b, double **c, double **d, size_t n, size_t s) {
   *a = (double*) calloc(n, s);
-  if (!(*a)) return false;
+  if (!(*a)) goto nomem;
   *b = (double*) calloc(n, s);
-  if (!(*b)) return false;
-  *c = (double*) calloc(n, s);
-  if (!(*c)) return false;
-  *d = (double*) calloc(n, s);
-  if (!(*d)) return false;
+  if (!(*b)) goto nomem;
+  if (c) {
+    *c = (double*) calloc(n, s);
+    if (!(*c)) goto nomem;
+  } if (d) {
+    *d = (double*) calloc(n, s);
+    if (!(*d)) goto nomem;
+  }
   return true;
+nomem:
+  free(*a); free(*b);
+  free(*c); free(*d);
+  *a = *b = *c = *d = NULL;
+  return false;
 }
 
 bool init_total_choice(total_choice_t *theta, size_t n, annot_disj_t *ad, size_t m) {
