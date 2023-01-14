@@ -79,9 +79,8 @@ typedef struct program {
   annot_disj_t *AD;
   size_t AD_n;
 
-  array_clingo_symbol_t_t gr_PF;
-  array_char_t gr_P;
-  array_double_t gr_pr;
+  const char *gr_P;
+  PyObject *py_gr_P;
 
   semantics_t sem;
   struct program *stable;

@@ -6,6 +6,7 @@
 #include "cutils.h"
 #include "cprogram.h"
 #include "carray.h"
+#include "../bitvector/bitvector.h"
 
 #define CGROUND_MODULE
 #include "ground.h"
@@ -25,7 +26,8 @@ static bool unify_callback(const clingo_location_t *loc, const char *name, const
   array_clingo_symbol_t_t *PF = (array_clingo_symbol_t_t*) pack[0];
   array_char_t *S = (array_char_t*) pack[1];
   array_double_t *Pr = (array_double_t*) pack[2];
-  uintptr_t sem = (uintptr_t) pack[3];
+  bitvec_t *L = (bitvec_t*) pack[3];
+  uintptr_t sem = (uintptr_t) pack[4];
   clingo_symbol_t ground_pf;
   const char *cl_str;
   double pr;
@@ -34,10 +36,17 @@ static bool unify_callback(const clingo_location_t *loc, const char *name, const
   if (!clingo_symbol_string(args[0], &cl_str)) goto error;
   pr = atof(cl_str);
 
+  /* Check if probabilistic rule is learnable. */
+  int l;
+  if (!clingo_symbol_number(args[2], &l)) goto error;
+  bitvec_push(L, l);
+
   /* Get number of head arguments. */
-  if (!clingo_symbol_number(args[2], &h)) goto error;
+  if (!clingo_symbol_number(args[3], &h)) goto error;
   /* Get number of body subgoals. */
-  if (!clingo_symbol_number(args[3], &b)) goto error;
+  if (!clingo_symbol_number(args[4], &b)) goto error;
+
+#define ARGS_START 5
 
   /* Get rule name. */
   if (!clingo_symbol_to_string_size(args[1], &s_n)) goto error;
@@ -45,7 +54,7 @@ static bool unify_callback(const clingo_location_t *loc, const char *name, const
   memcpy(line, s, s_n); line[s_n-1] = '('; cursor = s_n;
   if (sem) { memcpy(_line+1, s, s_n); _line[0] = '_'; _line[s_n] = '('; _cursor = s_n+1; }
   /* Fill out grounded head arguments. */
-  for (i = 0, j = 4; i < h; ++i) {
+  for (i = 0, j = ARGS_START; i < h; ++i) {
     if (!clingo_symbol_to_string_size(args[i+j], &s_n)) goto error;
     if (!clingo_symbol_to_string(args[i+j], s, s_n)) goto error;
     if (i != h-1) { s[s_n-1] = ','; s[s_n++] = ' '; }
@@ -93,83 +102,85 @@ static bool unify_callback(const clingo_location_t *loc, const char *name, const
   if (!array_double_append(Pr, pr)) goto error;
 
   /* Pass the actual head arguments down to the original rule. */
-  return sym_callback(args + 4, h, sym_data);
+  return sym_callback(args + ARGS_START, h, sym_data);
 error:
   return false;
 }
 
-static bool partial_update_program(program_t *P) {
-  PyObject *py_gr_P, *py_gr_PF, *py_gr_pr = py_gr_PF = py_gr_P = NULL;
-  size_t i;
+static bool partial_update_program(program_t *P, array_char_t *gr_P,
+    array_clingo_symbol_t_t *gr_PF, array_double_t *gr_pr, bitvec_t *L) {
+  PyObject *py_gr_P = NULL;
+  PyObject *py_mdl = NULL, *py_pf_type = NULL;
+  PyObject *py_P_PF = NULL;
+  prob_fact_t *PF = NULL;
+  bool ok = false;
 
-  py_gr_P = PyUnicode_DecodeUTF8(P->gr_P.d, P->gr_P.n-1, NULL);
+  py_gr_P = PyUnicode_DecodeUTF8(gr_P->d, gr_P->n-1, NULL);
   if (!py_gr_P) {
     PyErr_SetString(PyExc_UnicodeDecodeError, "could not decode gr_P as a UTF-8 string!");
-    goto error;
+    goto cleanup;
   }
-
-  py_gr_PF = PyTuple_New(P->gr_PF.n);
-  if (!py_gr_PF) {
-    PyErr_SetString(PyExc_MemoryError, "could not create new tuple for gr_PF!");
-    goto error;
-  }
-  for (i = 0; i < P->gr_PF.n; ++i) {
-    PyObject *py_sym = PyLong_FromUnsignedLong(P->gr_PF.d[i]);
-    if (!py_sym) {
-      PyErr_SetString(PyExc_TypeError, "could not build PyObject from clingo_symbol_t!");
-      goto error;
-    }
-    PyTuple_SET_ITEM(py_gr_PF, i, py_sym);
-  }
-
-  py_gr_pr = PyTuple_New(P->gr_pr.n);
-  if (!py_gr_pr) {
-    PyErr_SetString(PyExc_MemoryError, "could not create new tuple for gr_pr!");
-    goto error;
-  }
-  for (i = 0; i < P->gr_pr.n; ++i) {
-    PyObject *py_pr = PyFloat_FromDouble(P->gr_pr.d[i]);
-    if (!py_pr) {
-      PyErr_SetString(PyExc_TypeError, "could not build PyObject from double!");
-      goto error;
-    }
-    PyTuple_SET_ITEM(py_gr_pr, i, py_pr);
-  }
-
   if (PyObject_SetAttrString(P->py_P, "gr_P", py_gr_P)) {
     PyErr_SetString(PyExc_AttributeError, "could not attribute value to Program.gr_P!");
-    goto error;
-  }
-  if (PyObject_SetAttrString(P->py_P, "gr_PF", py_gr_PF)) {
-    PyErr_SetString(PyExc_AttributeError, "could not attribute value to Program.gr_PF!");
-    goto error;
-  }
-  if (PyObject_SetAttrString(P->py_P, "gr_pr", py_gr_pr)) {
-    PyErr_SetString(PyExc_AttributeError, "could not attribute value to Program.gr_pr!");
-    goto error;
+    goto cleanup;
   }
 
-  Py_DECREF(py_gr_P);
-  Py_DECREF(py_gr_PF);
-  Py_DECREF(py_gr_pr);
-  return true;
-error:
-  Py_XDECREF(py_gr_P);
-  Py_XDECREF(py_gr_PF);
-  Py_XDECREF(py_gr_pr);
-  return false;
+  /* Add new probabilistic facts to P->PF and update Python side. */
+  size_t n = P->PF_n + gr_PF->n;
+
+  py_mdl = PyImport_ImportModule("pasp.program");
+  if (!py_mdl) goto cleanup;
+  py_pf_type = PyObject_GetAttrString(py_mdl, "ProbFact");
+  if (!py_pf_type) goto cleanup;
+
+  py_P_PF = PyObject_GetAttrString(P->py_P, "PF");
+  if (!py_P_PF) goto cleanup;
+
+  PF = (prob_fact_t*) realloc(P->PF, n*sizeof(prob_fact_t));
+  if (!PF) goto cleanup;
+  for (size_t i = 0; i < gr_PF->n; ++i) {
+    prob_fact_t *pf = PF + P->PF_n + i;
+    pf->p = gr_pr->d[i];
+    pf->cl_f = gr_PF->d[i];
+    pf->f_obj = NULL;
+    pf->learnable = bitvec_GET(L, i);
+    if (!clingo_symbol_name(pf->cl_f, &pf->f)) goto cleanup;
+    PyObject *args = Py_BuildValue("ds", pf->p, pf->f);
+    pf->self = PyObject_Call(py_pf_type, args, NULL);
+    if (!pf->self) goto cleanup;
+    /* Update Python object with new PF. */
+    if (PyList_Append(py_P_PF, pf->self)) goto cleanup;
+  }
+  P->PF = PF;
+  P->PF_n = n;
+  P->gr_P = PyUnicode_AsUTF8(py_gr_P);
+  P->py_gr_P = py_gr_P;
+
+  ok = true;
+cleanup:
+  Py_XDECREF(py_mdl);
+  Py_XDECREF(py_pf_type);
+  Py_XDECREF(py_P_PF);
+  return ok;
 }
 
 static bool ground(program_t *P) {
   size_t i;
   clingo_control_t *C = NULL;
-  void *pack[4] = {NULL, NULL, NULL, (void*) ((uintptr_t) P->sem)};
+  void *pack[5] = {NULL, NULL, NULL, NULL, (void*) ((uintptr_t) P->sem)};
+  array_clingo_symbol_t_t gr_PF;
+  array_char_t gr_P;
+  array_double_t gr_pr;
+  bitvec_t L = {0};
+  bool ok = false;
 
-  if (!P->gr_PF.d && !array_clingo_symbol_t_init(&P->gr_PF)) goto error;
-  if (!P->gr_P.d  && !array_char_init(&P->gr_P)) goto error;
-  if (!P->gr_pr.d && !array_double_init(&P->gr_pr)) goto error;
+  if (!array_char_init(&gr_P)) goto error;
+  if (!array_clingo_symbol_t_init(&gr_PF)) goto error;
+  if (!array_double_init(&gr_pr)) goto error;
+  if (!bitvec_init(&L, 2)) goto error;
 
-  pack[0] = (void*) &P->gr_PF; pack[1] = (void*) &P->gr_P; pack[2] = (void*) &P->gr_pr;
+  pack[0] = (void*) &gr_PF; pack[1] = (void*) &gr_P; pack[2] = (void*) &gr_pr;
+  pack[3] = (void*) &L;
 
   if (!clingo_control_new(NULL, 0, undef_atom_ignore, NULL, 20, &C)) goto error;
   if (!clingo_control_add(C, "base", NULL, 0, P->P)) goto error;
@@ -180,23 +191,25 @@ static bool ground(program_t *P) {
 
   if (!clingo_control_ground(C, GROUND_DEFAULT_PARTS, 1, unify_callback, (void*) pack)) goto error;
 
-  clingo_control_free(C);
+  if (!partial_update_program(P, &gr_P, &gr_PF, &gr_pr, &L)) goto error;
 
-  if (!partial_update_program(P)) goto error;
-
-  return true;
+  ok = true;
 error:
   if (clingo_error_code() != clingo_error_success) {
     wprintf(L"Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
     PyErr_SetString(PyExc_Exception, "Clingo or unknown error!");
   }
+  array_clingo_symbol_t_free_contents(&gr_PF);
+  array_double_free_contents(&gr_pr);
+  array_char_free_contents(&gr_P);
+  bitvec_free_contents(&L);
   if (C) clingo_control_free(C);
-  return false;
+  return ok;
 }
 
 static bool needs_ground(program_t *P) {
   size_t i, n = P->PR_n;
-  if (P->gr_PF.d) return false;
+  if (P->gr_P[0]) return false;
   for (i = 0; i < n; ++i) if (!P->PR[i].is_prop) return true;
   return false;
 }

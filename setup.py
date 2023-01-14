@@ -35,9 +35,9 @@ exact    = Extension("exact",
 ground   = Extension("ground",
                      libraries = ["clingo"],
                      depends = ["pasp/cutils.c", "pasp/cprogram.c", "pasp/ground.h",
-                                "pasp/carray.c"],
+                                "pasp/carray.c", "bitvector/bitvector.c"],
                      sources = ["pasp/ground.c", "pasp/cutils.c", "pasp/carray.c",
-                                "pasp/cprogram.c"])
+                                "pasp/cprogram.c", "bitvector/bitvector.c"])
 learn    = Extension("learn",
                      libraries = ["clingo", "pthread"],
                      depends = ["pasp/cprogram.c", "pasp/cinf.c", "pasp/cutils.c", "pasp/carray.c",

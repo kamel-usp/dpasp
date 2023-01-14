@@ -75,13 +75,10 @@ cleanup:
 
 bool sample_total_choice(program_t *P, total_choice_t *theta, unsigned short seed[3]) {
   size_t n = P->PF_n;
-  size_t g = P->gr_pr.n;
   size_t m = P->AD_n;
 
   /* Sample probabilistic facts. */
   for (size_t i = 0; i < n; ++i) bitvec_SET(&theta->pf, i, erand48(seed) <= P->PF[i].p);
-  /* Sample ground probabilistic facts. */
-  for (size_t i = 0; i < g; ++i) bitvec_SET(&theta->pf, i + n, erand48(seed) <= P->gr_pr.d[i]);
   /* Sample annotated disjunctions. */
   for (size_t i = 0; i < m; ++i) {
     double p = theta->ad[i].P[0], x = erand48(seed);

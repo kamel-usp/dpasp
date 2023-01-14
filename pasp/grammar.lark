@@ -34,6 +34,9 @@ CONST: /[a-z]\w*/
 // Variables
 VAR: /[A-Z]\w*/
 
+EXPAND: "+"
+LEARN:  "?"
+
 // Ground atom.
 pgratom: (CONST | pgrpred)
 gratom: (NEG | UND)?  (CONST | grpred)
@@ -66,7 +69,7 @@ body: (atom | bop) ("," (atom | bop))*
 _rule: head ":-" body "."
 rule: _rule
 // Probabilistic rule.
-prule: PROB "::" ohead ":-" body "."
+prule: PROB (EXPAND? LEARN? | LEARN? EXPAND?) "::" ohead ":-" body "."
 
 // Annotated disjunction head.
 adhead: PROB "::" pgratom (";" PROB "::" pgratom)+

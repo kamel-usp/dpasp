@@ -1,18 +1,14 @@
 #include "cinf.h"
 #include "cutils.h"
 
-double prob_total_choice(prob_fact_t *phi, size_t n, array_double_t *gr_pr, size_t CF_n,
-    total_choice_t *theta, uint8_t *theta_ad) {
-  size_t i = 0, m = gr_pr->n, ad_n = theta->ad_n;
+double prob_total_choice(prob_fact_t *phi, size_t n, size_t CF_n, total_choice_t *theta,
+    uint8_t *theta_ad) {
+  size_t i = 0, ad_n = theta->ad_n;
   double p = 1.0;
   bool t;
   for (; i < n; ++i) {
     t = bitvec_GET(&theta->pf, i + CF_n);
     p *= t*phi[i].p + (!t)*(1.0-phi[i].p);
-  }
-  for (i = 0; i < m; ++i) {
-    t = bitvec_GET(&theta->pf, n + i + CF_n);
-    p *= t*(gr_pr->d[i]) + (!t)*(1.0-(gr_pr->d[i]));
   }
   for (i = 0; i < ad_n; ++i) p *= theta->ad[i].P[theta_ad[i]];
   return p;
@@ -170,7 +166,7 @@ bool dispatch_job(total_choice_t *theta, pthread_mutex_t *wakeup,
 
 bool prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
     uint8_t *theta_ad, const char *nmodels, bool parallelize_clingo, const char *append) {
-  size_t i, gr_n = P->gr_pr.n;
+  size_t i;
   clingo_backend_t *back = NULL;
   /* Create new clingo controller. */
   if (!clingo_control_new(NULL, 0, undef_atom_ignore, NULL, 20, C)) return false;
@@ -180,7 +176,7 @@ bool prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
   if (!clingo_control_add(*C, "base", NULL, 0, P->P)) return false;
   if (append) if (!clingo_control_add(*C, "base", NULL, 0, append)) return false;
   /* Add grounded probabilistic rules. */
-  if (P->gr_P.d) if (!clingo_control_add(*C, "base", NULL, 0, P->gr_P.d)) return false;
+  if (P->gr_P[0]) if (!clingo_control_add(*C, "base", NULL, 0, P->gr_P)) return false;
   /* Get the control's backend. */
   if (!clingo_control_backend(*C, &back)) return false;
   /* Startup the backend. */
@@ -197,13 +193,6 @@ bool prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
     clingo_atom_t a;
     if (!CHOICE_IS_TRUE(theta, i + P->CF_n)) continue;
     if (!clingo_backend_add_atom(back, &P->PF[i].cl_f, &a)) return false;
-    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) return false;
-  }
-  /* Add the grounded probabilistic rules according to the total rule. */
-  for (i = 0; i < gr_n; ++i) {
-    clingo_atom_t a;
-    if (!CHOICE_IS_TRUE(theta, i + P->CF_n + P->PF_n)) continue;
-    if (!clingo_backend_add_atom(back, &P->gr_PF.d[i], &a)) return false;
     if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) return false;
   }
   /* Add the annotated disjunction rules according to the total rule encoded by theta_ad. */

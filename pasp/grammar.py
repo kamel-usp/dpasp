@@ -113,6 +113,23 @@ class Command(enum.Enum):
   CONSTDEF = 7
   ANNOTATED_DISJUNCTION = 8
 
+class Terms(enum.Enum):
+  UND    = "undef"
+  NEG    = "not"
+  ADD    = "+"
+  SUB    = "-"
+  DIV    = "/"
+  MOD    = "\\"
+  MUL    = "*"
+  NEQ    = "!="
+  EQQ    = "="
+  LES    = "<"
+  GRT    = ">"
+  LEQ    = "<="
+  GEQ    = ">="
+  EXPAND = "+"
+  LEARN  = "?"
+
 class PLPTransformer(lark.Transformer):
   def __init__(self, _):
     super().__init__()
@@ -179,15 +196,21 @@ class PLPTransformer(lark.Transformer):
   def rule(self, r: list[str]) -> tuple[Command, str]:
     return Command.RULE, f"{r[0][0]} :- {r[1][0]}."
   def prule(self, r: list[str]) -> tuple[Command, str, ProbFact]:
+    l = Terms.LEARN.value in r
+    e = Terms.EXPAND.value in r
+    r = [x for x in r if x != Terms.LEARN.value and x != Terms.EXPAND.value]
     o = f"{r[1][0]} :- {r[2][0]}"
-    prop = r[1][1] and r[2][1]
-    if prop: return Command.PROB_RULE, ProbRule(r[0], o, is_prop = True)
-    h, b = r[1][3], r[2][2]
-    # Invariant: len(b) > 0, otherwise the rule is unsafe.
-    h_s = ", ".join(h) + ", " if len(h) > 0 else ""
-    b_s = ", ".join(map(lambda x: f"0, {x[4:]}" if x[:4] == "not " else f"1, {x}", b))
-    u = f"{r[1][2]}(@unify(\"{r[0]}\", {r[1][2]}, {len(h)}, {2*len(b)}, {h_s}{b_s})) :- {r[2][0]}."
-    return Command.PROB_RULE, ProbRule(r[0], o, is_prop = False, unify = u)
+    if e:
+      prop = r[1][1] and r[2][1]
+      if prop: return Command.PROB_RULE, ProbRule(r[0], o, is_prop = True)
+      h, b = r[1][3], r[2][2]
+      # Invariant: len(b) > 0, otherwise the rule is unsafe.
+      h_s = ", ".join(h) + ", " if len(h) > 0 else ""
+      b_s = ", ".join(map(lambda x: f"0, {x[4:]}" if x[:4] == "not " else f"1, {x}", b))
+      u = f"{r[1][2]}(@unify(\"{r[0]}\", {r[1][2]}, {int(l)}, {len(h)}, {2*len(b)}, {h_s}{b_s})) :- {r[2][0]}."
+      return Command.PROB_RULE, ProbRule(r[0], o, is_prop = False, unify = u, learnable = l)
+    else:
+      return Command.PROB_RULE, ProbRule(r[0], o, is_prop = True, learnable = l)
 
   # Annotated disjunction head.
   def adhead(self, h: list):
@@ -304,6 +327,9 @@ class PartialTransformer(PLPTransformer):
     return Command.RULE, f"{h1} :- {b1}.", f"{h2} :- {b2}."
 
   def prule(self, r) -> tuple[Command, str, str, str]:
+    l = Terms.LEARN.value in r
+    e = Terms.EXPAND.value in r
+    r = [x for x in r if x != Terms.LEARN.value and x != Terms.EXPAND.value]
     tr_negs = lambda x: f"not _{x[4:]}" if x[:4] == "not " else x
     tr_pos  = lambda x: x if (x[:4] == "not ") or PartialTransformer.has_binop(x) else f"_{x}"
     b1 = ", ".join(map(tr_negs, r[2][3]))
@@ -311,18 +337,23 @@ class PartialTransformer(PLPTransformer):
     h = r[1][0]
     o1, o2 = f"{h} :- {b1}", f"_{h} :- {b2}"
     self.PT.add(h)
-    # for x in r[2][3]:
-      # if not PartialTransformer.has_binop(x): self.PT.add(x[4:] if x[:4] == "not " else x)
-    prop = r[1][1] and r[2][1]
     uid = unique_fact()
-    if prop: return Command.PROB_RULE, ProbRule(r[0], o1, ufact = uid), ProbRule(r[0], o2, ufact = uid)
-    h_a, b = r[1][3], r[2][2]
-    # Invariant: len(b) > 0, otherwise the rule is unsafe.
-    h_s = ", ".join(h_a) + ", " if len(h_a) > 0 else ""
-    b1_s = ", ".join(map(lambda x: f"0, _{x[4:]}" if x[:4] == "not " else f"1, {x}", b))
-    # Let the grounder deal with the _f rule.
-    u1 = f"{r[1][2]}(@unify(\"{r[0]}\", {r[1][2]}, {len(h_a)}, {2*len(b)}, {h_s}{b1_s})) :- {b1}."
-    return Command.PROB_RULE, ProbRule(r[0], o1, is_prop = False, unify = u1)
+    if e:
+      # for x in r[2][3]:
+        # if not PartialTransformer.has_binop(x): self.PT.add(x[4:] if x[:4] == "not " else x)
+      prop = r[1][1] and r[2][1]
+      uid = unique_fact()
+      if prop: return Command.PROB_RULE, ProbRule(r[0], o1, ufact = uid), ProbRule(r[0], o2, ufact = uid)
+      h_a, b = r[1][3], r[2][2]
+      # Invariant: len(b) > 0, otherwise the rule is unsafe.
+      h_s = ", ".join(h_a) + ", " if len(h_a) > 0 else ""
+      b1_s = ", ".join(map(lambda x: f"0, _{x[4:]}" if x[:4] == "not " else f"1, {x}", b))
+      # Let the grounder deal with the _f rule.
+      u1 = f"{r[1][2]}(@unify(\"{r[0]}\", {r[1][2]}, {int(l)}, {len(h_a)}, {2*len(b)}, {h_s}{b1_s})) :- {b1}."
+      return Command.PROB_RULE, ProbRule(r[0], o1, is_prop = False, unify = u1, learnable = l)
+    else:
+      return Command.PROB_RULE, ProbRule(r[0], o1, ufact = uid, learnable = l), \
+             ProbRule(r[0], o2, ufact = uid)
 
   def plp(self, C: list[tuple]) -> Program:
     # Logic Program.

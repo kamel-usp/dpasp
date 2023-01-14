@@ -36,12 +36,14 @@ class ProbRule:
   some probability `p`. A non-propositional PR must be grounded first.
   """
 
-  def __init__(self, p: str, f: str, is_prop: bool = True, unify: str = None, ufact: str = None):
+  def __init__(self, p: str, f: str, is_prop: bool = True, unify: str = None, ufact: str = None,
+               learnable: bool = False):
     self.p = p
     self.f = f
     self.is_prop = is_prop
+    self.learnable = learnable
     self.unify = unify
-    self.prop_pf = ProbFact(p, unique_fact() if ufact is None else ufact)
+    self.prop_pf = ProbFact(p, unique_fact() if ufact is None else ufact, learnable = learnable)
     self.prop_f = f"{f}, {self.prop_pf.f}."
 
   def __str__(self) -> str: return f"{self.p}::{self.f}"
@@ -173,9 +175,7 @@ class Program:
     self.CF = CF
     self.AD = AD
 
-    self.gr_P = None
-    self.gr_PF = None
-    self.gr_pr = None
+    self.gr_P = ""
 
     self.semantics = semantics
     self.stable = stable_p

@@ -209,7 +209,7 @@ solve_cleanup:
     if (!(clingo_solve_handle_close(handle) && ok)) goto cleanup;
   }
   /* Compute ℙ(θ). */
-  p = prob_total_choice(P->PF, PF_n, &P->gr_pr, CF_n, theta, theta->theta_ad);
+  p = prob_total_choice(P->PF, PF_n, CF_n, theta, theta->theta_ad);
   for (i = 0; i < Q_n; ++i) {
     /* Evaluate counts to judge whether cond_1 and/or cond_3 are true. */
     if (count_e[i] == m || P->Q[i].E_n == 0) {
@@ -319,7 +319,7 @@ solve_cleanup:
     if (!(clingo_solve_handle_close(handle) && ok)) goto cleanup;
   }
 
-  p = prob_total_choice(P->PF, PF_n, &P->gr_pr, 0, theta, theta->theta_ad);
+  p = prob_total_choice(P->PF, PF_n, 0, theta, theta->theta_ad);
   for (i = 0; i < Q_n; ++i) {
     a[i] += (count_q_e[i]*p)/m;
     b[i] += (count_e[i]*p)/m;
@@ -790,7 +790,7 @@ solve_cleanup:
   }
 
   /* Only multiply after model counting to avoid numeric errors. */
-  double p = prob_total_choice(P->PF, P->PF_n, &P->gr_pr, 0, theta, theta->theta_ad)/N;
+  double p = prob_total_choice(P->PF, P->PF_n, 0, theta, theta->theta_ad)/N;
   for (i = 0; i < obs->n; ++i) {
     prob_obs_storage_t *pr = &prob->P[i];
     double p_o = pr->N * p;

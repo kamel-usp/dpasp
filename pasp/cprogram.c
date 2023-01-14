@@ -9,7 +9,7 @@ void print_prob_fact(prob_fact_t *pf) {
   if (pf->learnable) wprintf(L"%f?::%s", pf->p, pf->f);
   else wprintf(L"%f::%s", pf->p, pf->f);
 }
-void free_prob_fact_contents(prob_fact_t *pf) { if (pf) Py_DECREF(pf->f_obj); }
+void free_prob_fact_contents(prob_fact_t *pf) { if (pf) Py_XDECREF(pf->f_obj); }
 void free_prob_fact(prob_fact_t *pf) { free_prob_fact_contents(pf); free(pf); }
 
 void print_prob_rule(prob_rule_t *pr) { wprintf(L"%f::%s", pr->p, pr->f); }
@@ -114,9 +114,7 @@ void free_program_contents(program_t *P) {
   free(P->CF);
   for (i = 0; i < P->AD_n; ++i) free_annot_disj_contents(&P->AD[i]);
   free(P->AD);
-  array_clingo_symbol_t_free_contents(&P->gr_PF);
-  array_char_free_contents(&P->gr_P);
-  array_double_free_contents(&P->gr_pr);
+  Py_DECREF(P->py_gr_P);
   if (P->stable) free_program(P->stable);
 }
 void free_program(program_t *P) { free_program_contents(P); free(P); }
@@ -564,8 +562,8 @@ cleanup:
 bool from_python_program(PyObject *py_P, program_t *P) {
   PyObject *py_P_P, *py_P_PF, *py_P_PF_L, *py_P_PR, *py_P_PR_L, *py_P_Q, *py_P_Q_L, *py_P_CF, *py_P_AD, *py_P_CF_L, *py_P_sem = NULL;
   PyObject *py_P_AD_L = py_P_AD = py_P_CF_L = py_P_CF = py_P_Q_L = py_P_Q = py_P_PR_L = py_P_PR = py_P_PF_L = py_P_PF = py_P_P = NULL;
-  PyObject *py_P_stable = NULL;
-  const char *P_P;
+  PyObject *py_P_stable = NULL, *py_gr_P = NULL;
+  const char *P_P, *gr_P;
   prob_fact_t *PF = NULL;
   prob_rule_t *PR = NULL;
   query_t *Q = NULL;
@@ -618,7 +616,7 @@ bool from_python_program(PyObject *py_P, program_t *P) {
     goto cleanup;
   }
   sem = PyLong_AsUnsignedLong(py_P_sem);
-  if ((sem == (unsigned long) -1) && !PyErr_Occurred()) {
+  if ((sem == (semantics_t) ((unsigned long) -1)) && !PyErr_Occurred()) {
     PyErr_SetString(PyExc_TypeError, "field semantics of Program must be a Semantics!");
     goto cleanup;
   }
@@ -629,6 +627,17 @@ bool from_python_program(PyObject *py_P, program_t *P) {
     if (!from_python_program(py_P_stable, stable)) goto cleanup;
   } else if (!py_P_stable && sem) {
     PyErr_SetString(PyExc_TypeError, "field stable of Program must be a Program!");
+    goto cleanup;
+  }
+
+  py_gr_P = PyObject_GetAttrString(py_P, "gr_P");
+  if (!py_gr_P) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field gr_P of supposed Program object!");
+    goto cleanup;
+  }
+  gr_P = PyUnicode_AsUTF8(py_gr_P);
+  if (!gr_P) {
+    PyErr_SetString(PyExc_TypeError, "field gr_P of Program must be a string!");
     goto cleanup;
   }
 
@@ -679,9 +688,8 @@ bool from_python_program(PyObject *py_P, program_t *P) {
   P->CF = CF;
   P->AD = AD;
 
-  P->gr_PF.d = NULL; P->gr_PF.n = P->gr_PF.c = 0;
-  P->gr_P.d = NULL; P->gr_P.n = P->gr_P.c = 0;
-  P->gr_pr.d = NULL; P->gr_pr.n = P->gr_pr.c = 0;
+  P->gr_P = gr_P;
+  P->py_gr_P = py_gr_P;
 
   P->sem = sem;
   P->stable = stable;
@@ -717,6 +725,7 @@ cleanup:
   Py_XDECREF(py_P_AD_L);
   Py_XDECREF(py_P_sem);
   Py_XDECREF(py_P_stable);
+  Py_XDECREF(py_gr_P);
   free(PF);
   free(PR);
   free(Q);
