@@ -12,7 +12,7 @@ static PyObject* sample(PyObject *self, PyObject *args, PyObject *kwargs) {
   program_t P = {0};
   PyObject *py_P, *py_atoms, *ret;
   PyArrayObject *atoms = NULL;
-  bool ok = false;
+  bool ok = false, free_atoms = false;
   bool lstable_sat = true;
   size_t n = 1;
   static char *kwlist[] = { "", "", "n", "lstable_sat", NULL };
@@ -26,7 +26,8 @@ static PyObject* sample(PyObject *self, PyObject *args, PyObject *kwargs) {
       PyErr_SetString(PyExc_ValueError, "could not parse atoms as a numpy.ndarray!");
       goto cleanup;
     }
-  }
+    free_atoms = true;
+  } else atoms = (PyArrayObject*) py_atoms;
 
   if ((PyArray_NDIM(atoms) != 1) || (PyArray_SIZE(atoms) == 0)) {
     PyErr_SetString(PyExc_ValueError, "unexpected size dimension for atoms in sample!");
@@ -49,6 +50,7 @@ static PyObject* sample(PyObject *self, PyObject *args, PyObject *kwargs) {
 
   ok = true;
 cleanup:
+  if (free_atoms) Py_DECREF(atoms);
   free_program_contents(&P);
   return ok ? ret : NULL;
 }
