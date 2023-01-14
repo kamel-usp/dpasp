@@ -108,7 +108,7 @@ error:
 
 bool model_contains(const clingo_model_t *M, query_t *q, size_t i, bool *c, bool query_or_evi, bool is_partial) {
   clingo_symbol_t x, x_u;
-  char s;
+  uint8_t s;
   bool c_x;
 
   if (query_or_evi) {

@@ -343,7 +343,7 @@ bool from_python_query(PyObject *py_q, query_t *q, semantics_t sem) {
   PyObject *py_Q, *py_E, *py_Q_L, *py_E_L = py_Q_L = py_E = py_Q = NULL;
   clingo_symbol_t *Q, *E = Q = NULL;
   clingo_symbol_t *Q_u, *E_u = Q_u = NULL;
-  char *Q_s, *E_s = Q_s = NULL;
+  uint8_t *Q_s, *E_s = Q_s = NULL;
   size_t i;
 
   py_Q = PyObject_GetAttrString(py_q, "Q");
@@ -369,9 +369,9 @@ bool from_python_query(PyObject *py_q, query_t *q, semantics_t sem) {
   if (!Q) goto nomem;
   E = (clingo_symbol_t*) malloc(q->E_n*sizeof(clingo_symbol_t));
   if (!E) goto nomem;
-  Q_s = (char*) malloc(q->Q_n*sizeof(char));
+  Q_s = (uint8_t*) malloc(q->Q_n*sizeof(uint8_t));
   if (!Q_s) goto nomem;
-  E_s = (char*) malloc(q->E_n*sizeof(char));
+  E_s = (uint8_t*) malloc(q->E_n*sizeof(uint8_t));
   if (!E_s) goto nomem;
   if (sem) {
     Q_u = (clingo_symbol_t*) malloc(q->Q_n*sizeof(clingo_symbol_t));

@@ -47,14 +47,14 @@ typedef struct annot_disj {
 #define QUERY_TERM_POS 1
 #define QUERY_TERM_UND 2
 
-typedef struct query {
+typedef struct {
   clingo_symbol_t *Q;
-  char *Q_s;
+  uint8_t *Q_s;
   size_t Q_n;
   clingo_symbol_t *Q_u; /* Potentially true auxiliary variables for partial semantics. */
 
   clingo_symbol_t *E;
-  char *E_s;
+  uint8_t *E_s;
   size_t E_n;
   clingo_symbol_t *E_u; /* Potentially true auxiliary variables for partial semantics. */
 } query_t;
