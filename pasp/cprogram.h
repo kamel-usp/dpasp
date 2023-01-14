@@ -7,7 +7,7 @@
 #include <clingo.h>
 #include "carray.h"
 
-typedef struct prob_fact {
+typedef struct {
   double p;
   const char *f;
   PyObject *f_obj;
@@ -16,7 +16,7 @@ typedef struct prob_fact {
   PyObject *self;
 } prob_fact_t;
 
-typedef struct prob_rule {
+typedef struct {
   double p;
   const char *f;
   PyObject *f_obj;
@@ -25,7 +25,7 @@ typedef struct prob_rule {
   PyObject *unify_obj;
 } prob_rule_t;
 
-typedef struct credal_fact {
+typedef struct {
   double l;
   double u;
   const char *f;
@@ -33,7 +33,7 @@ typedef struct credal_fact {
   clingo_symbol_t cl_f;
 } credal_fact_t;
 
-typedef struct annot_disj {
+typedef struct {
   double *P;
   const char **F;
   PyObject **F_obj;
