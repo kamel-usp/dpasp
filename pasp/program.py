@@ -46,7 +46,7 @@ class ProbRule:
     self.prop_pf = ProbFact(p, unique_fact() if ufact is None else ufact, learnable = learnable)
     self.prop_f = f"{f}, {self.prop_pf.f}."
 
-  def __str__(self) -> str: return f"{self.p}::{self.f}"
+  def __str__(self) -> str: return f"{self.p}{'+' if self.unify else '' + '?' if self.learnable else ''}::{self.f}"
   def __repr__(self) -> str: return self.__str__()
 
 class CredalFact:
@@ -181,5 +181,5 @@ class Program:
     self.stable = stable_p
 
   def __str__(self) -> str:
-    return f"<Logic Program:\n{self.P},\nProbabilistic Facts:\n{self.PF},\nCredal Facts:\n{self.CF},\nAnnotated Disjunctions:\n{self.AD},\nProbabilistic Rules:\n{self.PR},\nQueries\n{self.Q}>"
+    return f"<Logic Program:\n{self.P},\nProbabilistic Facts:\n{self.PF},\nCredal Facts:\n{self.CF},\nAnnotated Disjunctions:\n{self.AD},\nProbabilistic Rules:\n{self.PR},\nQueries:\n{self.Q}>"
   def __repr__(self) -> str: return self.__str__()

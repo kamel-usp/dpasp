@@ -1,4 +1,4 @@
-import pathlib, enum, fractions, math
+import pathlib, enum, fractions, math, collections.abc
 import lark, lark.reconstruct
 from .program import ProbFact, Query, ProbRule, Program, CredalFact, unique_fact, Semantics
 from .program import AnnotatedDisjunction
@@ -101,6 +101,14 @@ def read(*files: str, G: lark.Lark = None, from_str: bool = False) -> lark.Tree:
   return T
 
 def getnths(X: iter, i: int) -> iter: return (x[i] for x in X)
+def find(X: iter, v, d = None):
+  try:
+    i = X.index(v)
+    return i, X[i]
+  except ValueError: return -1, d
+def push(L: list, X: iter):
+  if isinstance(X, collections.abc.Iterable) and (type(X) != str): L.extend(X)
+  else: L.append(X)
 
 class Command(enum.Enum):
   FACT = 0
@@ -112,6 +120,8 @@ class Command(enum.Enum):
   CONSTRAINT = 6
   CONSTDEF = 7
   ANNOTATED_DISJUNCTION = 8
+  NEURAL_RULE = 11
+  NEURAL_AD = 12
 
 class Terms(enum.Enum):
   UND    = "undef"
@@ -129,106 +139,133 @@ class Terms(enum.Enum):
   GEQ    = ">="
   EXPAND = "+"
   LEARN  = "?"
+  LPATH = "LPATH"
+  URL = "URL"
 
-class PLPTransformer(lark.Transformer):
+class StableTransformer(lark.Transformer):
   def __init__(self, _):
     super().__init__()
     self.semantics = Semantics.STABLE
 
-  # Terminals.
-  def UND(self, a: list[lark.Token]) -> tuple[str, bool]: return a, True
-  def CONST(self, a: list[lark.Token]) -> tuple[str, bool]: return a, True
-  def NEG(self, a: list[lark.Token]) -> tuple[str, bool]: return a, True
-  def VAR(self, a: list[lark.Token]) -> tuple[str, bool]: return a, False
-  def ID(self, a: list[lark.Token]) -> tuple[str, bool]: return a, True
-  def OP(self, a: list[lark.Token]) -> tuple[str, bool]: return a, True
-  def PROB(self, a: list[lark.Token]) -> float: return float(fractions.Fraction(a.value))
+  @staticmethod
+  def pack(t: str, rep: str = None, val = None, scope: dict = {}) -> tuple[str, str, str, dict]:
+    return t, str(val) if rep is None else rep, rep if val is None else val, scope
 
-  # Atoms.
-  def atom(self, a: list[lark.Tree]) -> tuple[str, bool]:
-    return " ".join(getnths(a, 0)), all(getnths(a, 1)), True
-  def gratom(self, a: list[lark.Tree]) -> tuple[str, bool]: return self.atom(a)[0], True
-  def pgratom(self, a): return self.atom(a)[0], True
+  @staticmethod
+  def join_scope(A: list) -> dict: return dict((y, None) for S in A for y in S[3])
+
+  # Terminals.
+  def UND(self, u): return self.pack("UND", str(u))
+  def CONST(self, c): return self.pack("CONST", str(c))
+  def NEG(self, n): return self.pack("NEG", str(n))
+  def VAR(self, v):
+    x = str(v); X = {v: None}
+    return self.pack("VAR", x, scope = X)
+  def ID(self, i): return self.pack("ID", val = int(i))
+  def OP(self, o): return self.pack("OP", str(o))
+  def PROB(self, p): return self.pack("PROB", val = float(fractions.Fraction(p.value)))
+  def PATH(self, p): return self.pack("LPATH" if p[0].type == Terms.LPATH else "URL", str(p))
+  def EXPAND(self, e): return self.pack("EXPAND",  str(e))
+  def LEARN(self, l): return self.pack("LEARN", str(l))
+
+  # Set.
+  def set(self, S):
+    L = [str(x) for x in S]
+    M = set()
+    for x in L:
+      if x in M: raise ValueError("set must contain only unique constants!")
+      M.append(x)
+    return self.pack("set", val = M)
 
   # Intervals.
-  def interval(self, i: list[lark.Token]) -> tuple[str, bool]:
-    return "..".join(getnths(i, 0)), all(getnths(i, 1))
+  def interval(self, I): return self.pack("interval", f"{I[0][2]}..{I[1][2]}")
 
   # Predicates.
-  def pred(self, p: list[tuple[str, bool]]) -> tuple[str, bool]:
-    sign = p[0][0].type == "NEG"
-    if sign:
-      name, args = p[1], p[2:]
-      return f"not {name}({', '.join(getnths(args, 0))})"
-    name, args = p[0], p[1:]
-    return f"{name[0]}({', '.join(getnths(args, 0))})", all(getnths(args, 1)), True
-  def grpred(self, p: list[tuple[str, bool]]) -> tuple[str, bool]: return self.pred(p)[0], True
-  def pgrpred(self, p): return self.pred(p)[0], True
+  def pred(self, P):
+    name = P[0][1]
+    return self.pack("pred", f"{name}({', '.join(getnths(P[1:], 1))})", name, self.join_scope(P))
+  def grpred(self, P): return self.pred(P)
+
+  # Literals.
+  def lit(self, P):
+    s = P[0][0] != "NEG"
+    return self.pack("lit", " ".join(getnths(P, 1)), P[0][2] if s else P[1][2], self.join_scope(P))
+  def grlit(self, P): return self.lit(P)
 
   # Binary operations.
-  def bop(self, b: list[lark.Tree]) -> str:
-    return " ".join(getnths(b, 0)), all(getnths(b, 1)), False
+  def bop(self, B) -> str: return self.pack("bop", " ".join(getnths(B, 1)))
 
   # Facts.
-  def fact(self, f: list[lark.Tree]) -> tuple[Command, str]:
-    return Command.FACT, "".join(getnths(f, 0)) + "."
-  def pfact(self, f: list[lark.Tree]) -> tuple[Command, ProbFact]:
-    return Command.PROB_FACT, ProbFact(f[0], f[1][0])
-  def cfact(self, f: list[lark.Tree]) -> tuple[Command, CredalFact]:
-    return Command.CRED_FACT, CredalFact(str(f[0]), str(f[1]), f[2][0])
-  def lpfact(self, f: list[lark.Tree]) -> tuple[Command, ProbFact]:
-    if len(f) < 2:
-      return Command.PROB_FACT, ProbFact(0.5, f[0][0], learnable = True)
-    return Command.PROB_FACT, ProbFact(f[0], f[1][0], learnable = True)
+  def fact(self, F):
+    f = f"{''.join(getnths(F, 1))}"
+    # Facts are always grounded.
+    return self.pack("fact", f + ".", f)
+  def pfact(self, PF):
+    p, f = PF[0][2], PF[1][1]
+    return self.pack("pfact", "", ProbFact(p, f))
+  def cfact(self, CF):
+    l, u, f = CF[0][2], CF[1][2], CF[2][1]
+    return self.pack("cfact", "", CredalFact(l, u, f))
+  def lpfact(self, PF):
+    if PF[0][0] == "PROB": p, f = PF[0][2], PF[1][1]
+    else: p, f = 0.5, PF[0][2]
+    return self.pack("pfact", "", ProbFact(p, f, learnable = True))
 
   # Heads.
-  def head(self, h: list[str]) -> str:
-    return ", ".join(getnths(h, 0)), all(getnths(h, 1)), [x for x in getnths(h, 0)]
-  def ohead(self, h: list[str]) -> str:
-    if len(h) == 1: return str(h[0][0]), True, h[0][0], ()
-    u = h[1:]
-    return f"{h[0][0]}({', '.join(getnths(u, 0))})", all(getnths(u, 1)), h[0][0], list(getnths(u, 0))
-  # Bodies.
-  def body(self, b: list[str]) -> str:
-    return ", ".join(getnths(b, 0)), all(getnths(b, 1)), list(x for x, t in zip(getnths(b, 0), getnths(b, 2)) if t), list(getnths(b, 0))
+  def head(self, H): return self.pack("head", ", ".join(getnths(H, 1)), H, self.join_scope(H))
+  def ohead(self, H): return self.pack("head", H[0][1], H[0][2], H[0][3])
+  # Body.
+  def body(self, B): return self.pack("body", ", ".join(getnths(B, 1)), B, self.join_scope(B))
 
   # Rules.
-  def rule(self, r: list[str]) -> tuple[Command, str]:
-    return Command.RULE, f"{r[0][0]} :- {r[1][0]}."
-  def prule(self, r: list[str]) -> tuple[Command, str, ProbFact]:
-    l = Terms.LEARN.value in r
-    e = Terms.EXPAND.value in r
-    r = [x for x in r if x != Terms.LEARN.value and x != Terms.EXPAND.value]
-    o = f"{r[1][0]} :- {r[2][0]}"
+  def rule(self, R): return self.pack("rule", " :- ".join(getnths(R, 1)) + ".")
+  def prule(self, R):
+    l = "LEARN" in getnths(R, 0)
+    e = "EXPAND" in getnths(R, 0)
+    h, b = R[-2], R[-1]
+    o = f"{h[1]} :- {b[1]}"
+    p = R[0][2]
     if e:
-      prop = r[1][1] and r[2][1]
-      if prop: return Command.PROB_RULE, ProbRule(r[0], o, is_prop = True)
-      h, b = r[1][3], r[2][2]
+      S = self.join_scope(R)
+      if len(S) == 0:
+        pr = ProbRule(p, o, is_prop = True)
+        return self.pack("prule", pr.prop_f, pr)
       # Invariant: len(b) > 0, otherwise the rule is unsafe.
-      h_s = ", ".join(h) + ", " if len(h) > 0 else ""
-      b_s = ", ".join(map(lambda x: f"0, {x[4:]}" if x[:4] == "not " else f"1, {x}", b))
-      u = f"{r[1][2]}(@unify(\"{r[0]}\", {r[1][2]}, {int(l)}, {len(h)}, {2*len(b)}, {h_s}{b_s})) :- {r[2][0]}."
-      return Command.PROB_RULE, ProbRule(r[0], o, is_prop = False, unify = u, learnable = l)
+      name = h[2]
+      # hscope is guaranteed to be ordered by Python dict's definition.
+      hscope = h[3]
+      body_preds = [x for x in b[2] if x[0] != "bop"]
+      h_s = ", ".join(hscope) + ", " if len(hscope) > 0 else ""
+      b_s = ", ".join(map(lambda x: f"0, {x[1][4:]}" if x[1][:4] == "not " else f"1, {x[1]}", body_preds))
+      # The number of body arguments is twice as we need to store the sugoal's sign and symbol.
+      u = f"{name}(@unify(\"{p}\", {name}, {int(l)}, {len(hscope)}, {2*len(body_preds)}, {h_s}{b_s})) :- {b[1]}."
+      return self.pack("prule", "", ProbRule(p, o, is_prop = False, unify = u, learnable = l))
     else:
-      return Command.PROB_RULE, ProbRule(r[0], o, is_prop = True, learnable = l)
+      # TODO: parameter tying
+      pr = ProbRule(p, o, is_prop = True, learnable = l)
+      return self.pack("prule", pr.prop_f, pr)
 
   # Annotated disjunction head.
-  def adhead(self, h: list):
-    return [float(h[i]) for i in range(0, len(h), 2)], [h[i][0] for i in range(1, len(h), 2)], False
+  def ad_head(self, H):
+    P, F = [], []
+    for i in range(0, len(H), 2):
+      P.append(H[i][2])
+      F.append(H[i+1][1])
+    return self.pack("ad_head", F, P, self.join_scope(H))
   # Learnable annotated disjunction head.
-  def ladhead(self, h: list):
+  def lad_head(self, H: list):
     P, F = [], []
     i, o, j = 0, 0, 0
     last = None
-    while i < len(h):
-      a = h[i]
-      if type(a) is float:
-        P.append(a)
-        F.append(h[i+1][0])
+    while i < len(H):
+      a = H[i]
+      if a[0] == "PROB":
+        P.append(a[2])
+        F.append(H[i+1][1])
         i += 2
       else:
         P.append(-1)
-        F.append(a[0])
+        F.append(a[1])
         i += 1; o += 1
         last = j
       j += 1
@@ -240,31 +277,44 @@ class PLPTransformer(lark.Transformer):
       for i, p in enumerate(P):
         if i == last: P[i] = 1.0-ts
         elif p < 0: P[i] = s
-    return P, F, True
+    return self.pack("lad_head", F, P, self.join_scope(H))
   # Annotated disjunctions.
-  def ad(self, d: list):
-    P, F, learnable = d[0][0], d[0][1], d[0][2]
+  def ad(self, AD):
+    P, F, learnable = AD[0][2], AD[0][1], AD[0][0] == "lad_head"
     if not math.isclose(s := sum(P), 1.0):
       P.append(1-s)
       F.append(unique_fact())
-    return Command.ANNOTATED_DISJUNCTION, AnnotatedDisjunction(d[0][0], d[0][1], learnable)
+    return self.pack("ad", "", AnnotatedDisjunction(P, F, learnable), AD[0][3])
+
+  # Neural constructs.
+  def nrule(self, A: list):
+    name = A[0][0]
+    inp = A[1][0]
+    where_from, net = A[2]
+    body = A[3:]
+
+    V = [v[3] for v in body]
+    if inp not in V:
+      raise ValueError(f"Neural rule {name} is unsafe!")
+    for a in body:
+      pass
 
   # Constraint.
-  def constraint(self, b: list[str]) -> tuple[Command, str]:
-    return Command.CONSTRAINT, f":- {b[0][0]}."
+  def constraint(self, C): return self.pack("constraint", f":- {C[0][1]}.")
 
+  # Query elements.
+  def qelement(self, E): return self.pack("qelement", " ".join(getnths(E, 1)))
   # Interpretations.
-  def interp(self, i: list[str]) -> list[str]: return list(getnths(i, 0))
-
+  def interp(self, I): return self.pack("interp", "", getnths(I, 1))
   # Queries.
-  def query(self, q: list[list[str]]) -> tuple[str, Query]:
-    return Command.QUERY, Query(q[0], q[1] if len(q) > 1 else [], semantics = self.semantics)
+  def query(self, Q):
+    return self.pack("query", "", Query(Q[0][2], Q[1][2] if len(Q) > 1 else [], semantics = self.semantics))
 
-  def constdef(self, t: list) -> tuple[Command, str]:
-    return Command.CONSTDEF, f"#const {t[0][0]} = {t[1][0]}."
+  # Constant definition.
+  def constdef(self, C): return self.pack("constdef", f"#const {C[0][1]} = {C[1][1]}.")
 
   # Probabilistic Logic Program.
-  def plp(self, C: list[tuple]) -> Program:
+  def plp(self, C) -> Program:
     # Logic Program.
     P  = []
     # Probabilistic Facts.
@@ -277,24 +327,16 @@ class PLPTransformer(lark.Transformer):
     CF = []
     # Annotated Disjunction.
     AD = []
-    for t, *c in C:
-      if t == Command.FACT: P.extend(c)
-      elif t == Command.PROB_FACT: PF.extend(c)
-      elif t == Command.RULE: P.extend(c)
-      elif t == Command.PROB_RULE:
-        for r in c:
-          PR.append(r)
-          if r.is_prop:
-            P.append(r.prop_f)
-            PF.append(r.prop_pf)
-      elif t == Command.QUERY: Q.extend(c)
-      elif t == Command.CRED_FACT: CF.extend(c)
-      elif t == Command.CONSTRAINT: P.extend(c)
-      elif t == Command.ANNOTATED_DISJUNCTION: AD.extend(c)
-      else: P.extend(c)
+    # Mapping.
+    M = {"pfact": PF, "prule": PR, "query": Q, "cfact": CF, "ad": AD}
+    for t, L, O, _ in C:
+      if len(L) > 0: push(P, L)
+      if t in M: push(M[t], O)
+    for r in PR:
+      if r.is_prop: PF.append(r.prop_pf)
     return Program("\n".join(P), PF, PR, Q, CF, AD, semantics = self.semantics)
 
-class PartialTransformer(PLPTransformer):
+class PartialTransformer(StableTransformer):
   def __init__(self, sem: str):
     super().__init__(sem)
     self.PT = set()
@@ -304,56 +346,59 @@ class PartialTransformer(PLPTransformer):
   @staticmethod
   def has_binop(x: str): return ("=" in x) or ("<" in x) or (">" in x)
 
-  def fact(self, f) -> tuple[Command, str]:
-    u = "".join(getnths(f, 0))
-    self.PT.add(u)
-    return Command.FACT, u + "."
+  def fact(self, F):
+    T = super().fact(F)
+    self.PT.add(T[2])
+    return T
 
-  def pfact(self, f) -> tuple[Command, ProbFact]:
-    self.PT.add(f[1][0])
-    return Command.PROB_FACT, ProbFact(f[0], f[1][0])
+  def pfact(self, PF):
+    T = super().pfact(PF)
+    self.PT.add(T[2].f)
+    return T
 
-  def cfact(self, f) -> tuple[Command, CredalFact]:
-    self.PT.add(f[2][0])
-    return Command.CRED_FACT, CredalFact(str(f[0]), str(f[1]), f[2][0])
+  def cfact(self, CF):
+    T = super().cfact(CF)
+    self.PT.add(T[2].f)
+    return T
 
-  def rule(self, r) -> tuple[Command, str, str, str]:
-    b1 = ", ".join(map(lambda x: f"not _{x[4:]}" if x[:4] == "not " else x, r[1][3]))
-    b2 = ", ".join(map(lambda x: x if (x[:4] == "not ") or PartialTransformer.has_binop(x) else f"_{x}", r[1][3]))
-    h1, h2 = ", ".join(r[0][2]), ", ".join(map(lambda x: f"_{x}", r[0][2]))
-    for h in r[0][2]: self.PT.add(h)
+  def rule(self, R):
+    b1 = ", ".join(map(lambda x: f"not _{x[1][4:]}" if x[1][:4] == "not " else x[1], R[1][2]))
+    b2 = ", ".join(map(lambda x: x[1] if (x[1][:4] == "not ") or PartialTransformer.has_binop(x) else f"_{x[1]}", R[1][2]))
+    h1, h2 = R[0][1], ", ".join(map(lambda x: f"_{x[1]}", R[0][2]))
+    for h in R[0][2]: self.PT.add(h[1])
     # for x in r[1][3]:
       # if not PartialTransformer.has_binop(x): self.PT.add(x[4:] if x[:4] == "not " else x)
-    return Command.RULE, f"{h1} :- {b1}.", f"{h2} :- {b2}."
+    return self.pack("rule", [f"{h1} :- {b1}.", f"{h2} :- {b2}."])
 
-  def prule(self, r) -> tuple[Command, str, str, str]:
-    l = Terms.LEARN.value in r
-    e = Terms.EXPAND.value in r
-    r = [x for x in r if x != Terms.LEARN.value and x != Terms.EXPAND.value]
-    tr_negs = lambda x: f"not _{x[4:]}" if x[:4] == "not " else x
-    tr_pos  = lambda x: x if (x[:4] == "not ") or PartialTransformer.has_binop(x) else f"_{x}"
-    b1 = ", ".join(map(tr_negs, r[2][3]))
-    b2 = ", ".join(map(tr_pos, r[2][3]))
-    h = r[1][0]
-    o1, o2 = f"{h} :- {b1}", f"_{h} :- {b2}"
-    self.PT.add(h)
+  def prule(self, R):
+    l = "LEARN" in getnths(R, 0)
+    e = "EXPAND" in getnths(R, 0)
+    p = R[0][2]
+    h, b = R[-2], R[-1]
+    tr_negs = lambda x: f"not _{x[1][4:]}" if x[1][:4] == "not " else x[1]
+    tr_pos  = lambda x: x[1] if (x[1][:4] == "not ") or PartialTransformer.has_binop(x) else f"_{x[1]}"
+    b1 = ", ".join(map(tr_negs, b[2]))
+    b2 = ", ".join(map(tr_pos, b[2]))
+    o1, o2 = f"{h[1]} :- {b1}", f"_{h[1]} :- {b2}"
+    self.PT.add(h[1])
     uid = unique_fact()
     if e:
-      # for x in r[2][3]:
-        # if not PartialTransformer.has_binop(x): self.PT.add(x[4:] if x[:4] == "not " else x)
-      prop = r[1][1] and r[2][1]
-      uid = unique_fact()
-      if prop: return Command.PROB_RULE, ProbRule(r[0], o1, ufact = uid), ProbRule(r[0], o2, ufact = uid)
-      h_a, b = r[1][3], r[2][2]
+      S = self.join_scope(R)
+      if len(S) == 0:
+        pr1, pr2 = ProbRule(p, o1, ufact = uid), ProbRule(p, o2, ufact = uid)
+        return self.pack("prule", [pr1.prop_f, pr2.prop_f], [pr1, pr2])
       # Invariant: len(b) > 0, otherwise the rule is unsafe.
-      h_s = ", ".join(h_a) + ", " if len(h_a) > 0 else ""
-      b1_s = ", ".join(map(lambda x: f"0, _{x[4:]}" if x[:4] == "not " else f"1, {x}", b))
+      name = h[2]
+      hscope = h[3]
+      body_preds = [x for x in b[2] if x[0] != "bop"]
+      h_s = ", ".join(hscope) + ", " if len(hscope) > 0 else ""
+      b1_s = ", ".join(map(lambda x: f"0, _{x[1][4:]}" if x[1][:4] == "not " else f"1, {x[1]}", body_preds))
       # Let the grounder deal with the _f rule.
-      u1 = f"{r[1][2]}(@unify(\"{r[0]}\", {r[1][2]}, {int(l)}, {len(h_a)}, {2*len(b)}, {h_s}{b1_s})) :- {b1}."
-      return Command.PROB_RULE, ProbRule(r[0], o1, is_prop = False, unify = u1, learnable = l)
+      u1 = f"{name}(@unify(\"{p}\", {name}, {int(l)}, {len(hscope)}, {2*len(body_preds)}, {h_s}{b1_s})) :- {b1}."
+      return self.pack("prule", "", ProbRule(p, o1, is_prop = False, unify = u1, learnable = l))
     else:
-      return Command.PROB_RULE, ProbRule(r[0], o1, ufact = uid, learnable = l), \
-             ProbRule(r[0], o2, ufact = uid)
+      pr1, pr2 = ProbRule(p, o1, ufact = uid, learnable = l), ProbRule(p, o2, ufact = uid)
+      return self.pack("prule", [pr1.prop_f, pr2.prop_f], [pr1, pr2])
 
   def plp(self, C: list[tuple]) -> Program:
     # Logic Program.
@@ -368,33 +413,20 @@ class PartialTransformer(PLPTransformer):
     CF = []
     # Annotated Disjunction.
     AD = []
-    for t, *c in C:
-      if t == Command.FACT: P.extend(c)
-      elif t == Command.PROB_FACT: PF.extend(c)
-      elif t == Command.RULE: P.extend(c)
-      elif t == Command.PROB_RULE:
-        if len(c) == 1:
-          PR.append(c[0])
-          continue
-        r1, r2 = c
-        PR.extend((r1, r2))
-        if r1.is_prop:
-          P.append(r1.prop_f)
-          PF.append(r1.prop_pf)
-        if r2.is_prop:
-          P.append(r2.prop_f)
-      elif t == Command.QUERY: Q.extend(c)
-      elif t == Command.CRED_FACT: CF.extend(c)
-      elif t == Command.CONSTRAINT: P.extend(c)
-      elif t == Command.ANNOTATED_DISJUNCTION: AD.extend(c)
-      else: P.extend(c)
+    # Mapping.
+    M = {"pfact": PF, "prule": PR, "query": Q, "cfact": CF, "ad": AD}
+    for t, L, O, _ in C:
+      if len(L) > 0: push(P, L)
+      if t in M: push(M[t], O)
+      if t == "prule" and isinstance(O, collections.abc.Iterable) and O[0].is_prop:
+        PF.append(O[0].prop_pf)
     P.extend(f"_{x} :- {x}." for x in self.PT)
     return Program("\n".join(P), PF, PR, Q, CF, AD, semantics = self.semantics, \
                    stable_p = self.stable_p)
 
   def transform(self, tree):
     self.o_tree = tree
-    self.stable_p = PLPTransformer(self.semantics).transform(tree)
+    self.stable_p = StableTransformer(self.semantics).transform(tree)
     return super().transform(tree)
 
 def parse(*files: str, G: lark.Lark = None, from_str: bool = False, semantics: str = "stable") -> Program:
@@ -404,7 +436,7 @@ def parse(*files: str, G: lark.Lark = None, from_str: bool = False, semantics: s
     raise ValueError("semantics not supported (must either be 'stable', 'partial' or 'lstable')!")
   return parse.trans_map[semantics](semantics).transform(read(*files, G = G, from_str = from_str))
 parse.trans_map = {}
-parse.trans_map["stable"] = PLPTransformer
+parse.trans_map["stable"] = StableTransformer
 parse.trans_map["lstable"] = PartialTransformer
 parse.trans_map["partial"] = PartialTransformer
 

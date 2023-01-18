@@ -31,53 +31,72 @@ PROB: FRAC | REAL
 
 // Constants.
 CONST: /[a-z]\w*/
-// Variables
+// Variables.
 VAR: /[A-Z]\w*/
+
+// URL.
+URL: "\"" /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/ "\""
+// Local path.
+LPATH: "\"" /https?(?:\/?[\w\d\.]+|(?:\\ ))+/ "\""
+// Path.
+PATH: URL | LPATH
 
 EXPAND: "+"
 LEARN:  "?"
 
-// Ground atom.
-pgratom: (CONST | pgrpred)
-gratom: (NEG | UND)?  (CONST | grpred)
-// Ground predicates.
-pgrpred: CONST "(" (gratom | ID) ("," (gratom | ID))* ")"
-grpred: (NEG | UND)? CONST "(" (gratom | ID) ("," (gratom | ID | interval))* ")"
+// Set.
+set: "{" (ID | CONST) ("," (ID | CONST))+ "}"
+
+// Data special rule.
+data: CONST "(" CONST ")" ":-" "data" "(" PATH ")" "."
 
 // Atom.
-atom: NEG* (CONST | VAR | pred)
+_atom: CONST
 // Interval.
-interval: (CONST | ID) ".." (CONST | ID)
+interval: (ID | CONST) ".." (ID | CONST)
 // Predicate.
-pred: NEG* CONST "(" (atom | ID | interval) ("," (atom | ID | interval))* ")"
+_ground: (_atom | grpred)
+_nground: (_atom | pred)
+grpred: CONST "(" (_ground | ID | interval) ("," (_ground | ID | interval))* ")"
+pred: CONST "(" (_nground | ID | interval | VAR) ("," (_nground | ID | interval | VAR))* ")"
+// Literal.
+lit: NEG* _nground
+grlit: NEG* _ground
 
 // Fact.
-_fact: atom "."
-fact: _fact
+fact: _ground "."
 // Probabilistic fact.
-pfact: PROB "::" _fact
-lpfact: PROB? "?" "::" pgratom "."
+pfact: PROB "::" _ground "."
+lpfact: PROB? "?" "::" _ground "."
 // Credal fact.
-cfact: "[" PROB "," PROB "]" "::" _fact
+cfact: "[" PROB "," PROB "]" "::" _ground "."
+_fact: fact | pfact | lpfact | cfact
 
 // Head of a rule.
-head: (atom) (("," | ";") (atom))*
-ohead: CONST ("(" (atom | pred) ("," (atom | pred))* ")")?
+head: _nground (("," | ";") _nground)*
+ohead: _nground
 // Body of a rule.
-body: (atom | bop) ("," (atom | bop))*
+body: (lit | bop) ("," (lit | bop))*
 // Rule.
-_rule: head ":-" body "."
-rule: _rule
+rule: head ":-" body "."
 // Probabilistic rule.
 prule: PROB (EXPAND? LEARN? | LEARN? EXPAND?) "::" ohead ":-" body "."
+_rule: prule | rule
 
 // Annotated disjunction head.
-adhead: PROB "::" pgratom (";" PROB "::" pgratom)+
+ad_head{arg}: PROB "::" arg (";" PROB "::" arg)+
 // Learnable annotated disjunction head.
-ladhead: PROB? "?" "::" pgratom (";" PROB? "?" "::" pgratom)+
+lad_head{arg}: PROB? "?" "::" arg (";" PROB? "?" "::" arg)+
 // Annotated disjunctions.
-ad: (adhead | ladhead) "."
-bad: (adhead | ladhead) ":-" body "."
+ad: (ad_head{_ground} | lad_head{_ground}) "."
+adr: (ad_head{_nground} | lad_head{_nground}) ":-" body "."
+_ad: ad | adr
+
+// Neural rule.
+nrule: "?" "::" CONST "(" VAR ")" "as" PATH ":-" lit ("," lit)* "."
+// Neural annotated disjunction.
+nad: "?" "::" CONST "(" VAR "," set ")" "as" PATH ":-" lit ("," lit)* "."
+_neural: nrule | nad
 
 // Constraint.
 constraint: ":-" body "."
@@ -86,13 +105,14 @@ constraint: ":-" body "."
 bop: ((ID | VAR | bop) OP (ID | VAR | bop)) | (VAR EQQ interval)
 
 // Query.
-interp: gratom ("," gratom)*
+qelement: (NEG | UND)? (CONST | grpred)
+interp: qelement ("," qelement)*
 query: "#query(" interp ("|" interp)? ")" "."?
 
 // Constant definition.
 constdef: "#const" CONST "=" ID "."
 
-plp: (constdef | fact | rule | pfact | lpfact | prule | cfact | ad | constraint | query)*
+plp: (constdef | _fact | _rule | _ad | _neural | constraint | query)*
 
 COMMENT: "%" /[^\n]*/ NEWLINE
 
