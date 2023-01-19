@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pasp-plp"
-version = "0.0.1-4"
+version = "0.0.2-2"
 authors = [
   { name = "Renato Lui Geh", email = "renatogeh@gmail.com" },
 ]

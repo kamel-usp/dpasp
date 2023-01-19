@@ -132,6 +132,7 @@ def main():
   if len(F) > 0:
     pasp.exact(pasp.parse(*F, semantics = A["sem"]), psemantics = A["psem"])
   else:
+    print("pasp version", pasp.__version__)
     inp = ""
     for l in sys.stdin: inp += l
     pasp.exact(pasp.parse(inp, from_str = True, semantics = A["sem"]), psemantics = A["psem"])

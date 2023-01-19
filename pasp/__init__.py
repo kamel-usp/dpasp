@@ -10,6 +10,8 @@ from sample import sample
 
 import numpy as np
 
+__version__ = "0.0.2-2"
+
 def learn(P: Program, D: np.ndarray, A: np.ndarray, niters: int = 30, alg: str = "fixpoint",
           eta: float = 0.001, lstable_sat: bool = True):
   if type(A) is not np.ndarray: atoms = np.array(A, dtype = bytes)
