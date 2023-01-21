@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools", "numpy"]
+requires = ["setuptools >= 65.6.3", "numpy >= 1.23.5"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "pasp-plp"
-version = "0.0.2-2"
+dynamic = ["version"]
 authors = [
   { name = "Renato Lui Geh", email = "renatogeh@gmail.com" },
 ]
@@ -26,6 +26,9 @@ dependencies = [
   "lark >= 1.1.5",
   "numpy >= 1.23.5",
 ]
+
+[tool.setuptools.dynamic]
+version = {attr = "pasp.__version__"}
 
 [project.urls]
 Repository = "https://github.com/RenatoGeh/pasp"
