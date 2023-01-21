@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pasp-plp"
-dynamic = ["version"]
+dynamic = ["version", "dependencies"]
 authors = [
   { name = "Renato Lui Geh", email = "renatogeh@gmail.com" },
 ]
@@ -21,14 +21,10 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 description = "Probabilistic Answer Set Programming"
-dependencies = [
-  "clingo >= 5.6.2",
-  "lark >= 1.1.5",
-  "numpy >= 1.23.5",
-]
 
 [tool.setuptools.dynamic]
 version = {attr = "pasp.__version__"}
+dependencies = {file = ["requirements.txt"]}
 
 [project.urls]
 Repository = "https://github.com/RenatoGeh/pasp"
