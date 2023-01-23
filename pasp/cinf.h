@@ -31,6 +31,7 @@ bool init_total_choice(total_choice_t *theta, size_t n, annot_disj_t *ad, size_t
 void free_total_choice_contents(total_choice_t *theta);
 total_choice_t* copy_total_choice(total_choice_t *src, total_choice_t *dst);
 bool incr_total_choice(total_choice_t *theta);
+bool incr_total_choice_ad(total_choice_t *theta);
 void print_total_choice(total_choice_t *theta);
 
 double prob_total_choice(prob_fact_t *phi, size_t n, size_t CF_n, total_choice_t *theta,
@@ -68,9 +69,8 @@ size_t estimate_nprocs(size_t total_choice_n);
 
 int retr_free_proc(bool *busy_procs, size_t num_procs, pthread_mutex_t *wakeup,
     pthread_cond_t *avail);
-bool dispatch_job(total_choice_t *theta, pthread_mutex_t *wakeup,
-    bool *busy_procs, storage_t *S, size_t num_procs, threadpool pool, pthread_cond_t *avail,
-    void (*compute_func)(void*), bool has_ad, size_t j, size_t c);
+bool dispatch_job(total_choice_t *theta, pthread_mutex_t *wakeup, bool *busy_procs, storage_t *S,
+    size_t num_procs, threadpool pool, pthread_cond_t *avail, void (*compute_func)(void*));
 
 /* Determine if the i-th position in PF total choice t is true. */
 #define CHOICE_IS_TRUE(t, i) bitvec_GET(&(t)->pf, i)

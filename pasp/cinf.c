@@ -120,6 +120,19 @@ total_choice_t* copy_total_choice(total_choice_t *src, total_choice_t *dst) {
 }
 
 bool incr_total_choice(total_choice_t *theta) { return bitvec_incr(&theta->pf); }
+bool _incr_total_choice_ad(uint8_t *theta, annot_disj_t *ad, size_t i, size_t ad_n) {
+  if (i == ad_n-1) return (theta[i] = (theta[i] + 1) % ad[i].n) == 0;
+  bool c = _incr_total_choice_ad(theta, ad, i+1, ad_n);
+  bool l = theta[i] == ad[i].n-1;
+  theta[i] = (theta[i] + c) % ad[i].n;
+  return c && l;
+}
+/**
+ * Recursive implementation of incrementing total_choice_t ADs.
+ */
+bool incr_total_choice_ad(total_choice_t *theta) {
+  return !_incr_total_choice_ad(theta->theta_ad, theta->ad, 0, theta->ad_n);
+}
 
 void print_total_choice(total_choice_t *theta) {
   printf("Total choice:\nPF: ");
@@ -151,11 +164,9 @@ int retr_free_proc(bool *busy_procs, size_t num_procs, pthread_mutex_t *wakeup,
   return id;
 }
 
-bool dispatch_job(total_choice_t *theta, pthread_mutex_t *wakeup,
-    bool *busy_procs, storage_t *S, size_t num_procs, threadpool pool, pthread_cond_t *avail,
-    void (*compute_func)(void*), bool has_ad, size_t j, size_t c) {
+bool dispatch_job(total_choice_t *theta, pthread_mutex_t *wakeup, bool *busy_procs, storage_t *S,
+    size_t num_procs, threadpool pool, pthread_cond_t *avail, void (*compute_func)(void*)) {
   int id = retr_free_proc(busy_procs, num_procs, wakeup, avail);
-  if (has_ad) theta->theta_ad[j] = c;
   copy_total_choice(theta, &S[id].theta);
   return !(S[id].fail || thpool_add_work(pool, compute_func, &S[id]));
 }

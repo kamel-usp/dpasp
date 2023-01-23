@@ -364,14 +364,11 @@ bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat, psemantics_t pse
       goto cleanup;
 
   do {
-    size_t j, c;
     if (has_ad) {
-      for (j = 0; j < theta.ad_n; ++j)
-        for (c = 0; c < theta.ad[j].n; ++c)
-          if (!dispatch_job(&theta, &wakeup, busy_procs, S, num_procs, pool, &avail, compute_func,
-                true, j, c)) goto cleanup;
-    } else if (!dispatch_job(&theta, &wakeup, busy_procs, S, num_procs, pool, &avail, compute_func,
-          false, 0, 0)) goto cleanup;
+      do {
+        if (!dispatch_job(&theta, &wakeup, busy_procs, S, num_procs, pool, &avail, compute_func)) goto cleanup;
+      } while (incr_total_choice_ad(&theta));
+    } else if (!dispatch_job(&theta, &wakeup, busy_procs, S, num_procs, pool, &avail, compute_func)) goto cleanup;
   } while (incr_total_choice(&theta));
   thpool_wait(pool);
 
