@@ -35,20 +35,23 @@ CONST: /[a-z]\w*/
 VAR: /[A-Z]\w*/
 
 // URL.
-URL: "\"" /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/ "\""
-// Local path.
-LPATH: "\"" /https?(?:\/?[\w\d\.]+|(?:\\ ))+/ "\""
+URL: /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/
+// Local data path.
+LOCAL_DATA: /(?:\/?[a-zA-Z\d\.\-_]+|(?:\\ ))+/
+// Python function identifier.
+PY_FUNC: /[a-zA-Z_][\da-zA-Z0-9_]*/
+// Local network path.
+LOCAL_NET: /(?:[\w\d.\-_\/]+|(?:\\ ))+/
+// Github repo network path.
+GITHUB: /[A-Za-z\d](?:[A-Za-z\d]|-(?=[A-Za-z\d])){0,38}\/[a-zA-Z0-9\-_.]{1,100}/
 // Path.
-PATH: URL | LPATH
+path: "\"" (LOCAL_DATA | URL) "\""
 
 EXPAND: "+"
 LEARN:  "?"
 
 // Set.
 set: "{" (ID | CONST) ("," (ID | CONST))+ "}"
-
-// Data special rule.
-data: CONST "(" CONST ")" ":-" "data" "(" PATH ")" "."
 
 // Atom.
 _atom: CONST
@@ -92,10 +95,16 @@ ad: (ad_head{_ground} | lad_head{_ground}) "."
 adr: (ad_head{_nground} | lad_head{_nground}) ":-" body "."
 _ad: ad | adr
 
-// Neural rule.
-nrule: "?" "::" CONST "(" VAR ")" "as" PATH ":-" lit ("," lit)* "."
+// Data special rule.
+data: CONST "(" CONST ")" "~" "data" "(" path ")" "."
+// Torch block.
+torch: "#torch" /(?:.|\n)+?(?=\#end\.)/ "#end."
+// PyTorch hub.
+hub: "\"" PY_FUNC "\"" ("on" (("\"" LOCAL_NET "\"" ("at" "\"local\"")?) | ("\"" GITHUB "\"" "at" "\"github\"")))?
+// Neural fact.
+nrule: "?" "::" CONST "(" VAR ")" "as" hub ":-" lit ("," lit)* "."
 // Neural annotated disjunction.
-nad: "?" "::" CONST "(" VAR "," set ")" "as" PATH ":-" lit ("," lit)* "."
+nad: "?" "::" CONST "(" VAR "," set ")" "as" hub ":-" lit ("," lit)* "."
 _neural: nrule | nad
 
 // Constraint.
@@ -112,7 +121,7 @@ query: "#query(" interp ("|" interp)? ")" "."?
 // Constant definition.
 constdef: "#const" CONST "=" ID "."
 
-plp: (constdef | _fact | _rule | _ad | _neural | constraint | query)*
+plp: (constdef | _fact | _rule | _ad | _neural | data | torch | constraint | query)*
 
 COMMENT: "%" /[^\n]*/ NEWLINE
 

@@ -1,7 +1,7 @@
 import pathlib, enum, fractions, math, collections.abc
 import lark, lark.reconstruct
-from .program import ProbFact, Query, ProbRule, Program, CredalFact, unique_fact, Semantics
-from .program import AnnotatedDisjunction
+from .program import ProbFact, Query, ProbRule, Program, CredalFact, unique_fact, Semantics, Data
+from .program import AnnotatedDisjunction, NeuralRule, NeuralAD
 
 def is_fact(x: lark.Tree) -> bool:
   "Returns whether a node in the AST is a fact."
@@ -107,45 +107,15 @@ def find(X: iter, v, d = None):
     return i, X[i]
   except ValueError: return -1, d
 def push(L: list, X: iter):
-  if isinstance(X, collections.abc.Iterable) and (type(X) != str): L.extend(X)
+  "Pushes X to L. If X is a list, then push all elements of X to L instead of the list object itself."
+  if isinstance(X, list): L.extend(X)
   else: L.append(X)
-
-class Command(enum.Enum):
-  FACT = 0
-  PROB_FACT = 1
-  RULE = 2
-  PROB_RULE = 3
-  QUERY = 4
-  CRED_FACT = 5
-  CONSTRAINT = 6
-  CONSTDEF = 7
-  ANNOTATED_DISJUNCTION = 8
-  NEURAL_RULE = 11
-  NEURAL_AD = 12
-
-class Terms(enum.Enum):
-  UND    = "undef"
-  NEG    = "not"
-  ADD    = "+"
-  SUB    = "-"
-  DIV    = "/"
-  MOD    = "\\"
-  MUL    = "*"
-  NEQ    = "!="
-  EQQ    = "="
-  LES    = "<"
-  GRT    = ">"
-  LEQ    = "<="
-  GEQ    = ">="
-  EXPAND = "+"
-  LEARN  = "?"
-  LPATH = "LPATH"
-  URL = "URL"
 
 class StableTransformer(lark.Transformer):
   def __init__(self, _):
     super().__init__()
     self.semantics = Semantics.STABLE
+    self.torch_scope = {}
 
   @staticmethod
   def pack(t: str, rep: str = None, val = None, scope: dict = {}) -> tuple[str, str, str, dict]:
@@ -153,6 +123,45 @@ class StableTransformer(lark.Transformer):
 
   @staticmethod
   def join_scope(A: list) -> dict: return dict((y, None) for S in A for y in S[3])
+
+  @staticmethod
+  def find_data_pred(D: dict, body: list, which: str, name: str) -> list:
+    t = None
+    for d in body:
+      if d[2][1] in D:
+        t = D[d[2][1]]
+        break
+    if t is None: raise ValueError(f"Neural {which} {name} must contain a data predicate!")
+    return t
+
+  @staticmethod
+  def register_nrule(TNR: list, NR: list, D: list):
+    for name, inp, net, body, rep in TNR:
+      t = StableTransformer.find_data_pred(D, body, "rule", name)
+      # Ground rules.
+      rules = [None for _ in range(len(t))]
+      for i in range(len(t)):
+        a = t[i].arg
+        if len(body) > 1:
+          rules[i] = f"{name}({t[i].arg}) :- {', '.join('' if b[2][0] else 'not ' + b[2][1] for b in body)}."
+        else: # neural fact
+          rules[i] = f"{name}({t[i].arg})."
+      NR.append(NeuralRule(rules, name, net, rep, t))
+
+  @staticmethod
+  def register_nad(TNA: list, NA: list, D: list):
+    for name, inp, vals, net, body, rep in TNA:
+      t = StableTransformer.find_data_pred(D, body, "AD", name)
+      # Ground rules.
+      rules = [[None for _ in range(len(vals))] for _ in range(len(t))]
+      V = list(vals.keys())
+      for i in range(len(t)):
+        for j in range(len(V)):
+          if len(body) > 1:
+            rules[i][j] = f"{name}({V[j]}, {t[i].arg}) :- {', '.join('' if b[2][0] else 'not ' + b[2][1] for b in body)}."
+          else:
+            rules[i][j] = f"{name}({V[j]}, {t[i].arg})."
+      NA.append(NeuralAD(rules, name, V, net, rep, t))
 
   # Terminals.
   def UND(self, u): return self.pack("UND", str(u))
@@ -164,18 +173,17 @@ class StableTransformer(lark.Transformer):
   def ID(self, i): return self.pack("ID", val = int(i))
   def OP(self, o): return self.pack("OP", str(o))
   def PROB(self, p): return self.pack("PROB", val = float(fractions.Fraction(p.value)))
-  def PATH(self, p): return self.pack("LPATH" if p[0].type == Terms.LPATH else "URL", str(p))
   def EXPAND(self, e): return self.pack("EXPAND",  str(e))
   def LEARN(self, l): return self.pack("LEARN", str(l))
 
+  # Path.
+  def path(self, p): return self.pack(p[0].type, p[0].value)
+
   # Set.
   def set(self, S):
-    L = [str(x) for x in S]
-    M = set()
-    for x in L:
-      if x in M: raise ValueError("set must contain only unique constants!")
-      M.append(x)
-    return self.pack("set", val = M)
+    M = dict((x[1], None) for x in S)
+    if len(M) != len(S): raise ValueError("set must contain only unique constants!")
+    return self.pack("set", f"{{{','.join(x for x in M.keys())}}}", M)
 
   # Intervals.
   def interval(self, I): return self.pack("interval", f"{I[0][2]}..{I[1][2]}")
@@ -189,7 +197,7 @@ class StableTransformer(lark.Transformer):
   # Literals.
   def lit(self, P):
     s = P[0][0] != "NEG"
-    return self.pack("lit", " ".join(getnths(P, 1)), P[0][2] if s else P[1][2], self.join_scope(P))
+    return self.pack("lit", " ".join(getnths(P, 1)), (s, P[0][2] if s else P[1][2]), self.join_scope(P))
   def grlit(self, P): return self.lit(P)
 
   # Binary operations.
@@ -236,7 +244,7 @@ class StableTransformer(lark.Transformer):
       hscope = h[3]
       body_preds = [x for x in b[2] if x[0] != "bop"]
       h_s = ", ".join(hscope) + ", " if len(hscope) > 0 else ""
-      b_s = ", ".join(map(lambda x: f"0, {x[1][4:]}" if x[1][:4] == "not " else f"1, {x[1]}", body_preds))
+      b_s = ", ".join(map(lambda x: f"1, {x[1]}" if x[2][0] else f"0, {x[1][4:]}", body_preds))
       # The number of body arguments is twice as we need to store the sugoal's sign and symbol.
       u = f"{name}(@unify(\"{p}\", {name}, {int(l)}, {len(hscope)}, {2*len(body_preds)}, {h_s}{b_s})) :- {b[1]}."
       return self.pack("prule", "", ProbRule(p, o, is_prop = False, unify = u, learnable = l))
@@ -285,19 +293,80 @@ class StableTransformer(lark.Transformer):
       P.append(1-s)
       F.append(unique_fact())
     return self.pack("ad", "", AnnotatedDisjunction(P, F, learnable), AD[0][3])
+  def adr(self, AD):
+    raise NotImplementedError
 
-  # Neural constructs.
-  def nrule(self, A: list):
-    name = A[0][0]
-    inp = A[1][0]
-    where_from, net = A[2]
+  # Data special predicate.
+  def data(self, D):
+    name, arg = D[0][1], D[1][1]
+    data = D[2][1]
+    import pandas, numpy
+    return self.pack("data", f"{name}({arg}).", \
+                     Data(name, arg, pandas.read_csv(data, dtype = numpy.float32)))
+
+  # Torch block.
+  def torch(self, T):
+    exec("import torch\n\n" + T[0].value, self.torch_scope)
+    return self.pack("torch", "")
+
+  # Local hubconf repo.
+  def LOCAL_NET(self, L): return self.pack("LOCAL_NET", str(L))
+  # GitHub hubconf repo.
+  def GITHUB(self, H): return self.pack("GITHUB", str(H))
+  # Python function.
+  def PY_FUNC(self, P): return self.pack("PY_FUNC", str(P))
+
+  # Hub network.
+  def hub(self, H):
+    # Function name or entrypoint.
+    func = H[0][1]
+    # Network is coming from a Torch block.
+    if len(H) == 1:
+      if func not in self.torch_scope:
+        raise ValueError(f"No network definition {func} found! Either define it in a PyTorch "
+                         "block or specify a PyTorch Hub model (local or from GitHub).")
+      N = self.torch_scope[func]()
+      rep = f"\"{func}\""
+    # Network is coming from PyTorch Hub.
+    else:
+      try:
+        import torch
+      except ModuleNotFoundError:
+        raise ModuleNotFoundError("PyTorch not found! PyTorch must be installed for neural rules "
+                                  "and neural ADs.")
+      path, source = H[1][1], "github" if H[1][0] == "GITHUB" else "local"
+      N = torch.hub.load(path, func, source = source, trust_repo = "check")
+      rep = f"\"{func}\" on \"{path}\" at \"{source}\""
+    return self.pack("hub", "", (N, rep))
+
+  # Neural rule.
+  def nrule(self, A):
+    name = A[0][1]
+    inp = A[1][1]
+    net, hub_repr = A[2][2]
     body = A[3:]
+    scope = self.join_scope(A)
 
-    V = [v[3] for v in body]
-    if inp not in V:
-      raise ValueError(f"Neural rule {name} is unsafe!")
-    for a in body:
-      pass
+    if len(scope) != 1:  raise ValueError(f"Neural rule {name} is not grounded!")
+    if inp not in scope: raise ValueError(f"Neural rule {name} is unsafe!")
+
+    rep = f"?::{name}({inp}) as {hub_repr} :- {', '.join(getnths(body, 1))}."
+    return self.pack("nrule", "", (name, inp, net, body, rep))
+
+  # Neural annotated disjunction.
+  def nad(self, A):
+    name = A[0][1]
+    inp = A[1][1]
+    vals = A[2][2]
+    net, hub_repr = A[3][2]
+    body = A[4:]
+    scope = self.join_scope(A)
+
+    if len(scope) != 1:  raise ValueError(f"Neural annotated disjunction {name} is not grounded!")
+    if inp not in scope: raise ValueError(f"Neural annotated disjunction {name} is unsafe!")
+
+    rep = f"?::{name}({inp}, {A[2][1]}) as {hub_repr} :- {', '.join(getnths(body, 1))}."
+    return self.pack("nad", "", (name, inp, vals, net, body, rep))
 
   # Constraint.
   def constraint(self, C): return self.pack("constraint", f":- {C[0][1]}.")
@@ -327,14 +396,25 @@ class StableTransformer(lark.Transformer):
     CF = []
     # Annotated Disjunction.
     AD = []
+    # Neural arguments and data.
+    TNR, TNA = [], []
+    D = {}
+    # Actual neural rules and neural ADs.
+    NR, NA = [], []
     # Mapping.
-    M = {"pfact": PF, "prule": PR, "query": Q, "cfact": CF, "ad": AD}
+    M = {"pfact": PF, "prule": PR, "query": Q, "cfact": CF, "ad": AD, "nrule": TNR, "nad": TNA}
     for t, L, O, _ in C:
       if len(L) > 0: push(P, L)
       if t in M: push(M[t], O)
+      if t == "data":
+        if O.name in D: D[O.name].append(O)
+        else: D[O.name] = [O]
+    # Deal with ungrounded probabilistic rules.
     for r in PR:
       if r.is_prop: PF.append(r.prop_pf)
-    return Program("\n".join(P), PF, PR, Q, CF, AD, semantics = self.semantics)
+    self.register_nrule(TNR, NR, D)
+    self.register_nad(TNA, NA, D)
+    return Program("\n".join(P), PF, PR, Q, CF, AD, NR, NA, semantics = self.semantics)
 
 class PartialTransformer(StableTransformer):
   def __init__(self, sem: str):
@@ -362,8 +442,8 @@ class PartialTransformer(StableTransformer):
     return T
 
   def rule(self, R):
-    b1 = ", ".join(map(lambda x: f"not _{x[1][4:]}" if x[1][:4] == "not " else x[1], R[1][2]))
-    b2 = ", ".join(map(lambda x: x[1] if (x[1][:4] == "not ") or PartialTransformer.has_binop(x) else f"_{x[1]}", R[1][2]))
+    b1 = ", ".join(map(lambda x: x[1] if x[2][0] else f"not _{x[1][4:]}", R[1][2]))
+    b2 = ", ".join(map(lambda x: f"_{x[1]}" if x[2][0] or PartialTransformer.has_binop(x) else x[1], R[1][2]))
     h1, h2 = R[0][1], ", ".join(map(lambda x: f"_{x[1]}", R[0][2]))
     for h in R[0][2]: self.PT.add(h[1])
     # for x in r[1][3]:
@@ -375,8 +455,8 @@ class PartialTransformer(StableTransformer):
     e = "EXPAND" in getnths(R, 0)
     p = R[0][2]
     h, b = R[-2], R[-1]
-    tr_negs = lambda x: f"not _{x[1][4:]}" if x[1][:4] == "not " else x[1]
-    tr_pos  = lambda x: x[1] if (x[1][:4] == "not ") or PartialTransformer.has_binop(x) else f"_{x[1]}"
+    tr_negs = lambda x: x[1] if x[2][0] else f"not _{x[1][4:]}"
+    tr_pos  = lambda x: f"_{x[1]}" if x[2][0] or PartialTransformer.has_binop(x) else x[1]
     b1 = ", ".join(map(tr_negs, b[2]))
     b2 = ", ".join(map(tr_pos, b[2]))
     o1, o2 = f"{h[1]} :- {b1}", f"_{h[1]} :- {b2}"
@@ -392,7 +472,7 @@ class PartialTransformer(StableTransformer):
       hscope = h[3]
       body_preds = [x for x in b[2] if x[0] != "bop"]
       h_s = ", ".join(hscope) + ", " if len(hscope) > 0 else ""
-      b1_s = ", ".join(map(lambda x: f"0, _{x[1][4:]}" if x[1][:4] == "not " else f"1, {x[1]}", body_preds))
+      b1_s = ", ".join(map(lambda x: f"1, {x[1]}" if x[2][0] else f"0, _{x[1][4:]}", body_preds))
       # Let the grounder deal with the _f rule.
       u1 = f"{name}(@unify(\"{p}\", {name}, {int(l)}, {len(hscope)}, {2*len(body_preds)}, {h_s}{b1_s})) :- {b1}."
       return self.pack("prule", "", ProbRule(p, o1, is_prop = False, unify = u1, learnable = l))
@@ -413,6 +493,8 @@ class PartialTransformer(StableTransformer):
     CF = []
     # Annotated Disjunction.
     AD = []
+    # Neural rules and ADs.
+    NR, NA = [], []
     # Mapping.
     M = {"pfact": PF, "prule": PR, "query": Q, "cfact": CF, "ad": AD}
     for t, L, O, _ in C:
@@ -421,7 +503,7 @@ class PartialTransformer(StableTransformer):
       if t == "prule" and isinstance(O, collections.abc.Iterable) and O[0].is_prop:
         PF.append(O[0].prop_pf)
     P.extend(f"_{x} :- {x}." for x in self.PT)
-    return Program("\n".join(P), PF, PR, Q, CF, AD, semantics = self.semantics, \
+    return Program("\n".join(P), PF, PR, Q, CF, AD, NR, NA, semantics = self.semantics, \
                    stable_p = self.stable_p)
 
   def transform(self, tree):

@@ -81,8 +81,71 @@ class AnnotatedDisjunction:
   def __getitem__(self, i: int) -> tuple[float, str]:
     return self.P[i], self.F[i]
   def __str__(self) -> str:
-    return "; ".join([f"{round(self.P[i], ndigits = 3)}{'?' if self.learnable else ''}::{self.F[i]}" for i in range(len(self.P))])
+    return "; ".join([f"{(p := round(self.P[i], ndigits = 3) if p > 0 else '*')}{'?' if self.learnable else ''}::{self.F[i]}" for i in range(len(self.P))])
   def __repr__(self) -> str: return self.__str__()
+
+# Check torch.
+has_torch = False
+try:
+  import torch.utils.data
+  has_torch = True
+except ModuleNotFoundError:
+  raise ModuleNotFoundError("PyTorch not found! PyTorch must be installed for neural rules "
+                            "and neural ADs to be used in programs.")
+
+# Extend object to avoid errors when torch is not present.
+class Data(torch.utils.data.Dataset if has_torch else object):
+  def __init__(self, name: str, arg: str, data):
+    self.name = name
+    self.arg = arg
+    import pandas
+    if issubclass(type(data), pandas.DataFrame): self.data = torch.tensor(data.to_numpy())
+
+  def __len__(self): return len(self.data)
+  def __getitem__(self, i: int): return self.data[i]
+  def __str__(self): return f"{self.name}({self.arg}) ~ {self.data.shape}"
+  def __repr__(self): return self.__str__()
+
+class NeuralRule:
+  def __init__(self, rules: list, name: str, net, rep: str, data: list):
+    self.rules = rules
+    self.name  = name
+    self.net   = net
+    self.rep   = rep
+    self.data  = data
+    self.input = torch.stack(tuple(d.data for d in data), dim = 0)
+
+    # Validate net during parsing so that it won't blow in our faces during inference or learning.
+    assert self.pr().ndim == 3, \
+           "Networks embedded onto neural rules must output a single probability!"
+
+  def pr(self):
+    with torch.inference_mode():
+      return self.net(self.input).numpy()
+
+  def __str__(self): return self.rep
+  def __repr__(self): return self.__str__()
+
+class NeuralAD:
+  def __init__(self, rules: list, name: str, vals: list, net, rep: str, data: list):
+    self.rules = rules
+    self.name  = name
+    self.net   = net
+    self.rep   = rep
+    self.data  = data
+    self.vals  = vals
+    self.input = torch.stack(tuple(d.data for d in data), dim = 0)
+
+    # Validate net during parsing so that it won't blow in our faces during inference or learning.
+    assert self.pr().ndim == 3, \
+           "Networks embedded onto neural rules must output a 1D probability tensor!"
+
+  def __str__(self): return self.rep
+  def __repr__(self): return self.__str__()
+
+  def pr(self):
+    with torch.inference_mode():
+      return self.net(self.input).numpy()
 
 class Semantics(enum.IntEnum):
   STABLE = 0
@@ -162,8 +225,8 @@ class Program:
   """
 
   def __init__(self, P: str, PF: list[ProbFact], PR: list[ProbRule], Q: list[Query], \
-               CF: list[CredalFact], AD: list[AnnotatedDisjunction], \
-               semantics: Semantics = Semantics.STABLE, stable_p = None):
+               CF: list[CredalFact], AD: list[AnnotatedDisjunction], NR: list[NeuralRule], \
+               NA: list[NeuralAD], semantics: Semantics = Semantics.STABLE, stable_p = None):
     """
     Constructs a PLP out of a logic program `P`, probabilistic facts `PF`, credal facts `CF` and
     queries `Q`.
@@ -174,12 +237,25 @@ class Program:
     self.Q = Q
     self.CF = CF
     self.AD = AD
+    self.NR = NR
+    self.NA = NA
 
     self.gr_P = ""
 
     self.semantics = semantics
     self.stable = stable_p
 
+  @staticmethod
+  def str_if_contains(s: str, L):
+    return f"\n{s}:\n{L}," if len(L) > 0 else ""
+
   def __str__(self) -> str:
-    return f"<Logic Program:\n{self.P},\nProbabilistic Facts:\n{self.PF},\nCredal Facts:\n{self.CF},\nAnnotated Disjunctions:\n{self.AD},\nProbabilistic Rules:\n{self.PR},\nQueries:\n{self.Q}>"
+    return f"<Logic Program:\n{self.P}," + \
+           self.str_if_contains("Probabilistic Facts", self.PF) + \
+           self.str_if_contains("Credal Facts", self.CF) + \
+           self.str_if_contains("Annotated Disjunctions", self.AD) + \
+           self.str_if_contains("Probabilistic Rules", self.PR) + \
+           self.str_if_contains("Neural Rules", self.NR) + \
+           self.str_if_contains("Neural Annotated Disjunctions", self.NA) + \
+           f"\nQueries:\n{self.Q}>"
   def __repr__(self) -> str: return self.__str__()
