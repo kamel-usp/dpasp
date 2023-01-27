@@ -28,7 +28,7 @@ bool init_storage(storage_t *s, program_t *P, array_bool_t (*Pn)[4],
   if (!P->CF_n) { if (!setup_abcd(&s->a, &s->b, &s->c, &s->d, P->Q_n, sizeof(double))) goto error; }
   s->busy_procs = busy_procs; s->lstable_sat = lstable_sat;
   s->pid = id;
-  s->fail = false;
+  s->fail = s->warn = false;
   if (!init_total_choice(&s->theta, total_choice_n, ad, ad_n)) goto error;
   return true;
 error:

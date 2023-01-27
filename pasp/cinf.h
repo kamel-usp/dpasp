@@ -45,7 +45,7 @@ typedef struct {
   array_double_t (*K)[4];
   program_t *P;
   total_choice_t theta;
-  bool fail, *busy_procs, lstable_sat;
+  bool fail, *busy_procs, lstable_sat, warn;
   size_t pid;
   pthread_mutex_t *mu, *wakeup;
   pthread_cond_t *avail;

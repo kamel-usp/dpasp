@@ -208,6 +208,8 @@ solve_error:
 solve_cleanup:
     if (!(clingo_solve_handle_close(handle) && ok)) goto cleanup;
   }
+  /* Probabilities are wrong when a total choice has no model. */
+  if (m == 0) st->warn = true;
   /* Compute ℙ(θ). */
   p = prob_total_choice(P->PF, PF_n, CF_n, theta, theta->theta_ad);
   for (i = 0; i < Q_n; ++i) {
@@ -318,7 +320,8 @@ solve_error:
 solve_cleanup:
     if (!(clingo_solve_handle_close(handle) && ok)) goto cleanup;
   }
-
+  /* Probabilities are wrong when a total choice has no model. */
+  if (m == 0) st->warn = true;
   p = prob_total_choice(P->PF, PF_n, 0, theta, theta->theta_ad);
   for (i = 0; i < Q_n; ++i) {
     a[i] += (count_q_e[i]*p)/m;
@@ -371,6 +374,12 @@ bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat, psemantics_t pse
     } else if (!dispatch_job(&theta, &wakeup, busy_procs, S, num_procs, pool, &avail, compute_func)) goto cleanup;
   } while (incr_total_choice(&theta));
   thpool_wait(pool);
+
+  for (i = 0; i < num_procs; ++i)
+    if (S[i].warn) {
+      fputws(L"Warning: found total choice with no model. Probabilities may be incorrect.", stdout);
+      break;
+    }
 
   if (!has_credal) {
     a = S[0].a; b = S[0].b; c = S[0].c; d = S[0].d;
