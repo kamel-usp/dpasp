@@ -248,7 +248,7 @@ bool from_python_prob_fact(PyObject *py_pf, prob_fact_t *pf) {
     PyErr_SetString(PyExc_AttributeError, "could not access field _rep of supposed Symbol object!");
     goto cleanup;
   }
-  cl_f = PyLong_AsUnsignedLong(py_cl_f_rep);
+  cl_f = PyLong_AsUnsignedLongLong(py_cl_f_rep);
   if ((cl_f == (clingo_symbol_t) -1) && !PyErr_Occurred()) {
     PyErr_SetString(PyExc_TypeError, "field cl_f of ProbFact must be a Symbol!");
     goto cleanup;
@@ -335,7 +335,7 @@ bool from_python_credal_fact(PyObject *py_cf, credal_fact_t *cf) {
     PyErr_SetString(PyExc_AttributeError, "could not access field _rep of supposed Symbol object!");
     goto cleanup;
   }
-  cl_f = PyLong_AsUnsignedLong(py_cl_f_rep);
+  cl_f = PyLong_AsUnsignedLongLong(py_cl_f_rep);
   if ((cl_f == (clingo_symbol_t) -1) && !PyErr_Occurred()) {
     PyErr_SetString(PyExc_TypeError, "field cl_f of CredalFact must be a Symbol!");
     goto cleanup;
@@ -408,12 +408,12 @@ bool from_python_query(PyObject *py_q, query_t *q, semantics_t sem) {
     }
     rep = PyObject_GetAttrString(PySequence_Fast_GET_ITEM(t, 0), "_rep");
     if (!rep) goto cleanup;
-    Q[i] = PyLong_AsUnsignedLong(rep);
+    Q[i] = PyLong_AsUnsignedLongLong(rep);
     Q_s[i] = PyLong_AsLong(PySequence_Fast_GET_ITEM(t, 1));
     if (sem) { /* sem != (STABLE_SEMANTICS = 0) */
       PyObject *u = PyObject_GetAttrString(PySequence_Fast_GET_ITEM(t, 2), "_rep");
       if (!u) { Py_DECREF(rep); Py_DECREF(t); goto cleanup; }
-      Q_u[i] = PyLong_AsUnsignedLong(u);
+      Q_u[i] = PyLong_AsUnsignedLongLong(u);
       Py_DECREF(u);
     }
     Py_DECREF(rep);
@@ -430,12 +430,12 @@ bool from_python_query(PyObject *py_q, query_t *q, semantics_t sem) {
     }
     rep = PyObject_GetAttrString(PySequence_Fast_GET_ITEM(t, 0), "_rep");
     if (!rep) goto cleanup;
-    E[i] = PyLong_AsUnsignedLong(rep);
+    E[i] = PyLong_AsUnsignedLongLong(rep);
     E_s[i] = PyLong_AsLong(PySequence_Fast_GET_ITEM(t, 1));
     if (sem) { /* sem != (STABLE_SEMANTICS = 0) */
       PyObject *u = PyObject_GetAttrString(PySequence_Fast_GET_ITEM(t, 2), "_rep");
       if (!u) { Py_DECREF(rep); Py_DECREF(t); goto cleanup; }
-      E_u[i] = PyLong_AsUnsignedLong(u);
+      E_u[i] = PyLong_AsUnsignedLongLong(u);
       Py_DECREF(u);
     }
     Py_DECREF(rep);
@@ -539,7 +539,7 @@ bool from_python_ad(PyObject *py_ad, annot_disj_t *ad) {
       PyErr_SetString(PyExc_AttributeError, "field cl_F of AnnotatedDisjunction must be a list of Symbols!");
       goto cleanup;
     }
-    cl_F[i] = PyLong_AsUnsignedLong(rep);
+    cl_F[i] = PyLong_AsUnsignedLongLong(rep);
     if ((cl_F[i] == (clingo_symbol_t) -1) && !PyErr_Occurred()) {
       PyErr_SetString(PyExc_TypeError, "field _rep of elements in AnnotatedDisjunction.cl_F must be a Symbol!");
       goto cleanup;
