@@ -1,14 +1,19 @@
 #include "cinf.h"
 #include "cutils.h"
 
-double prob_total_choice(prob_fact_t *phi, size_t n, size_t CF_n, total_choice_t *theta,
-    uint8_t *theta_ad) {
+double prob_total_choice(prob_fact_t *phi, size_t n, size_t CF_n, neural_rule_t *nu,
+    size_t m, total_choice_t *theta, uint8_t *theta_ad) {
   size_t i = 0, ad_n = theta->ad_n;
   double p = 1.0;
   bool t;
   for (; i < n; ++i) {
     t = bitvec_GET(&theta->pf, i + CF_n);
     p *= t*phi[i].p + (!t)*(1.0-phi[i].p);
+  }
+  for (i = 0; i < m; ++i) {
+    t = bitvec_GET(&theta->pf, i + CF_n + n);
+    register size_t q = nu[i].P[i*nu[i].m];
+    p *= t*q + (!t)*q;
   }
   for (i = 0; i < ad_n; ++i) p *= theta->ad[i].P[theta_ad[i]];
   return p;
@@ -205,6 +210,24 @@ bool prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
     if (!CHOICE_IS_TRUE(theta, i + P->CF_n)) continue;
     if (!clingo_backend_add_atom(back, &P->PF[i].cl_f, &a)) return false;
     if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) return false;
+  }
+  /* Add the neural rules according to the total rule. */
+  {
+    clingo_atom_t h;
+    clingo_literal_t B[64];
+    for (i = 0; i < P->NR_n; ++i) {
+      for (size_t j = 0; j < P->NR[i].n; ++j) {
+        if (!CHOICE_IS_TRUE(theta, i + P->CF_n + P->PF_n)) continue;
+        if (!clingo_backend_add_atom(back, &P->NR[i].H[j], &h)) return false;
+        for (size_t b = 0; b < P->NR[i].k; ++b) {
+          size_t u = j*P->NR[i].k+b;
+          if (!clingo_backend_add_atom(back, &P->NR[i].B[u], (clingo_atom_t*) &B[b]))
+            return false;
+          if (P->NR[i].S[u]) B[b] = -B[b];
+        }
+        if (!clingo_backend_rule(back, false, &h, 1, B, P->NR[i].k)) return false;
+      }
+    }
   }
   /* Add the annotated disjunction rules according to the total rule encoded by theta_ad. */
   for (i = 0; i < theta->ad_n; ++i) {

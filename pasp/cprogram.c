@@ -1,5 +1,8 @@
 #include "cprogram.h"
 
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#include <numpy/arrayobject.h>
+
 #include <locale.h>
 #include <wchar.h>
 
@@ -38,6 +41,19 @@ void free_annot_disj_contents(annot_disj_t *ad) {
   free(ad->cl_F);
 }
 void free_annot_disj(annot_disj_t *ad) { free_annot_disj_contents(ad); free(ad); }
+
+bool update_pr_neural_rule(neural_rule_t *nr) {
+  PyArrayObject *py_P = (PyArrayObject*) PyObject_CallMethod(nr->self, "pr", NULL);
+  if (!py_P) return false;
+  nr->P = PyArray_DATA(py_P);
+  return true;
+}
+
+void free_neural_rule_contents(neural_rule_t *nr) {}
+void free_neural_rule(neural_rule_t *nr) { free_neural_rule_contents(nr); free(nr); }
+
+void free_neural_annot_disj_contents(neural_annot_disj_t *nad) {}
+void free_neural_annot_disj(neural_annot_disj_t *nad) { free_neural_annot_disj_contents(nad); free(nad); }
 
 bool print_query_with_buffer(query_t *q, string_t *s) {
   size_t i;
@@ -114,6 +130,10 @@ void free_program_contents(program_t *P) {
   free(P->CF);
   for (i = 0; i < P->AD_n; ++i) free_annot_disj_contents(&P->AD[i]);
   free(P->AD);
+  for (i = 0; i < P->NR_n; ++i) free_neural_rule_contents(&P->NR[i]);
+  free(P->NR);
+  for (i = 0; i < P->NA_n; ++i) free_neural_annot_disj_contents(&P->NA[i]);
+  free(P->NA);
   Py_DECREF(P->py_gr_P);
   if (P->stable) free_program(P->stable);
 }
@@ -559,9 +579,134 @@ cleanup:
   return false;
 }
 
+bool from_python_neural_rule(PyObject *py_nr, neural_rule_t *nr) {
+  PyObject *py_m = NULL;
+  PyArrayObject *py_H, *py_B, *py_S = py_B = py_H = NULL;
+  clingo_symbol_t *H = NULL, *B = NULL;
+  bool *S = NULL;
+  size_t n, m, k = 0;
+  bool ok = false;
+
+  py_m = PyObject_GetAttrString(py_nr, "m");
+  if (!py_m) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field m of supposed NeuralRule object!");
+    goto cleanup;
+  }
+  m = PyLong_AsUnsignedLong(py_m);
+  if ((m == (unsigned long) -1) && !PyErr_Occurred()) {
+    PyErr_SetString(PyExc_TypeError, "field m of NeuralRule must be an integer!");
+    goto cleanup;
+  }
+
+  py_H = (PyArrayObject*) PyObject_GetAttrString(py_nr, "H");
+  if (!py_H) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field H of supposed NeuralRule object!");
+    goto cleanup;
+  }
+  H = (clingo_symbol_t*) PyArray_DATA(py_H);
+  n = PyArray_SIZE(py_H);
+
+  PyObject *_py_B = PyObject_GetAttrString(py_nr, "B");
+  if (!_py_B) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field B of supposed NeuralRule object!");
+    goto cleanup;
+  }
+  if (_py_B != Py_None) {
+    py_B = (PyArrayObject*) _py_B;
+    k = PyArray_SIZE(py_B)/n;
+    B = PyArray_DATA(py_B);
+
+    py_S = (PyArrayObject*) PyObject_GetAttrString(py_nr, "S");
+    if (!py_S) {
+      PyErr_SetString(PyExc_AttributeError, "could not access field S of supposed NeuralRule object!");
+      goto cleanup;
+    }
+    S = PyArray_DATA(py_S);
+  }
+
+  nr->m = m; nr->n = n; nr->k = k;
+  nr->P = NULL;
+  nr->H = H; nr->B = B; nr->S = S;
+  nr->self = py_nr;
+
+  ok = true;
+cleanup:
+  if (!ok) { free(H); free(B); free(S); }
+  Py_XDECREF(py_m); Py_XDECREF(py_H); Py_XDECREF(py_B); Py_XDECREF(py_S);
+  return ok;
+}
+
+bool from_python_neural_ad(PyObject *py_nad, neural_annot_disj_t *nad) {
+  PyObject *py_m = NULL;
+  PyArrayObject *py_H, *py_B, *py_S = py_B = py_H = NULL;
+  clingo_symbol_t *H = NULL, *B = NULL;
+  bool *S = NULL;
+  size_t n, m, v, k = 0;
+  bool ok = false;
+
+  py_m = PyObject_GetAttrString(py_nad, "m");
+  if (!py_m) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field m of supposed NeuralRule object!");
+    goto cleanup;
+  }
+  m = PyLong_AsUnsignedLong(py_m);
+  if ((m == (unsigned long) -1) && !PyErr_Occurred()) {
+    PyErr_SetString(PyExc_TypeError, "field m of NeuralRule must be an integer!");
+    goto cleanup;
+  }
+
+  PyObject *py_V = PyObject_GetAttrString(py_nad, "vals");
+  if (!py_V) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field vals of supposed NeuralRule object!");
+    goto cleanup;
+  }
+  PyObject *py_V_L = PySequence_Fast(py_V, "field NeuralAD.vals must either be a list or tuple!");
+  if (!py_V_L) { Py_DECREF(py_V); goto cleanup; }
+  v = PySequence_Fast_GET_SIZE(py_V_L);
+  Py_DECREF(py_V_L);
+
+  py_H = (PyArrayObject*) PyObject_GetAttrString(py_nad, "H");
+  if (!py_H) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field H of supposed NeuralRule object!");
+    goto cleanup;
+  }
+  H = (clingo_symbol_t*) PyArray_DATA(py_H);
+  n = PyArray_SIZE(py_H)/v;
+
+  PyObject *_py_B = PyObject_GetAttrString(py_nad, "B");
+  if (!_py_B) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field B of supposed NeuralRule object!");
+    goto cleanup;
+  }
+  if (_py_B != Py_None) {
+    py_B = (PyArrayObject*) _py_B;
+    k = PyArray_SIZE(py_B)/n;
+    B = PyArray_DATA(py_B);
+
+    py_S = (PyArrayObject*) PyObject_GetAttrString(py_nad, "S");
+    if (!py_S) {
+      PyErr_SetString(PyExc_AttributeError, "could not access field S of supposed NeuralRule object!");
+      goto cleanup;
+    }
+    S = PyArray_DATA(py_S);
+  }
+
+  nad->m = m; nad->n = n; nad->k = k;
+  nad->P = NULL;
+  nad->H = H; nad->B = B; nad->S = S;
+  nad->self = py_nad;
+
+  ok = true;
+cleanup:
+  if (!ok) { free(H); free(B); free(S); }
+  Py_XDECREF(py_m); Py_XDECREF(py_H); Py_XDECREF(py_B); Py_XDECREF(py_S);
+  return ok;
+}
+
 bool from_python_program(PyObject *py_P, program_t *P) {
   PyObject *py_P_P, *py_P_PF, *py_P_PF_L, *py_P_PR, *py_P_PR_L, *py_P_Q, *py_P_Q_L, *py_P_CF, *py_P_AD, *py_P_CF_L, *py_P_sem = NULL;
   PyObject *py_P_AD_L = py_P_AD = py_P_CF_L = py_P_CF = py_P_Q_L = py_P_Q = py_P_PR_L = py_P_PR = py_P_PF_L = py_P_PF = py_P_P = NULL;
+  PyObject *py_P_NR, *py_P_NR_L, *py_P_NA, *py_P_NA_L = py_P_NA = py_P_NR_L = py_P_NR = NULL;
   PyObject *py_P_stable = NULL, *py_gr_P = NULL;
   const char *P_P, *gr_P;
   prob_fact_t *PF = NULL;
@@ -569,6 +714,8 @@ bool from_python_program(PyObject *py_P, program_t *P) {
   query_t *Q = NULL;
   credal_fact_t *CF = NULL;
   annot_disj_t *AD = NULL;
+  neural_rule_t *NR = NULL;
+  neural_annot_disj_t *NA = NULL;
   program_t *stable = NULL;
   semantics_t sem;
   size_t i;
@@ -607,6 +754,16 @@ bool from_python_program(PyObject *py_P, program_t *P) {
   py_P_AD = PyObject_GetAttrString(py_P, "AD");
   if (!py_P_AD) {
     PyErr_SetString(PyExc_AttributeError, "could not access field AD of supposed Program object!");
+    goto cleanup;
+  }
+  py_P_NR = PyObject_GetAttrString(py_P, "NR");
+  if (!py_P_NR) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field NR of supposed Program object!");
+    goto cleanup;
+  }
+  py_P_NA = PyObject_GetAttrString(py_P, "NA");
+  if (!py_P_NA) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field NA of supposed Program object!");
     goto cleanup;
   }
 
@@ -651,12 +808,18 @@ bool from_python_program(PyObject *py_P, program_t *P) {
   if (!py_P_CF_L) goto cleanup;
   py_P_AD_L = PySequence_Fast(py_P_AD, "field Program.AD must either be a list or tuple!");
   if (!py_P_AD_L) goto cleanup;
+  py_P_NR_L = PySequence_Fast(py_P_NR, "field Program.NR must either be a list or tuple!");
+  if (!py_P_NR_L) goto cleanup;
+  py_P_NA_L = PySequence_Fast(py_P_NA, "field Program.NA must either be a list or tuple!");
+  if (!py_P_NA_L) goto cleanup;
 
   P->PF_n = PySequence_Fast_GET_SIZE(py_P_PF_L);
   P->PR_n = PySequence_Fast_GET_SIZE(py_P_PR_L);
   P->Q_n = PySequence_Fast_GET_SIZE(py_P_Q_L);
   P->CF_n = PySequence_Fast_GET_SIZE(py_P_CF_L);
   P->AD_n = PySequence_Fast_GET_SIZE(py_P_AD_L);
+  P->NR_n = PySequence_Fast_GET_SIZE(py_P_NR_L);
+  P->NA_n = PySequence_Fast_GET_SIZE(py_P_NA_L);
 
   PF = (prob_fact_t*) malloc(P->PF_n*sizeof(prob_fact_t));
   if (!PF) goto nomem;
@@ -668,6 +831,10 @@ bool from_python_program(PyObject *py_P, program_t *P) {
   if (!CF) goto nomem;
   AD = (annot_disj_t*) malloc(P->AD_n*sizeof(annot_disj_t));
   if (!AD) goto nomem;
+  NR = (neural_rule_t*) malloc(P->NR_n*sizeof(neural_rule_t));
+  if (!NR) goto nomem;
+  NA = (neural_annot_disj_t*) malloc(P->NA_n*sizeof(neural_annot_disj_t));
+  if (!NA) goto nomem;
 
   for (i = 0; i < P->PF_n; ++i)
     if (!from_python_prob_fact(PySequence_Fast_GET_ITEM(py_P_PF_L, i), &PF[i])) goto cleanup;
@@ -679,6 +846,10 @@ bool from_python_program(PyObject *py_P, program_t *P) {
     if (!from_python_credal_fact(PySequence_Fast_GET_ITEM(py_P_CF_L, i), &CF[i])) goto cleanup;
   for (i = 0; i < P->AD_n; ++i)
     if (!from_python_ad(PySequence_Fast_GET_ITEM(py_P_AD_L, i), &AD[i])) goto cleanup;
+  for (i = 0; i < P->NR_n; ++i)
+    if (!from_python_neural_rule(PySequence_Fast_GET_ITEM(py_P_NR_L, i), &NR[i])) goto cleanup;
+  for (i = 0; i < P->NA_n; ++i)
+    if (!from_python_neural_ad(PySequence_Fast_GET_ITEM(py_P_NA_L, i), &NA[i])) goto cleanup;
 
   P->P = P_P;
   P->P_obj = py_P_P;
@@ -687,6 +858,8 @@ bool from_python_program(PyObject *py_P, program_t *P) {
   P->Q = Q;
   P->CF = CF;
   P->AD = AD;
+  P->NR = NR;
+  P->NA = NA;
 
   P->gr_P = gr_P;
   P->py_gr_P = py_gr_P;
@@ -700,11 +873,15 @@ bool from_python_program(PyObject *py_P, program_t *P) {
   Py_DECREF(py_P_Q);
   Py_DECREF(py_P_CF);
   Py_DECREF(py_P_AD);
+  Py_DECREF(py_P_NR);
+  Py_DECREF(py_P_NA);
   Py_DECREF(py_P_PF_L);
   Py_DECREF(py_P_PR_L);
   Py_DECREF(py_P_Q_L);
   Py_DECREF(py_P_CF_L);
   Py_DECREF(py_P_AD_L);
+  Py_DECREF(py_P_NR_L);
+  Py_DECREF(py_P_NA_L);
   Py_DECREF(py_P_sem);
   Py_XDECREF(py_P_stable);
 
@@ -718,11 +895,15 @@ cleanup:
   Py_XDECREF(py_P_Q);
   Py_XDECREF(py_P_CF);
   Py_XDECREF(py_P_AD);
+  Py_XDECREF(py_P_NR);
+  Py_XDECREF(py_P_NA);
   Py_XDECREF(py_P_PF_L);
   Py_XDECREF(py_P_PR_L);
   Py_XDECREF(py_P_Q_L);
   Py_XDECREF(py_P_CF_L);
   Py_XDECREF(py_P_AD_L);
+  Py_XDECREF(py_P_NR_L);
+  Py_XDECREF(py_P_NA_L);
   Py_XDECREF(py_P_sem);
   Py_XDECREF(py_P_stable);
   Py_XDECREF(py_gr_P);
@@ -731,6 +912,8 @@ cleanup:
   free(Q);
   free(CF);
   free(AD);
+  free(NR);
+  free(NA);
   free(stable);
   return false;
 }

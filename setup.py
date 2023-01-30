@@ -37,7 +37,8 @@ ground   = Extension("ground",
                      depends = ["pasp/cutils.c", "pasp/cprogram.c", "pasp/ground.h",
                                 "pasp/carray.c", "bitvector/bitvector.c"],
                      sources = ["pasp/ground.c", "pasp/cutils.c", "pasp/carray.c",
-                                "pasp/cprogram.c", "bitvector/bitvector.c"])
+                                "pasp/cprogram.c", "bitvector/bitvector.c"],
+                     include_dirs = [np.get_include()])
 learn    = Extension("learn",
                      libraries = ["clingo", "pthread"],
                      depends = ["pasp/cprogram.c", "pasp/cinf.c", "pasp/cutils.c", "pasp/carray.c",

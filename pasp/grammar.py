@@ -1,5 +1,6 @@
 import pathlib, enum, fractions, math, collections.abc
-import lark, lark.reconstruct
+import lark, lark.reconstruct, clingo, numpy
+from numpy import ascontiguousarray as contiguous
 from .program import ProbFact, Query, ProbRule, Program, CredalFact, unique_fact, Semantics, Data
 from .program import AnnotatedDisjunction, NeuralRule, NeuralAD
 
@@ -135,33 +136,47 @@ class StableTransformer(lark.Transformer):
     return t
 
   @staticmethod
+  def check_data(D: list):
+    "Checks if all data have same first dimension size."
+    n = -1
+    for X in D.values():
+      if n < 0: n = X[0].data.shape[0]
+      for x in X:
+        if x.data.shape[0] != n: raise ValueError("Data must have same number of instances!")
+
+  @staticmethod
   def register_nrule(TNR: list, NR: list, D: list):
     for name, inp, net, body, rep in TNR:
       t = StableTransformer.find_data_pred(D, body, "rule", name)
       # Ground rules.
-      rules = [None for _ in range(len(t))]
-      for i in range(len(t)):
-        a = t[i].arg
-        if len(body) > 1:
-          rules[i] = f"{name}({t[i].arg}) :- {', '.join('' if b[2][0] else 'not ' + b[2][1] for b in body)}."
-        else: # neural fact
-          rules[i] = f"{name}({t[i].arg})."
-      NR.append(NeuralRule(rules, name, net, rep, t))
+      H = contiguous(tuple(clingo.parse_term(f"{name}({t[i].arg})")._rep for i in range(len(t))), \
+                      dtype = numpy.uint64)
+      B, S = None, None
+      if len(body) > 1:
+        body_no_data = [b for b in body if b[2][1] != t[0].name]
+        B = contiguous(tuple(clingo.parse_term(f"{b[2][1]}({t[i].arg})" if len(b[3]) > 0 \
+                                                      else b[1])._rep for i in range(len(t)) \
+                              for b in body_no_data), dtype = numpy.uint64)
+        S = contiguous(tuple(b[2][0] for i in range(len(t)) for b in body_no_data), dtype = bool)
+      NR.append(NeuralRule(H, B, S, name, net, rep, t))
 
   @staticmethod
   def register_nad(TNA: list, NA: list, D: list):
     for name, inp, vals, net, body, rep in TNA:
       t = StableTransformer.find_data_pred(D, body, "AD", name)
       # Ground rules.
-      rules = [[None for _ in range(len(vals))] for _ in range(len(t))]
       V = list(vals.keys())
-      for i in range(len(t)):
-        for j in range(len(V)):
-          if len(body) > 1:
-            rules[i][j] = f"{name}({V[j]}, {t[i].arg}) :- {', '.join('' if b[2][0] else 'not ' + b[2][1] for b in body)}."
-          else:
-            rules[i][j] = f"{name}({V[j]}, {t[i].arg})."
-      NA.append(NeuralAD(rules, name, V, net, rep, t))
+      H = contiguous(tuple(clingo.parse_term(f"{name}({V[j]}, {t[i].arg})")._rep \
+                            for i in range(len(t)) for j in range(len(V))))
+      B, S = None, None
+      if len(body) > 1:
+        body_no_data = [b for b in body if b[2][1] != t[0].name]
+        # B and S do not depend on the number of values |V|, only on |t| and |body|.
+        B = contiguous(tuple(clingo.parse_term(f"{b[2][1]}({t[i].arg})" if len(b[3]) > 0 \
+                                                else b[1])._rep for i in range(len(t)) \
+                              for b in body_no_data), dtype = numpy.uint64)
+        S = contiguous(tuple(b[2][0] for i in range(len(t)) for b in body_no_data), dtype = bool)
+      NA.append(NeuralAD(H, B, S, name, V, net, rep, t))
 
   # Terminals.
   def UND(self, u): return self.pack("UND", str(u))
@@ -412,6 +427,7 @@ class StableTransformer(lark.Transformer):
     # Deal with ungrounded probabilistic rules.
     for r in PR:
       if r.is_prop: PF.append(r.prop_pf)
+    self.check_data(D)
     self.register_nrule(TNR, NR, D)
     self.register_nad(TNA, NA, D)
     return Program("\n".join(P), PF, PR, Q, CF, AD, NR, NA, semantics = self.semantics)

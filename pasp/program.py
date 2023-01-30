@@ -107,17 +107,23 @@ class Data(torch.utils.data.Dataset if has_torch else object):
   def __repr__(self): return self.__str__()
 
 class NeuralRule:
-  def __init__(self, rules: list, name: str, net, rep: str, data: list):
-    self.rules = rules
-    self.name  = name
-    self.net   = net
-    self.rep   = rep
-    self.data  = data
+  def __init__(self, heads: list, bodies: list, signs: list, name: str, net, rep: str, data: list):
+    # Heads and bodies must be numpy.uint64 values representing _rep, not Symbols.
+    self.H = heads
+    self.B = bodies
+    self.S = signs
+    self.name = name
+    self.net = net
+    self.rep = rep
+    self.data = data
     self.input = torch.stack(tuple(d.data for d in data), dim = 0)
 
     # Validate net during parsing so that it won't blow in our faces during inference or learning.
-    assert self.pr().ndim == 3, \
+    p = self.pr()
+    assert p.ndim == 3, \
            "Networks embedded onto neural rules must output a single probability!"
+    # Number of instances.
+    self.m = p.shape[1]
 
   def pr(self):
     with torch.inference_mode():
@@ -127,8 +133,11 @@ class NeuralRule:
   def __repr__(self): return self.__str__()
 
 class NeuralAD:
-  def __init__(self, rules: list, name: str, vals: list, net, rep: str, data: list):
-    self.rules = rules
+  def __init__(self, heads: list, bodies: list, signs: list, name: str, vals: list, net, rep: str, \
+               data: list):
+    self.H = heads
+    self.B = bodies
+    self.S = signs
     self.name  = name
     self.net   = net
     self.rep   = rep
@@ -137,8 +146,11 @@ class NeuralAD:
     self.input = torch.stack(tuple(d.data for d in data), dim = 0)
 
     # Validate net during parsing so that it won't blow in our faces during inference or learning.
-    assert self.pr().ndim == 3, \
+    p = self.pr()
+    assert p.ndim == 3, \
            "Networks embedded onto neural rules must output a 1D probability tensor!"
+    # Number of instances.
+    self.m = p.shape[1]
 
   def __str__(self): return self.rep
   def __repr__(self): return self.__str__()

@@ -9,8 +9,8 @@
 #include "../thpool/thpool.h"
 
 /* Total choice size. */
-#define TOTAL_CHOICE_N(P) (P)->PF_n
-#define TOTAL_CHOICE_NCREDAL(P) (P)->PF_n+(P)->CF_n
+#define TOTAL_CHOICE_N(P) (P)->PF_n+(P)->NR_n
+#define TOTAL_CHOICE_NCREDAL(P) (P)->PF_n+(P)->CF_n+(P)->NR_n
 
 /* Get dimension (number of classes) of the i-th learnable AD in storage S. */
 #define STORAGE_AD_DIM(P, S, i) ((P)->AD[(S)->I_A[(i)]].n)
@@ -34,8 +34,8 @@ bool incr_total_choice(total_choice_t *theta);
 bool incr_total_choice_ad(total_choice_t *theta);
 void print_total_choice(total_choice_t *theta);
 
-double prob_total_choice(prob_fact_t *phi, size_t n, size_t CF_n, total_choice_t *theta,
-    uint8_t *ad_i);
+double prob_total_choice(prob_fact_t *phi, size_t n, size_t CF_n, neural_rule_t *nu, size_t m,
+    total_choice_t *theta, uint8_t *ad_i);
 
 typedef struct {
   bool *cond_1, *cond_2, *cond_3, *cond_4;
