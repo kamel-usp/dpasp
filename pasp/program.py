@@ -90,8 +90,8 @@ try:
   import torch.utils.data
   has_torch = True
 except ModuleNotFoundError:
-  raise ModuleNotFoundError("PyTorch not found! PyTorch must be installed for neural rules "
-                            "and neural ADs to be used in programs.")
+  print("PyTorch not found! PyTorch must be installed for neural rules and neural ADs to be used "
+        "in programs.")
 
 # Extend object to avoid errors when torch is not present.
 class Data(torch.utils.data.Dataset if has_torch else object):
