@@ -22,6 +22,9 @@ classifiers = [
 ]
 description = "Probabilistic Answer Set Programming"
 
+[project.optional-dependencies]
+torch = ["torch >= 1.13.1"]
+
 [tool.setuptools.dynamic]
 version = {attr = "pasp.__version__"}
 dependencies = {file = ["requirements.txt"]}
