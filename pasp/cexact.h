@@ -24,7 +24,7 @@ void free_count_storage_contents(count_storage_t *C, bool free_shared);
 void free_count_storage(count_storage_t *C);
 
 /* Compute (exactly) query probabilities by exhaustively enumerating all models. */
-bool exact_enum(program_t *P, double (*R)[2], bool lstable_sat, psemantics_t psem, bool quiet);
+bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, bool quiet);
 /* Count number of models for each learnable probabilistic fact or annotated disjunction. */
 bool count_models(program_t *P, bool lstable_sat, count_storage_t *C);
 

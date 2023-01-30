@@ -12,8 +12,7 @@
 static PyObject* exact(PyObject *self, PyObject *args, PyObject *kwargs) {
   program_t p = {0};
   PyObject *py_P, *py_R = NULL;
-  double (*R)[2] = NULL;
-  size_t i;
+  double *R = NULL;
   bool r = false, parallel = true, lstable_sat = true, quiet = false;
   const char *psem_arg = "credal";
   static char *kwlist[] = { "", "parallel", "lstable_sat", "psemantics", "quiet", NULL };
@@ -31,39 +30,37 @@ static PyObject* exact(PyObject *self, PyObject *args, PyObject *kwargs) {
 
   if (!from_python_program(py_P, &p)) return NULL;
 
-  R = (double (*)[2]) malloc(p.Q_n*sizeof(*R));
-  if (!R) goto cleanup;
-
   if (needs_ground(&p)) {
     if (!ground(&p)) goto cleanup;
     if (p.stable) if (!ground(p.stable)) goto cleanup;
   }
 
   lstable_sat = lstable_sat && (p.sem == LSTABLE_SEMANTICS);
-  if (!exact_enum(&p, R, lstable_sat, psem, quiet)) goto badval;
+  if (!exact_enum(&p, &R, lstable_sat, psem, quiet)) goto badval;
 
-  py_R = PyTuple_New(p.Q_n);
-  if (!py_R) {
-    PyErr_SetString(PyExc_MemoryError, "could not create new py_R tuple!");
-    goto cleanup;
-  } for (i = 0; i < p.Q_n; ++i) {
-    PyObject *py_R_i = PyTuple_New(2);
-    if (!py_R_i) {
-      PyErr_SetString(PyExc_MemoryError, "could not create new py_R_i tuple!");
-      goto cleanup;
-    }
-    PyTuple_SET_ITEM(py_R_i, 0, PyFloat_FromDouble(R[i][0]));
-    PyTuple_SET_ITEM(py_R_i, 1, PyFloat_FromDouble(R[i][1]));
-    PyTuple_SET_ITEM(py_R, i, py_R_i);
+  /* Return result as a numpy array. */
+  bool has_neural = p.NR_n + p.NA_n > 0;
+  int nd;
+  npy_intp dims[3];
+  if (has_neural) {
+    nd = 3;
+    dims[0] = p.NR_n > 0 ? p.NR[0].m : p.NA[0].m;
+    dims[1] = p.Q_n; dims[2] = psem == MAXENT_SEMANTICS ? 1 : 2;
+  } else {
+    nd = 2;
+    dims[0] = p.Q_n;
+    dims[1] = psem == MAXENT_SEMANTICS ? 1 : 2;
   }
+  py_R = PyArray_SimpleNewFromData(nd, dims, NPY_DOUBLE, R);
+  if (!py_R) goto cleanup;
+  PyArray_ENABLEFLAGS((PyArrayObject*) py_R, NPY_ARRAY_OWNDATA);
+
   r = true;
   goto cleanup;
 badval:
   PyErr_SetString(PyExc_Exception, "clingo or unknown error!");
 cleanup:
   free_program_contents(&p);
-  free(R);
-  if (!r) Py_XDECREF(py_R);
   return r ? py_R : NULL;
 }
 

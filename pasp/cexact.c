@@ -396,49 +396,66 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
     }
   }
 
-  for (i = 0; i < Q_n; ++i) {
-    if (has_credal) {
-      if (P->Q[i].E_n == 0) {
-        double _a, _b;
-        bf(X, Pn[i][0].d, Pn[i][1].d, K[i][0].d, K[i][1].d, L_CF, U_CF, K[i][0].n, K[i][1].n,
-            P->CF_n, &_a, &_b, true);
-        R[i][0] = _a, R[i][1] = _b;
-      } else {
-        size_t _a = K[i][0].n, _b = K[i][1].n, _c = K[i][2].n, _d = K[i][3].n;
-        if (_b + _d == 0) {
-          fputws(L"Fail: ℙ(E) = 0!\n", stdout);
-          R[i][0] = -INFINITY, R[i][1] = INFINITY;
+  /* If credal, then 2: lower and upper; else, then 1: sharp probability. */
+  size_t sem_stride = psem == MAXENT_SEMANTICS ? 1 : 2;
+  size_t data_stride = has_neural ? (P->NR_n > 0 ? P->NR[0].m : P->NA[0].m) : 1;
+  double *R_data = (double*) malloc(Q_n*sem_stride*data_stride*sizeof(double));
+  if (!R_data) {
+    PyErr_SetString(PyExc_MemoryError, "could not allocate enough memory for exact result!");
+    goto cleanup;
+  }
+  *R = R_data;
+
+  for (size_t ds = 0; ds < data_stride; ++ds) {
+    double *I = R_data + ds*Q_n*sem_stride;
+    for (i = 0; i < Q_n; ++i) {
+      size_t i_l = i*sem_stride;
+      size_t i_u = i_l+1;
+      if (has_credal) {
+        if (P->Q[i].E_n == 0) {
+          double _a, _b;
+          bf(X, Pn[i][0].d, Pn[i][1].d, K[i][0].d, K[i][1].d, L_CF, U_CF, K[i][0].n, K[i][1].n,
+              P->CF_n, &_a, &_b, true);
+          I[i_l] = _a, I[i_u] = _b;
         } else {
-          if ((_b + _c == 0) && (_d > 0)) R[i][0] = 0, R[i][1] = 0;
-          else if ((_a + _d == 0) && (_b > 0)) R[i][0] = 1, R[i][1] = 1;
-          else {
-            double min, max;
-            bf_minmax(X, Pn[i][0].d, Pn[i][1].d, Pn[i][2].d, Pn[i][3].d, K[i][0].d, K[i][1].d,
-                K[i][2].d, K[i][3].d, L_CF, U_CF, _a, _b, _c, _d, P->CF_n, &min, &max);
-            R[i][0] = min, R[i][1] = max;
-          }
-        }
-      }
-    } else {
-      if (psem == MAXENT_SEMANTICS) {
-        double _a = a[i], _b = b[i];
-        R[i][0] = R[i][1] = _a/_b;
-      } else {
-        double _a = a[i], _b = b[i], _c = c[i], _d = d[i];
-        if (P->Q[i].E_n == 0) R[i][0] = _a, R[i][1] = _b;
-        else {
+          size_t _a = K[i][0].n, _b = K[i][1].n, _c = K[i][2].n, _d = K[i][3].n;
           if (_b + _d == 0) {
             fputws(L"Fail: ℙ(E) = 0!\n", stdout);
-            R[i][0] = -INFINITY, R[i][1] = INFINITY;
+            I[i_l] = -INFINITY, I[i_u] = INFINITY;
           } else {
-            if ((_b + _c == 0) && (_d > 0)) R[i][0] = 0, R[i][1] = 0;
-            else if ((_a + _d == 0) && (_b > 0)) R[i][0] = 1, R[i][1] = 1;
-            else R[i][0] = _a/(_a + _d), R[i][1] = _b/(_b + _c);
+            if ((_b + _c == 0) && (_d > 0)) I[i_l] = 0, I[i_u] = 0;
+            else if ((_a + _d == 0) && (_b > 0)) I[i_l] = 1, I[i_u] = 1;
+            else {
+              double min, max;
+              bf_minmax(X, Pn[i][0].d, Pn[i][1].d, Pn[i][2].d, Pn[i][3].d, K[i][0].d, K[i][1].d,
+                  K[i][2].d, K[i][3].d, L_CF, U_CF, _a, _b, _c, _d, P->CF_n, &min, &max);
+              I[i_l] = min, I[i_u] = max;
+            }
+          }
+        }
+      } else {
+        if (psem == MAXENT_SEMANTICS) I[i_l] = a[i]/b[i];
+        else {
+          double _a = a[i], _b = b[i], _c = c[i], _d = d[i];
+          if (P->Q[i].E_n == 0) I[i_l] = _a, I[i_u] = _b;
+          else {
+            if (_b + _d == 0) {
+              fputws(L"Fail: ℙ(E) = 0!\n", stdout);
+              I[i_l] = -INFINITY, I[i_u] = INFINITY;
+            } else {
+              if ((_b + _c == 0) && (_d > 0)) I[i_l] = 0, I[i_u] = 0;
+              else if ((_a + _d == 0) && (_b > 0)) I[i_l] = 1, I[i_u] = 1;
+              else I[i_l] = _a/(_a + _d), I[i_u] = _b/(_b + _c);
+            }
           }
         }
       }
+      if (!quiet) {
+        print_query(P->Q+i);
+        if (psem == MAXENT_SEMANTICS) wprintf(L" = %f\n", I[i_l]);
+        else wprintf(L" = [%f, %f]\n", I[i_l], I[i_u]);
+      }
     }
-    if (!quiet) { print_query(P->Q+i); wprintf(L" = [%f, %f]\n", R[i][0], R[i][1]); }
   }
 
   exact_num_ok = true;
