@@ -314,10 +314,23 @@ class StableTransformer(lark.Transformer):
   # Data special predicate.
   def data(self, D):
     name, arg = D[0][1], D[1][1]
-    data = D[2][1]
+    path_or_func = D[2]
     import pandas, numpy
-    return self.pack("data", f"{name}({arg}).", \
-                     Data(name, arg, pandas.read_csv(data, dtype = numpy.float32)))
+    # Is an external file or URL.
+    if path_or_func[0] != "PY_FUNC": data = pandas.read_csv(path_or_func[1], dtype = numpy.float32)
+    else: # is a function.
+      func = path_or_func[1]
+      if func not in self.torch_scope:
+        raise ValueError(f"No data definition {func} found! Either define it in a PyTorch "
+                         "block or specify a file or URL to read from.")
+      data = self.torch_scope[func]()
+      try:
+        import torch
+      except ModuleNotFoundError:
+        raise ModuleNotFoundError("PyTorch not found! PyTorch must be installed for neural rules "
+                                  "and neural ADs.")
+      if not issubclass(type(data), torch.Tensor): data = torch.tensor(data)
+    return self.pack("data", f"{name}({arg}).", Data(name, arg, data))
 
   # Torch block.
   def torch(self, T):
@@ -341,7 +354,7 @@ class StableTransformer(lark.Transformer):
         raise ValueError(f"No network definition {func} found! Either define it in a PyTorch "
                          "block or specify a PyTorch Hub model (local or from GitHub).")
       N = self.torch_scope[func]()
-      rep = f"\"{func}\""
+      rep = f"@{func}"
     # Network is coming from PyTorch Hub.
     else:
       try:
@@ -351,7 +364,7 @@ class StableTransformer(lark.Transformer):
                                   "and neural ADs.")
       path, source = H[1][1], "github" if H[1][0] == "GITHUB" else "local"
       N = torch.hub.load(path, func, source = source, trust_repo = "check")
-      rep = f"\"{func}\" on \"{path}\" at \"{source}\""
+      rep = f"@{func} on \"{path}\" at \"{source}\""
     return self.pack("hub", "", (N, rep))
 
   # Neural rule.

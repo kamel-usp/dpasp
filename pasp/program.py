@@ -100,6 +100,7 @@ class Data(torch.utils.data.Dataset if has_torch else object):
     self.arg = arg
     import pandas
     if issubclass(type(data), pandas.DataFrame): self.data = torch.tensor(data.to_numpy())
+    else: self.data = data
 
   def __len__(self): return len(self.data)
   def __getitem__(self, i: int): return self.data[i]

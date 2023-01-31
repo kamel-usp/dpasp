@@ -39,7 +39,7 @@ URL: /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a
 // Local data path.
 LOCAL_DATA: /(?:\/?[a-zA-Z\d\.\-_]+|(?:\\ ))+/
 // Python function identifier.
-PY_FUNC: /[a-zA-Z_][\da-zA-Z0-9_]*/
+PY_FUNC: /[a-zA-Z_][a-zA-Z0-9_]*/
 // Local network path.
 LOCAL_NET: /(?:[\w\d.\-_\/]+|(?:\\ ))+/
 // Github repo network path.
@@ -96,11 +96,11 @@ adr: (ad_head{_nground} | lad_head{_nground}) ":-" body "."
 _ad: ad | adr
 
 // Data special rule.
-data: CONST "(" CONST ")" "~" "data" "(" path ")" "."
+data: CONST "(" CONST ")" "~" "data" "(" (path | ("@" PY_FUNC)) ")" "."
 // Torch block.
 torch: "#torch" /(?:.|\n)+?(?=\#end\.)/ "#end."
 // PyTorch hub.
-hub: "\"" PY_FUNC "\"" ("on" (("\"" LOCAL_NET "\"" ("at" "\"local\"")?) | ("\"" GITHUB "\"" "at" "\"github\"")))?
+hub: "@" PY_FUNC ("on" (("\"" LOCAL_NET "\"" ("at" "\"local\"")?) | ("\"" GITHUB "\"" "at" "\"github\"")))?
 // Neural fact.
 nrule: "?" "::" CONST "(" VAR ")" "as" hub ":-" lit ("," lit)* "."
 // Neural annotated disjunction.
