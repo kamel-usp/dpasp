@@ -8,10 +8,6 @@
 #include <pthread.h>
 #include "../thpool/thpool.h"
 
-/* Total choice size. */
-#define TOTAL_CHOICE_N(P) (P)->PF_n+(P)->NR_n
-#define TOTAL_CHOICE_NCREDAL(P) (P)->PF_n+(P)->CF_n+(P)->NR_n
-
 /* Get dimension (number of classes) of the i-th learnable AD in storage S. */
 #define STORAGE_AD_DIM(P, S, i) ((P)->AD[(S)->I_A[(i)]].n)
 
@@ -29,6 +25,7 @@ typedef struct {
 
 bool init_total_choice(total_choice_t *theta, size_t n, annot_disj_t *ad, size_t m);
 void free_total_choice_contents(total_choice_t *theta);
+size_t get_num_facts(program_t *P);
 total_choice_t* copy_total_choice(total_choice_t *src, total_choice_t *dst);
 bool incr_total_choice(total_choice_t *theta);
 bool incr_total_choice_ad(total_choice_t *theta);

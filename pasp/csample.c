@@ -167,7 +167,7 @@ cleanup:
 
 bool naive_sample(program_t *P, size_t n, PyArrayObject *atoms, bool lstable_sat, PyObject **ret) {
   import_array();
-  size_t total_choice_n = TOTAL_CHOICE_N(P);
+  size_t total_choice_n = get_num_facts(P);
   /* Heuristic for choosing the number of processes to use. Roughly 100 samples per process. */
   size_t num_procs = max(min(n / 100, NUM_PROCS), 1);
   bool ok = false;

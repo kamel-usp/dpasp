@@ -114,6 +114,13 @@ void free_total_choice_contents(total_choice_t *theta) {
   free(theta->theta_ad);
 }
 
+size_t get_num_facts(program_t *P) {
+  size_t n = P->PF_n + P->CF_n;
+  for (size_t i = 0; i < P->NR_n; ++i) n += P->NR[i].n;
+  for (size_t i = 0; i < P->NA_n; ++i) n += P->NA[i].n;
+  return n;
+}
+
 total_choice_t* copy_total_choice(total_choice_t *src, total_choice_t *dst) {
   if (!dst) {
     dst = (total_choice_t*) malloc(sizeof(total_choice_t));

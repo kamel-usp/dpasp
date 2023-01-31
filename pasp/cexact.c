@@ -341,7 +341,7 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
   bool has_credal = P->CF_n > 0, has_ad = P->AD_n > 0, has_neural = P->NR_n + P->NA_n > 0;
   double *a, *b, *c, *d = c = b = a = NULL;
   size_t Q_n = P->Q_n, i;
-  size_t total_choice_n = has_credal ? TOTAL_CHOICE_NCREDAL(P) : TOTAL_CHOICE_N(P);
+  size_t total_choice_n = get_num_facts(P);
   total_choice_t theta;
   array_bool_t (*Pn)[4] = NULL;
   array_double_t (*K)[4] = NULL;
@@ -615,7 +615,7 @@ cleanup:
 
 bool count_models(program_t *P, bool lstable_sat, count_storage_t *ret) {
   total_choice_t theta;
-  size_t total_choice_n = TOTAL_CHOICE_N(P);
+  size_t total_choice_n = get_num_facts(P);
   size_t num_procs = estimate_nprocs(total_choice_n + P->AD_n);
   bool busy_procs[NUM_PROCS] = {0};
   count_storage_t C[NUM_PROCS] = {{0}};
@@ -727,7 +727,7 @@ cleanup:
 }
 
 size_t init_prob_storage_seq(prob_storage_t Q[NUM_PROCS], program_t *P, observations_t *O) {
-  size_t total_choice_n = TOTAL_CHOICE_N(P);
+  size_t total_choice_n = get_num_facts(P);
   size_t num_procs = estimate_nprocs(total_choice_n + P->AD_n);
   size_t i = 0;
 
@@ -871,7 +871,7 @@ cleanup:
 bool prob_obs_reuse(program_t *P, observations_t *obs, bool lstable_sat, prob_storage_t *ret,
     prob_storage_t Q[NUM_PROCS], bool derive) {
   total_choice_t theta;
-  size_t total_choice_n = TOTAL_CHOICE_N(P);
+  size_t total_choice_n = get_num_facts(P);
   size_t num_procs = estimate_nprocs(total_choice_n + P->AD_n);
   bool busy_procs[NUM_PROCS] = {0};
   storage_t S[NUM_PROCS] = {{0}};
