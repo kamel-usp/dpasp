@@ -38,7 +38,8 @@ ground   = Extension("ground",
                                 "pasp/carray.c", "bitvector/bitvector.c"],
                      sources = ["pasp/ground.c", "pasp/cutils.c", "pasp/carray.c",
                                 "pasp/cprogram.c", "bitvector/bitvector.c"],
-                     include_dirs = [np.get_include()])
+                     include_dirs = [np.get_include()],
+                     define_macros = STD_MACROS)
 learn    = Extension("learn",
                      libraries = ["clingo", "pthread"],
                      depends = ["pasp/cprogram.c", "pasp/cinf.c", "pasp/cutils.c", "pasp/carray.c",
