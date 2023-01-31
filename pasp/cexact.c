@@ -348,7 +348,7 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
   double *X, *L_CF, *U_CF = L_CF = X = NULL;
   size_t num_procs = estimate_nprocs(total_choice_n + P->AD_n);
   threadpool pool = thpool_init(num_procs);
-  bool busy_procs[NUM_PROCS] = {0}, exact_num_ok;
+  bool busy_procs[NUM_PROCS] = {0}, exact_num_ok, warn = false;
   storage_t S[NUM_PROCS] = {{0}};
   pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER, wakeup = PTHREAD_MUTEX_INITIALIZER;
   pthread_cond_t avail = PTHREAD_COND_INITIALIZER;
@@ -366,48 +366,44 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
           total_choice_n, P->AD, P->AD_n))
       goto cleanup;
 
-  for (i = 0; i < P->NR_n; ++i) if (!update_pr_neural_rule(&P->NR[i])) goto cleanup;
+  for (i = 0; i < P->NR_n; ++i)
+    if (!update_pr_neural_rule(&P->NR[i])) goto cleanup;
 
-  do {
-    if (has_ad) {
-      do {
-        if (!dispatch_job(&theta, &wakeup, busy_procs, S, num_procs, pool, &avail, compute_func)) goto cleanup;
-      } while (incr_total_choice_ad(&theta));
-    } else if (!dispatch_job(&theta, &wakeup, busy_procs, S, num_procs, pool, &avail, compute_func)) goto cleanup;
-  } while (incr_total_choice(&theta));
-  thpool_wait(pool);
-
-  for (i = 0; i < num_procs; ++i)
-    if (S[i].warn) {
-      fputws(L"Warning: found total choice with no model. Probabilities may be incorrect.", stdout);
-      break;
-    }
-
-  if (!has_credal) {
-    a = S[0].a; b = S[0].b; c = S[0].c; d = S[0].d;
-    for (i = 1; i < num_procs; ++i) {
-      size_t j;
-      for (j = 0; j < Q_n; ++j) {
-        a[j] += S[i].a[j];
-        b[j] += S[i].b[j];
-        c[j] += S[i].c[j];
-        d[j] += S[i].d[j];
-      }
-    }
-  }
-
+  size_t data_stride = has_neural ? (P->NR_n > 0 ? P->NR[0].m : P->NA[0].m) : 1;
   /* If credal, then 2: lower and upper; else, then 1: sharp probability. */
   size_t sem_stride = psem == MAXENT_SEMANTICS ? 1 : 2;
-  size_t data_stride = has_neural ? (P->NR_n > 0 ? P->NR[0].m : P->NA[0].m) : 1;
   double *R_data = (double*) malloc(Q_n*sem_stride*data_stride*sizeof(double));
   if (!R_data) {
     PyErr_SetString(PyExc_MemoryError, "could not allocate enough memory for exact result!");
     goto cleanup;
   }
   *R = R_data;
-
+  double *I = R_data;
   for (size_t ds = 0; ds < data_stride; ++ds) {
-    double *I = R_data + ds*Q_n*sem_stride;
+    do {
+      if (has_ad) {
+        do {
+          if (!dispatch_job(&theta, &wakeup, busy_procs, S, num_procs, pool, &avail, compute_func)) goto cleanup;
+        } while (incr_total_choice_ad(&theta));
+      } else if (!dispatch_job(&theta, &wakeup, busy_procs, S, num_procs, pool, &avail, compute_func)) goto cleanup;
+    } while (incr_total_choice(&theta));
+    thpool_wait(pool);
+
+    for (i = 0; i < num_procs; ++i) warn |= S[i].warn;
+
+    if (!has_credal) {
+      a = S[0].a; b = S[0].b; c = S[0].c; d = S[0].d;
+      for (i = 1; i < num_procs; ++i) {
+        size_t j;
+        for (j = 0; j < Q_n; ++j) {
+          a[j] += S[i].a[j];
+          b[j] += S[i].b[j];
+          c[j] += S[i].c[j];
+          d[j] += S[i].d[j];
+        }
+      }
+    }
+
     for (i = 0; i < Q_n; ++i) {
       size_t i_l = i*sem_stride;
       size_t i_u = i_l+1;
@@ -456,7 +452,23 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
         else wprintf(L" = [%f, %f]\n", I[i_l], I[i_u]);
       }
     }
+    if (!quiet) fputws(L"---\n", stdout);
+
+    /* Move memory for next batch. */
+    I += Q_n*sem_stride;
+    for (i = 0; i < P->NR_n; ++i) ++P->NR[i].P;
+    /* Reset memory for next batch. */
+    if ((data_stride > 1) && !P->CF_n) {
+      size_t s = Q_n*sizeof(double);
+      for (i = 0; i < num_procs; ++i) {
+        memset(S[i].a, 0, s); memset(S[i].b, 0, s);
+        memset(S[i].c, 0, s); memset(S[i].d, 0, s);
+      }
+    }
   }
+
+  if (warn)
+    fputws(L"Warning: found total choice with no model. Probabilities may be incorrect.", stdout);
 
   exact_num_ok = true;
 cleanup:

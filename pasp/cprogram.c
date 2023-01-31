@@ -704,6 +704,7 @@ cleanup:
 }
 
 bool from_python_program(PyObject *py_P, program_t *P) {
+  import_array();
   PyObject *py_P_P, *py_P_PF, *py_P_PF_L, *py_P_PR, *py_P_PR_L, *py_P_Q, *py_P_Q_L, *py_P_CF, *py_P_AD, *py_P_CF_L, *py_P_sem = NULL;
   PyObject *py_P_AD_L = py_P_AD = py_P_CF_L = py_P_CF = py_P_Q_L = py_P_Q = py_P_PR_L = py_P_PR = py_P_PF_L = py_P_PF = py_P_P = NULL;
   PyObject *py_P_NR, *py_P_NR_L, *py_P_NA, *py_P_NA_L = py_P_NA = py_P_NR_L = py_P_NR = NULL;

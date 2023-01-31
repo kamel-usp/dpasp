@@ -10,11 +10,13 @@ double prob_total_choice(prob_fact_t *phi, size_t n, size_t CF_n, neural_rule_t 
     t = bitvec_GET(&theta->pf, i + CF_n);
     p *= t*phi[i].p + (!t)*(1.0-phi[i].p);
   }
-  for (i = 0; i < m; ++i) {
-    t = bitvec_GET(&theta->pf, i + CF_n + n);
-    register size_t q = nu[i].P[i*nu[i].m];
-    p *= t*q + (!t)*q;
-  }
+  size_t r = CF_n + n;
+  for (i = 0; i < m; ++i)
+    for (size_t j = 0; j < nu[i].n; ++j) {
+      t = bitvec_GET(&theta->pf, r++);
+      double q = nu[i].P[j*nu[i].m];
+      p *= t*q + (!t)*(1.0-q);
+    }
   for (i = 0; i < ad_n; ++i) p *= theta->ad[i].P[theta_ad[i]];
   return p;
 }
@@ -222,15 +224,16 @@ bool prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
   {
     clingo_atom_t h;
     clingo_literal_t B[64];
+    size_t c = P->CF_n + P->PF_n;
     for (i = 0; i < P->NR_n; ++i) {
       for (size_t j = 0; j < P->NR[i].n; ++j) {
-        if (!CHOICE_IS_TRUE(theta, i + P->CF_n + P->PF_n)) continue;
+        if (!CHOICE_IS_TRUE(theta, c++)) continue;
         if (!clingo_backend_add_atom(back, &P->NR[i].H[j], &h)) return false;
         for (size_t b = 0; b < P->NR[i].k; ++b) {
           size_t u = j*P->NR[i].k+b;
           if (!clingo_backend_add_atom(back, &P->NR[i].B[u], (clingo_atom_t*) &B[b]))
             return false;
-          if (P->NR[i].S[u]) B[b] = -B[b];
+          if (!P->NR[i].S[u]) B[b] = -B[b];
         }
         if (!clingo_backend_rule(back, false, &h, 1, B, P->NR[i].k)) return false;
       }
