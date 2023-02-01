@@ -18,21 +18,19 @@ typedef enum {
 
 typedef struct {
   bitvec_t pf;
-  annot_disj_t *ad;
   size_t ad_n;
   uint8_t *theta_ad;
 } total_choice_t;
 
-bool init_total_choice(total_choice_t *theta, size_t n, annot_disj_t *ad, size_t m);
+bool init_total_choice(total_choice_t *theta, size_t n, program_t *P);
 void free_total_choice_contents(total_choice_t *theta);
 size_t get_num_facts(program_t *P);
 total_choice_t* copy_total_choice(total_choice_t *src, total_choice_t *dst);
 bool incr_total_choice(total_choice_t *theta);
-bool incr_total_choice_ad(total_choice_t *theta);
+bool incr_total_choice_ad(total_choice_t *theta, program_t *P);
 void print_total_choice(total_choice_t *theta);
 
-double prob_total_choice(prob_fact_t *phi, size_t n, size_t CF_n, neural_rule_t *nu, size_t m,
-    total_choice_t *theta, uint8_t *ad_i);
+double prob_total_choice(program_t *P, total_choice_t *theta);
 
 typedef struct {
   bool *cond_1, *cond_2, *cond_3, *cond_4;
@@ -68,6 +66,9 @@ int retr_free_proc(bool *busy_procs, size_t num_procs, pthread_mutex_t *wakeup,
     pthread_cond_t *avail);
 bool dispatch_job(total_choice_t *theta, pthread_mutex_t *wakeup, bool *busy_procs, storage_t *S,
     size_t num_procs, threadpool pool, pthread_cond_t *avail, void (*compute_func)(void*));
+bool dispatch_job_with_payload(total_choice_t *theta, pthread_mutex_t *wakeup, bool *busy_procs,
+    storage_t *S, size_t num_procs, threadpool pool, pthread_cond_t *avail, int id,
+    void (*compute_func)(void*), void *payload);
 
 /* Determine if the i-th position in PF total choice t is true. */
 #define CHOICE_IS_TRUE(t, i) bitvec_GET(&(t)->pf, i)

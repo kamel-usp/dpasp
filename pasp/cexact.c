@@ -154,7 +154,7 @@ void compute_total_choice(void *data) {
     if (has) P = P->stable;
   }
 
-  size_t CF_n = P->CF_n, PF_n = P->PF_n;
+  size_t CF_n = P->CF_n;
   size_t Q_n = P->Q_n, Q_n_bytes = Q_n*sizeof(size_t);
   bool is_partial = P->sem, has_credal = P->CF_n;
 
@@ -211,7 +211,7 @@ solve_cleanup:
   /* Probabilities are wrong when a total choice has no model. */
   if (m == 0) st->warn = true;
   /* Compute ℙ(θ). */
-  p = prob_total_choice(P->PF, PF_n, CF_n, P->NR, P->NR_n, theta, theta->theta_ad);
+  p = prob_total_choice(P, theta);
   for (i = 0; i < Q_n; ++i) {
     /* Evaluate counts to judge whether cond_1 and/or cond_3 are true. */
     if (count_e[i] == m || P->Q[i].E_n == 0) {
@@ -274,7 +274,6 @@ void compute_total_choice_maxent(void *data) {
     if (has) P = P->stable;
   }
 
-  size_t PF_n = P->PF_n;
   size_t Q_n = P->Q_n, Q_n_bytes = Q_n*sizeof(size_t);
   bool is_partial = P->sem;
 
@@ -322,7 +321,7 @@ solve_cleanup:
   }
   /* Probabilities are wrong when a total choice has no model. */
   if (m == 0) st->warn = true;
-  p = prob_total_choice(P->PF, PF_n, 0, P->NR, P->NR_n, theta, theta->theta_ad);
+  p = prob_total_choice(P, theta);
   for (i = 0; i < Q_n; ++i) {
     a[i] += (count_q_e[i]*p)/m;
     b[i] += (count_e[i]*p)/m;
@@ -338,7 +337,7 @@ cleanup:
 }
 
 bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, bool quiet) {
-  bool has_credal = P->CF_n > 0, has_ad = P->AD_n > 0, has_neural = P->NR_n + P->NA_n > 0;
+  bool has_credal = P->CF_n > 0, has_neural = P->NR_n + P->NA_n > 0;
   double *a, *b, *c, *d = c = b = a = NULL;
   size_t Q_n = P->Q_n, i;
   size_t total_choice_n = get_num_facts(P);
@@ -354,7 +353,7 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
   pthread_cond_t avail = PTHREAD_COND_INITIALIZER;
   void (*compute_func)(void*) = psem ? compute_total_choice_maxent : compute_total_choice;
 
-  if (!init_total_choice(&theta, total_choice_n, P->AD, P->AD_n)) goto cleanup;
+  if (!init_total_choice(&theta, total_choice_n, P)) goto cleanup;
 
   if (has_credal) {
     if (!setup_credal(&L_CF, &U_CF, &X, P)) goto cleanup;
@@ -381,11 +380,10 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
   double *I = R_data;
   for (size_t ds = 0; ds < data_stride; ++ds) {
     do {
-      if (has_ad) {
-        do {
-          if (!dispatch_job(&theta, &wakeup, busy_procs, S, num_procs, pool, &avail, compute_func)) goto cleanup;
-        } while (incr_total_choice_ad(&theta));
-      } else if (!dispatch_job(&theta, &wakeup, busy_procs, S, num_procs, pool, &avail, compute_func)) goto cleanup;
+      do {
+        if (!dispatch_job(&theta, &wakeup, busy_procs, S, num_procs, pool, &avail, compute_func))
+          goto cleanup;
+      } while (incr_total_choice_ad(&theta, P));
     } while (incr_total_choice(&theta));
     thpool_wait(pool);
 
@@ -633,7 +631,7 @@ bool count_models(program_t *P, bool lstable_sat, count_storage_t *ret) {
   count_storage_t C[NUM_PROCS] = {{0}};
   storage_t S[NUM_PROCS] = {{0}};
   size_t i;
-  bool has_ad = P->AD_n > 0, ok = false;
+  bool ok = false;
   pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER, wakeup = PTHREAD_MUTEX_INITIALIZER;
   pthread_cond_t avail = PTHREAD_COND_INITIALIZER;
   threadpool pool = thpool_init(num_procs);
@@ -643,7 +641,7 @@ bool count_models(program_t *P, bool lstable_sat, count_storage_t *ret) {
     PyErr_SetString(PyExc_ValueError, "received NULL count_storage_t as argument!");
     goto cleanup;
   }
-  if (!init_total_choice(&theta, total_choice_n, P->AD, P->AD_n)) goto cleanup;
+  if (!init_total_choice(&theta, total_choice_n, P)) goto cleanup;
 
   for (i = 0; i < num_procs; ++i) {
     /* These are zero-initialized when i = 0. */
@@ -655,27 +653,17 @@ bool count_models(program_t *P, bool lstable_sat, count_storage_t *ret) {
     S[i].pid = i; S[i].mu = &mu; S[i].wakeup = &wakeup; S[i].avail = &avail;
     S[i].busy_procs = busy_procs; S[i].lstable_sat = lstable_sat;
     S[i].P = P;
-    if (!init_total_choice(&S[i].theta, total_choice_n, P->AD, P->AD_n)) goto cleanup;
+    if (!init_total_choice(&S[i].theta, total_choice_n, P)) goto cleanup;
     pairs[i].C = &C[i];
     pairs[i].S = &S[i];
   }
 
   do {
-    size_t j, c;
-    if (has_ad) {
-      for (j = 0; j < theta.ad_n; ++j)
-        for (c = 0; c < theta.ad[j].n; ++c) {
-          int id = retr_free_proc(busy_procs, num_procs, &wakeup, &avail);
-          theta.theta_ad[j] = c;
-          copy_total_choice(&theta, &S[id].theta);
-          if (S[id].fail || thpool_add_work(pool, compute_model_count, &pairs[id])) goto cleanup;
-        }
-    } else {
+    do {
       int id = retr_free_proc(busy_procs, num_procs, &wakeup, &avail);
-      copy_total_choice(&theta, &S[id].theta);
-      if (S[id].fail || thpool_add_work(pool, compute_model_count, &pairs[id])) goto cleanup;
-    }
-
+      if (!dispatch_job_with_payload(&theta, &wakeup, busy_procs, S, num_procs, pool, &avail, id,
+            compute_model_count, &pairs[id])) goto cleanup;
+    } while (incr_total_choice_ad(&theta, P));
   } while (incr_total_choice(&theta));
   thpool_wait(pool);
 
@@ -827,7 +815,7 @@ solve_cleanup:
   }
 
   /* Only multiply after model counting to avoid numeric errors. */
-  double p = prob_total_choice(P->PF, P->PF_n, 0, P->NR, P->NR_n, theta, theta->theta_ad)/N;
+  double p = prob_total_choice(P, theta)/N;
   for (i = 0; i < obs->n; ++i) {
     prob_obs_storage_t *pr = &prob->P[i];
     double p_o = pr->N * p;
@@ -888,19 +876,19 @@ bool prob_obs_reuse(program_t *P, observations_t *obs, bool lstable_sat, prob_st
   bool busy_procs[NUM_PROCS] = {0};
   storage_t S[NUM_PROCS] = {{0}};
   size_t i;
-  bool has_ad = P->AD_n > 0, ok = false;
+  bool ok = false;
   pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER, wakeup = PTHREAD_MUTEX_INITIALIZER;
   pthread_cond_t avail = PTHREAD_COND_INITIALIZER;
   threadpool pool = thpool_init(num_procs);
   struct { prob_storage_t *Q; storage_t *S; observations_t *O; bool derive; } tuple[NUM_PROCS] = {{0}};
 
-  if (!init_total_choice(&theta, total_choice_n, P->AD, P->AD_n)) goto cleanup;
+  if (!init_total_choice(&theta, total_choice_n, P)) goto cleanup;
 
   for (i = 0; i < num_procs; ++i) {
     S[i].pid = i; S[i].mu = &mu; S[i].wakeup = &wakeup; S[i].avail = &avail;
     S[i].busy_procs = busy_procs; S[i].lstable_sat = lstable_sat;
     S[i].P = P;
-    if (!init_total_choice(&S[i].theta, total_choice_n, P->AD, P->AD_n)) goto cleanup;
+    if (!init_total_choice(&S[i].theta, total_choice_n, P)) goto cleanup;
     tuple[i].Q = &Q[i]; tuple[i].S = &S[i];
     tuple[i].O = obs; tuple[i].derive = derive;
     /* Fill probs with zero. */
@@ -913,21 +901,11 @@ bool prob_obs_reuse(program_t *P, observations_t *obs, bool lstable_sat, prob_st
   }
 
   do {
-    size_t j, c;
-    if (has_ad) {
-      for (j = 0; j < theta.ad_n; ++j)
-        for (c = 0; c < theta.ad[j].n; ++c) {
-          int id = retr_free_proc(busy_procs, num_procs, &wakeup, &avail);
-          theta.theta_ad[j] = c;
-          copy_total_choice(&theta, &S[id].theta);
-          if (S[id].fail || thpool_add_work(pool, compute_prob_obs, &tuple[id])) goto cleanup;
-        }
-    } else {
+    do {
       int id = retr_free_proc(busy_procs, num_procs, &wakeup, &avail);
-      copy_total_choice(&theta, &S[id].theta);
-      if (S[id].fail || thpool_add_work(pool, compute_prob_obs, &tuple[id])) goto cleanup;
-    }
-
+      if (!dispatch_job_with_payload(&theta, &wakeup, busy_procs, S, num_procs, pool, &avail, id,
+            compute_prob_obs, &tuple[id])) goto cleanup;
+    } while (incr_total_choice_ad(&theta, P));
   } while (incr_total_choice(&theta));
   thpool_wait(pool);
 

@@ -81,10 +81,10 @@ bool sample_total_choice(program_t *P, total_choice_t *theta, unsigned short see
   for (size_t i = 0; i < n; ++i) bitvec_SET(&theta->pf, i, erand48(seed) <= P->PF[i].p);
   /* Sample annotated disjunctions. */
   for (size_t i = 0; i < m; ++i) {
-    double p = theta->ad[i].P[0], x = erand48(seed);
+    double p = P->AD[i].P[0], x = erand48(seed);
     register uint16_t c = 0;
     /* A linear search on the cdf is fine here, since ADs are (usually) small. */
-    for (size_t j = 1; (j <= theta->ad[i].n) && !c; ++j, p += theta->ad[i].P[j-1]) c += j*(x < p);
+    for (size_t j = 1; (j <= P->AD[i].n) && !c; ++j, p += P->AD[i].P[j-1]) c += j*(x < p);
     theta->theta_ad[i] = c-1;
   }
   return true;
@@ -189,7 +189,7 @@ bool naive_sample(program_t *P, size_t n, PyArrayObject *atoms, bool lstable_sat
       S[i].lstable_sat = lstable_sat;
       S[i].P = P;
       S[i].fail = false;
-      if (!init_total_choice(&S[i].theta, total_choice_n, P->AD, P->AD_n)) goto cleanup;
+      if (!init_total_choice(&S[i].theta, total_choice_n, P)) goto cleanup;
       /* Split samples into num_procs approximately equally sized chunks for parallelism. */
       S[i].n = d + (i < r);
       S[i].samples = samples + t;

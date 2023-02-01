@@ -1,23 +1,25 @@
 #include "cinf.h"
 #include "cutils.h"
 
-double prob_total_choice(prob_fact_t *phi, size_t n, size_t CF_n, neural_rule_t *nu,
-    size_t m, total_choice_t *theta, uint8_t *theta_ad) {
-  size_t i = 0, ad_n = theta->ad_n;
+double prob_total_choice(program_t *P, total_choice_t *theta) {
+  prob_fact_t *PF = P->PF;
+  neural_rule_t *NR = P->NR;
+  size_t PF_n = P->PF_n, AD_n = P->AD_n, CF_n = P->CF_n, NR_n = P->NR_n;
+  size_t i = 0;
   double p = 1.0;
   bool t;
-  for (; i < n; ++i) {
+  for (; i < PF_n; ++i) {
     t = bitvec_GET(&theta->pf, i + CF_n);
-    p *= t*phi[i].p + (!t)*(1.0-phi[i].p);
+    p *= t*PF[i].p + (!t)*(1.0-PF[i].p);
   }
-  size_t r = CF_n + n;
-  for (i = 0; i < m; ++i)
-    for (size_t j = 0; j < nu[i].n; ++j) {
+  size_t r = CF_n + PF_n;
+  for (i = 0; i < NR_n; ++i)
+    for (size_t j = 0; j < NR[i].n; ++j) {
       t = bitvec_GET(&theta->pf, r++);
-      double q = nu[i].P[j*nu[i].m];
+      double q = NR[i].P[j*NR[i].m];
       p *= t*q + (!t)*(1.0-q);
     }
-  for (i = 0; i < ad_n; ++i) p *= theta->ad[i].P[theta_ad[i]];
+  for (i = 0; i < AD_n; ++i) p *= P->AD[i].P[theta->theta_ad[i]];
   return p;
 }
 
@@ -36,7 +38,7 @@ bool init_storage(storage_t *s, program_t *P, array_bool_t (*Pn)[4],
   s->busy_procs = busy_procs; s->lstable_sat = lstable_sat;
   s->pid = id;
   s->fail = s->warn = false;
-  if (!init_total_choice(&s->theta, total_choice_n, ad, ad_n)) goto error;
+  if (!init_total_choice(&s->theta, total_choice_n, P)) goto error;
   return true;
 error:
   PyErr_SetString(PyExc_MemoryError, "could not allocate enough memory for init_storage!");
@@ -103,13 +105,17 @@ nomem:
   return false;
 }
 
-bool init_total_choice(total_choice_t *theta, size_t n, annot_disj_t *ad, size_t m) {
+bool _init_total_choice(total_choice_t *theta, size_t n, size_t m) {
   if (!bitvec_init(&theta->pf, n)) return false;
   bitvec_zeron(&theta->pf, n);
-  theta->ad = ad;
   theta->ad_n = m;
-  theta->theta_ad = m > 0 ? (uint8_t*) calloc(m, sizeof(uint8_t)) : NULL;
+  theta->theta_ad = (uint8_t*) calloc(m, sizeof(uint8_t));
   return true;
+}
+bool init_total_choice(total_choice_t *theta, size_t n, program_t *P) {
+  size_t l = P->AD_n;
+  for (size_t i = 0; i < P->NA_n; ++i) l += P->NA[i].n;
+  return _init_total_choice(theta, n, l);
 }
 void free_total_choice_contents(total_choice_t *theta) {
   bitvec_free_contents(&theta->pf);
@@ -126,8 +132,8 @@ size_t get_num_facts(program_t *P) {
 total_choice_t* copy_total_choice(total_choice_t *src, total_choice_t *dst) {
   if (!dst) {
     dst = (total_choice_t*) malloc(sizeof(total_choice_t));
-    if (!init_total_choice(dst, src->pf.n, src->ad, src->ad_n)) return NULL;
-  } else { dst->ad = src->ad; dst->ad_n = src->ad_n; }
+    if (!_init_total_choice(dst, src->pf.n, src->ad_n)) return NULL;
+  } else dst->ad_n = src->ad_n;
   bitvec_copy(&src->pf, &dst->pf);
   if (src->ad_n > 0) memcpy(dst->theta_ad, src->theta_ad, src->ad_n*sizeof(uint8_t));
   return dst;
@@ -144,8 +150,8 @@ bool _incr_total_choice_ad(uint8_t *theta, annot_disj_t *ad, size_t i, size_t ad
 /**
  * Recursive implementation of incrementing total_choice_t ADs.
  */
-bool incr_total_choice_ad(total_choice_t *theta) {
-  return !_incr_total_choice_ad(theta->theta_ad, theta->ad, 0, theta->ad_n);
+bool incr_total_choice_ad(total_choice_t *theta, program_t *P) {
+  return (P->NA_n + P->AD_n > 0) ? !_incr_total_choice_ad(theta->theta_ad, P->AD, 0, P->AD_n) : false;
 }
 
 void print_total_choice(total_choice_t *theta) {
@@ -178,11 +184,17 @@ int retr_free_proc(bool *busy_procs, size_t num_procs, pthread_mutex_t *wakeup,
   return id;
 }
 
+bool dispatch_job_with_payload(total_choice_t *theta, pthread_mutex_t *wakeup, bool *busy_procs,
+    storage_t *S, size_t num_procs, threadpool pool, pthread_cond_t *avail, int id,
+    void (*compute_func)(void*), void *payload) {
+  copy_total_choice(theta, &S[id].theta);
+  return !(S[id].fail || thpool_add_work(pool, compute_func, payload));
+}
 bool dispatch_job(total_choice_t *theta, pthread_mutex_t *wakeup, bool *busy_procs, storage_t *S,
     size_t num_procs, threadpool pool, pthread_cond_t *avail, void (*compute_func)(void*)) {
   int id = retr_free_proc(busy_procs, num_procs, wakeup, avail);
-  copy_total_choice(theta, &S[id].theta);
-  return !(S[id].fail || thpool_add_work(pool, compute_func, &S[id]));
+  return dispatch_job_with_payload(theta, wakeup, busy_procs, S, num_procs, pool, avail, id,
+      compute_func, (void*) &S[id]);
 }
 
 #define PROCS_STR(x) #x ",compete"
@@ -242,7 +254,7 @@ bool prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
   /* Add the annotated disjunction rules according to the total rule encoded by theta_ad. */
   for (i = 0; i < theta->ad_n; ++i) {
     clingo_atom_t a;
-    if (!clingo_backend_add_atom(back, &theta->ad[i].cl_F[theta_ad[i]], &a)) return false;
+    if (!clingo_backend_add_atom(back, &P->AD[i].cl_F[theta_ad[i]], &a)) return false;
     if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) return false;
   }
   /* Cleanup backend. */
