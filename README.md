@@ -5,16 +5,15 @@
 [![](https://img.shields.io/badge/docs-master-blue.svg)](https://renatogeh.github.io/pasp)
 [![GitHub](https://img.shields.io/github/license/RenatoGeh/pasp?color=blue&label=License)](https://github.com/RenatoGeh/pasp/blob/master/LICENSE)
 
-Prototype implementation for probabilistic ASP [[1]](#ref-1)[[2]](#ref-2). Example probabilistic
-logic programs may be found in [`examples/`](examples/). See full API documentation
-[here](https://renatogeh.github.io/pasp/pasp.html). Let's take a look at some examples to show
-how to do inference with this package.
+Implementation of a neural-probabilistic ASP language [[1]](#ref-1)[[2]](#ref-2), with inference
+and learning. Example probabilistic logic programs may be found in [`examples/`](examples/). See
+full API documentation [here](https://renatogeh.github.io/pasp/pasp.html). Let's take a look at
+some examples to show how to do inference with this package.
 
 ## Examples
 
 Let's first take a look at the popular `asia` Bayesian network, here encoded as the probabilistic
-logic program [`examples/asia.lp`](examples/asia.lp) in a
-[ProbLog](https://dtai.cs.kuleuven.be/problog/) inspired syntax.
+logic program [`examples/asia.lp`](examples/asia.lp).
 
 ```clingo
 0.01::trip. 0.5::smoking.
@@ -363,6 +362,10 @@ sudo apt-get install clingo libclingo-dev
 ```
 
 ### Mac OS X
+
+> **Disclaimer:** pasp is only tested in Linux machines, and does not fully support Mac OS X! There
+> are known bugs and issues when running pasp in Mac OS X, and so we do not guarantee correctness
+> in other systems. Support for other operating systems is not a priority for now.
 
 Homebrew `clingo`:
 
