@@ -16,22 +16,19 @@ def test_mlp():
     | 1 | 1 |   1.0   |
     +---+---+---------+
   """
-  class Net(torch.nn.Module):
-    def __init__(self):
-      super(Net, self).__init__()
-      self.f = torch.nn.Linear(2, 2)
-      self.g = torch.nn.Sigmoid()
-      self.h = torch.nn.Linear(2, 1)
-
-    def forward(self, x: torch.Tensor):
-      return self.h(self.g(self.f(x)))
-
-  N = Net()
+  N = torch.nn.Sequential(
+    torch.nn.Linear(2, 2),
+    torch.nn.Sigmoid(),
+    torch.nn.Linear(2, 1),
+    # Make sure output is non-negative.
+    torch.nn.ReLU()
+  )
   S = {
-    "f.weight": torch.tensor([[ 1.1519355, 0.9704726], [-1.3226409, -0.77811617]]),
-    "f.bias":   torch.tensor([-2.534905, 2.3281014]),
-    "h.weight": torch.tensor([[1.4467078, -0.6486825]]),
-    "h.bias":   torch.tensor([0.7848085])
+    "0.weight": torch.tensor([[1.0795750617980957, 0.7900891304016113],
+                              [1.2740952968597412, 0.9654174447059631]]),
+    "0.bias":   torch.tensor([-2.386507511138916, -2.486057996749878]),
+    "2.weight": torch.tensor([[0.7259771823883057, 1.3539804220199585]]),
+    "2.bias":   torch.tensor([0.1348256766796112])
   }
   N.load_state_dict(S)
   return N
@@ -54,24 +51,23 @@ def test_ad_mlp():
     |  1  |  1  |  1.  |  .0  |  .0  |
     +---+---+---+------+------+------+
   """
-  class Net(torch.nn.Module):
-    def __init__(self):
-      super(Net, self).__init__()
-      self.f = torch.nn.Linear(2, 2)
-      self.g = torch.nn.Sigmoid()
-      self.h = torch.nn.Linear(2, 3)
-
-    def forward(self, x: torch.Tensor):
-      return self.h(self.g(self.f(x)))
-
-  N = Net()
+  N = torch.nn.Sequential(
+    torch.nn.Linear(2, 4),
+    torch.nn.Sigmoid(),
+    torch.nn.Linear(4, 3),
+    # Make sure output is non-negative.
+    torch.nn.Softmax(dim = 1)
+  )
   S = {
-    "f.weight": torch.tensor([[1.4857, 0.3382], [1.6301, 1.9893]]),
-    "f.bias":   torch.tensor([-0.6389, -3.2496]),
-    "h.weight": torch.tensor([[ 0.5377,  0.8554],
-                              [ 0.5681, -0.7919],
-                              [-1.1057, -0.0635]]),
-    "h.bias":   torch.tensor([0.0823, 0.0333, 0.8844])
+    "0.weight": torch.tensor([[-2.436516046524048, -1.9045624732971191],
+                              [-3.4312784671783447, 7.422353744506836],
+                              [3.002552032470703, 2.9324307441711426],
+                              [-5.433633804321289, 1.480564832687378]]),
+    "0.bias":   torch.tensor([3.18778133392334, 2.1292202472686768, -4.477348804473877, 0.029237013310194016]),
+    "2.weight": torch.tensor([[-1.9041186571121216, 2.8515288829803467, 3.432497978210449, -2.0234572887420654],
+                              [2.56845760345459, -2.964510679244995, -2.5871169567108154, 1.8192431926727295],
+                              [1.7890348434448242, -0.4094463288784027, -3.4937069416046143, 2.4915430545806885]]),
+    "2.bias":   torch.tensor([0.8296637535095215, -0.5550796985626221, -1.5046206712722778])
   }
   N.load_state_dict(S)
   return N
