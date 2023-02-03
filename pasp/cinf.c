@@ -125,7 +125,6 @@ void free_total_choice_contents(total_choice_t *theta) {
 size_t get_num_facts(program_t *P) {
   size_t n = P->PF_n + P->CF_n;
   for (size_t i = 0; i < P->NR_n; ++i) n += P->NR[i].n;
-  for (size_t i = 0; i < P->NA_n; ++i) n += P->NA[i].n;
   return n;
 }
 
@@ -139,7 +138,9 @@ total_choice_t* copy_total_choice(total_choice_t *src, total_choice_t *dst) {
   return dst;
 }
 
-bool incr_total_choice(total_choice_t *theta) { return bitvec_incr(&theta->pf); }
+bool incr_total_choice(total_choice_t *theta) {
+  return !theta->pf.n ? false : bitvec_incr(&theta->pf);
+}
 bool _incr_total_choice_ad(uint8_t *theta, annot_disj_t *ad, size_t i, size_t ad_n) {
   if (i == ad_n-1) return (theta[i] = (theta[i] + 1) % ad[i].n) == 0;
   bool c = _incr_total_choice_ad(theta, ad, i+1, ad_n);
