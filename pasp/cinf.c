@@ -20,6 +20,10 @@ double prob_total_choice(program_t *P, total_choice_t *theta) {
       p *= t*q + (!t)*(1.0-q);
     }
   for (i = 0; i < AD_n; ++i) p *= P->AD[i].P[theta->theta_ad[i]];
+  r = AD_n;
+  for (i = 0; i < P->NA_n; ++i)
+    for (size_t j = 0; j < P->NA[i].n; ++j)
+      p *= P->NA[i].P[j*P->NA[i].m*P->NA[i].v+theta->theta_ad[r++]];
   return p;
 }
 
@@ -142,24 +146,36 @@ bool incr_total_choice(total_choice_t *theta) {
   return !theta->pf.n ? false : bitvec_incr(&theta->pf);
 }
 bool _incr_total_choice_ad(uint8_t *theta, annot_disj_t *ad, size_t i, size_t ad_n) {
+  if (!ad_n) return true;
   if (i == ad_n-1) return (theta[i] = (theta[i] + 1) % ad[i].n) == 0;
   bool c = _incr_total_choice_ad(theta, ad, i+1, ad_n);
   bool l = theta[i] == ad[i].n-1;
   theta[i] = (theta[i] + c) % ad[i].n;
   return c && l;
 }
+bool _incr_total_choice_nad(uint8_t *theta, neural_annot_disj_t *nad, size_t i, size_t j, size_t a,
+    size_t nad_n) {
+  if (!nad_n) return true;
+  if (a == nad_n-1) return (theta[a] = (theta[a] + 1) % nad[i].v) == 0;
+  if (j == nad[i].n) j = 0, ++i;
+  bool c = _incr_total_choice_nad(theta, nad, i, j+1, a+1, nad_n);
+  bool l = theta[a] == nad[i].v-1;
+  theta[a] = (theta[a] + c) % nad[i].v;
+  return c && l;
+}
 /**
  * Recursive implementation of incrementing total_choice_t ADs.
  */
 bool incr_total_choice_ad(total_choice_t *theta, program_t *P) {
-  return (P->NA_n + P->AD_n > 0) ? !_incr_total_choice_ad(theta->theta_ad, P->AD, 0, P->AD_n) : false;
+  return !(_incr_total_choice_ad(theta->theta_ad, P->AD, 0, P->AD_n) &&
+    _incr_total_choice_nad(theta->theta_ad + P->AD_n, P->NA, 0, 0, 0, theta->ad_n - P->AD_n));
 }
 
 void print_total_choice(total_choice_t *theta) {
-  printf("Total choice:\nPF: ");
-  bitvec_print(&theta->pf);
+  wprintf(L"Total choice:\nPF: ");
+  bitvec_wprint(&theta->pf);
   for (size_t i = 0; i < theta->ad_n; ++i)
-    printf("AD[%lu] = %u\n", i, theta->theta_ad[i]);
+    wprintf(L"AD[%lu] = %u\n", i, theta->theta_ad[i]);
 }
 
 size_t estimate_nprocs(size_t total_choice_n) {
@@ -253,10 +269,29 @@ bool prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
     }
   }
   /* Add the annotated disjunction rules according to the total rule encoded by theta_ad. */
-  for (i = 0; i < theta->ad_n; ++i) {
+  for (i = 0; i < P->AD_n; ++i) {
     clingo_atom_t a;
     if (!clingo_backend_add_atom(back, &P->AD[i].cl_F[theta_ad[i]], &a)) return false;
     if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) return false;
+  }
+  /* Add the neural annotated disjunction rules according to the total rule encoded by theta_ad. */
+  {
+    clingo_atom_t h;
+    clingo_literal_t B[64];
+    size_t r = P->AD_n;
+    for (i = 0; i < P->NA_n; ++i) {
+      for (size_t j = 0; j < P->NA[i].n; ++j) {
+        if (!clingo_backend_add_atom(back, &P->NA[i].H[j*P->NA[i].v+theta->theta_ad[r++]], &h))
+          return false;
+        for (size_t b = 0; b < P->NA[i].k; ++b) {
+          size_t u = j*P->NA[i].k+b;
+          if (!clingo_backend_add_atom(back, &P->NA[i].B[u], (clingo_atom_t*) &B[b]))
+            return false;
+          if (!P->NA[i].S[u]) B[b] = -B[b];
+        }
+        if (!clingo_backend_rule(back, false, &h, 1, B, P->NA[i].k)) return false;
+      }
+    }
   }
   /* Cleanup backend. */
   if (!clingo_backend_end(back)) return false;

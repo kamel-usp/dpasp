@@ -112,6 +112,8 @@ def push(L: list, X: iter):
   if isinstance(X, list): L.extend(X)
   else: L.append(X)
 
+def lit2atom(x: str) -> str: return x[4:] if x[:4] == "not " else x
+
 class StableTransformer(lark.Transformer):
   def __init__(self, _):
     super().__init__()
@@ -155,7 +157,7 @@ class StableTransformer(lark.Transformer):
       if len(body) > 1:
         body_no_data = [b for b in body if b[2][1] != t[0].name]
         B = contiguous(tuple(clingo.parse_term(f"{b[2][1]}({t[i].arg})" if len(b[3]) > 0 \
-                                                      else b[1])._rep for i in range(len(t)) \
+                                                else lit2atom(b[1]))._rep for i in range(len(t)) \
                               for b in body_no_data), dtype = numpy.uint64)
         S = contiguous(tuple(b[2][0] for i in range(len(t)) for b in body_no_data), dtype = bool)
       NR.append(NeuralRule(H, B, S, name, net, rep, t))
@@ -166,14 +168,14 @@ class StableTransformer(lark.Transformer):
       t = StableTransformer.find_data_pred(D, body, "AD", name)
       # Ground rules.
       V = list(vals.keys())
-      H = contiguous(tuple(clingo.parse_term(f"{name}({V[j]}, {t[i].arg})")._rep \
+      H = contiguous(tuple(clingo.parse_term(f"{name}({t[i].arg}, {V[j]})")._rep \
                             for i in range(len(t)) for j in range(len(V))))
       B, S = None, None
       if len(body) > 1:
         body_no_data = [b for b in body if b[2][1] != t[0].name]
         # B and S do not depend on the number of values |V|, only on |t| and |body|.
         B = contiguous(tuple(clingo.parse_term(f"{b[2][1]}({t[i].arg})" if len(b[3]) > 0 \
-                                                else b[1])._rep for i in range(len(t)) \
+                                                else lit2atom(b[1]))._rep for i in range(len(t)) \
                               for b in body_no_data), dtype = numpy.uint64)
         S = contiguous(tuple(b[2][0] for i in range(len(t)) for b in body_no_data), dtype = bool)
       NA.append(NeuralAD(H, B, S, name, V, net, rep, t))

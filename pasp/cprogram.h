@@ -142,6 +142,10 @@ bool update_pr_neural_rule(neural_rule_t *nr);
 void free_neural_rule_contents(neural_rule_t *nr);
 void free_neural_rule(neural_rule_t *nr);
 
+bool update_pr_neural_annot_disj(neural_annot_disj_t *na);
+void free_neural_annot_disj_contents(neural_annot_disj_t *na);
+void free_neural_annot_disj_rule(neural_annot_disj_t *na);
+
 bool print_query(query_t *Q);
 void free_query_contents(query_t *Q);
 void free_query(query_t *Q);

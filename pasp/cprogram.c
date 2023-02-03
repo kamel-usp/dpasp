@@ -48,12 +48,17 @@ bool update_pr_neural_rule(neural_rule_t *nr) {
   nr->P = PyArray_DATA(py_P);
   return true;
 }
-
 void free_neural_rule_contents(neural_rule_t *nr) {}
 void free_neural_rule(neural_rule_t *nr) { free_neural_rule_contents(nr); free(nr); }
 
-void free_neural_annot_disj_contents(neural_annot_disj_t *nad) {}
-void free_neural_annot_disj(neural_annot_disj_t *nad) { free_neural_annot_disj_contents(nad); free(nad); }
+bool update_pr_neural_annot_disj(neural_annot_disj_t *na) {
+  PyArrayObject *py_P = (PyArrayObject*) PyObject_CallMethod(na->self, "pr", NULL);
+  if (!py_P) return false;
+  na->P = PyArray_DATA(py_P);
+  return true;
+}
+void free_neural_annot_disj_contents(neural_annot_disj_t *na) {}
+void free_neural_annot_disj(neural_annot_disj_t *na) { free_neural_annot_disj_contents(na); free(na); }
 
 bool print_query_with_buffer(query_t *q, string_t *s) {
   size_t i;
@@ -691,7 +696,7 @@ bool from_python_neural_ad(PyObject *py_nad, neural_annot_disj_t *nad) {
     S = PyArray_DATA(py_S);
   }
 
-  nad->m = m; nad->n = n; nad->k = k;
+  nad->m = m; nad->n = n; nad->k = k; nad->v = v;
   nad->P = NULL;
   nad->H = H; nad->B = B; nad->S = S;
   nad->self = py_nad;

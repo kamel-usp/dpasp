@@ -367,6 +367,8 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
 
   for (i = 0; i < P->NR_n; ++i)
     if (!update_pr_neural_rule(&P->NR[i])) goto cleanup;
+  for (i = 0; i < P->NA_n; ++i)
+    if (!update_pr_neural_annot_disj(&P->NA[i])) goto cleanup;
 
   size_t data_stride = has_neural ? (P->NR_n > 0 ? P->NR[0].m : P->NA[0].m) : 1;
   /* If credal, then 2: lower and upper; else, then 1: sharp probability. */
@@ -455,6 +457,7 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
     /* Move memory for next batch. */
     I += Q_n*sem_stride;
     for (i = 0; i < P->NR_n; ++i) ++P->NR[i].P;
+    for (i = 0; i < P->NA_n; ++i) P->NA[i].P += P->NA[i].v;
     /* Reset memory for next batch. */
     if ((data_stride > 1) && !P->CF_n) {
       size_t s = Q_n*sizeof(double);
