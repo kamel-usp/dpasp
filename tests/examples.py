@@ -101,7 +101,7 @@ class TestExamples(PaspTest):
     # ℙ(smokes(b))
     self.assertApproxEqual(R[1,:], [0.2, 0.2])
 
-  def test_ad(self):
+  def test_earthquake_ad(self):
     P = pasp.parse("examples/earthquake_ad.lp")
     R = pasp.exact(P, quiet = True)
     # ℙ(alarm | burglary, earthquake(heavy))
