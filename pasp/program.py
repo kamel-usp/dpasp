@@ -117,11 +117,11 @@ class NeuralRule:
     self.net = net
     self.rep = rep
     self.data = data
-    self.input = torch.stack(tuple(d.data for d in data), dim = 0)
+    self.input = torch.cat(tuple(d.data for d in data), dim = 0)
 
     # Validate net during parsing so that it won't blow in our faces during inference or learning.
     p = self.pr()
-    assert p.ndim == 3, \
+    assert p.ndim == 2, \
            "Networks embedded onto neural rules must output a single probability!"
     # Number of instances.
     self.m = p.shape[1]
@@ -144,11 +144,11 @@ class NeuralAD:
     self.rep   = rep
     self.data  = data
     self.vals  = vals
-    self.input = torch.stack(tuple(d.data for d in data), dim = 0)
+    self.input = torch.cat(tuple(d.data for d in data), dim = 0)
 
     # Validate net during parsing so that it won't blow in our faces during inference or learning.
     p = self.pr()
-    assert p.ndim == 3, \
+    assert p.ndim == 2, \
            "Networks embedded onto neural rules must output a 1D probability tensor!"
     # Number of instances.
     self.m = p.shape[1]
