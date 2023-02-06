@@ -28,12 +28,10 @@ void array_##type##_free(array_##type##_t *a) { array_##type##_free_contents(a);
 
 #define CARRAY_ARRAY_GROW_DECLARE(type) \
 bool array_##type##_grow(array_##type##_t *a) { \
-  size_t nc = sizeof(type)*ARRAY_MAGIC_MULTIPLIER*a->n; \
-  type *d = (type*) realloc(a->d, nc); \
-  if (!d) { \
-    a->d = NULL; \
-    return false; \
-  } \
+  size_t nc = ARRAY_MAGIC_MULTIPLIER*a->c; \
+  size_t nb = sizeof(type)*nc; \
+  type *d = (type*) realloc(a->d, nb); \
+  if (!d) return false; \
   a->d = d; \
   a->c = nc; \
   return true; \
