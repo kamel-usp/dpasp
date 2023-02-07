@@ -30,6 +30,11 @@ static PyObject* exact(PyObject *self, PyObject *args, PyObject *kwargs) {
 
   if (!from_python_program(py_P, &p)) return NULL;
 
+  if (psem == MAXENT_SEMANTICS && p.CF_n > 0) {
+    PyErr_SetString(PyExc_ValueError, "cannot have MaxEntropy semantics together with credal facts!");
+    goto cleanup;
+  }
+
   if (needs_ground(&p)) {
     if (!ground(&p)) goto cleanup;
     if (p.stable) if (!ground(p.stable)) goto cleanup;
