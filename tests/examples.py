@@ -1,5 +1,6 @@
 import unittest
 from .utils import PaspTest
+import numpy as np
 import pasp
 
 class TestExamples(PaspTest):
@@ -122,6 +123,22 @@ class TestExamples(PaspTest):
          [0.157500, 0.450000], [0.073500, 0.350000], [0.122500, 0.350000]]
     for i, o in enumerate(O):
       self.assertApproxEqual(R[i,:], o)
+
+  def test_fault_tree(self):
+    P = pasp.parse("examples/fault_tree.lp")
+    R = pasp.exact(P, quiet = True)
+    # All marginal probabilities.
+    T = np.array([[0.05     , 0.1       ], [0.05      , 0.1       ], [0.005    , 0.01      ],
+                  [0.05475  , 0.109     ], [0.05475   , 0.109     ], [0.01198  , 0.019925  ],
+                  [0.0074875, 0.0199    ], [0.01741262, 0.0346015 ], [0.0193778, 0.03942849],
+                  [0.001    , 0.01      ], [0.02035842, 0.04903421]])
+    self.assertTrue(np.allclose(R[0:-4], T))
+
+  # This test might take a long time. Ignore for now.
+  # def test_rain_util(self):
+    # P = pasp.parse("examples/rain_utility.lp")
+    # R = pasp.exact(P, quiet = True)
+    # self.assertAlmostEqual(R[0,1], 0.5075)
 
 class TestLStable(PaspTest):
   def test_barber(self):
