@@ -1,5 +1,5 @@
-#ifndef _PASP_CARRAY 
-#define _PASP_CARRAY 
+#ifndef _PASP_CARRAY
+#define _PASP_CARRAY
 
 #include <stdlib.h>
 #include <stdbool.h>
@@ -10,7 +10,7 @@
     type *d; /* data */ \
     size_t c; /* capacity */ \
     size_t n; /* size */ \
-  } array_##type##_t;
+  } array_##type##_t
 
 CARRAY_ARRAY_TYPE_DECLARE(bool);
 CARRAY_ARRAY_TYPE_DECLARE(double);
@@ -18,9 +18,9 @@ CARRAY_ARRAY_TYPE_DECLARE(char);
 CARRAY_ARRAY_TYPE_DECLARE(clingo_symbol_t);
 
 #define CARRAY_ARRAY_HEADER(type, ret_type, func) \
-ret_type array_##type##_##func(array_##type##_t *a);
+ret_type array_##type##_##func(array_##type##_t *a)
 #define CARRAY_ARRAY_HEADER_PONE(type, ret_type, func) \
-ret_type array_##type##_##func(array_##type##_t *a, type o);
+ret_type array_##type##_##func(array_##type##_t *a, type o)
 
 CARRAY_ARRAY_HEADER(bool, bool, init);
 CARRAY_ARRAY_HEADER(bool, void, free_contents);
