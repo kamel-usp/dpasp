@@ -25,6 +25,11 @@ cleanup:
   return false;
 }
 
+void* observations_atoms(observations_t *O) {
+  if (O->dense) return O->V;
+  return O->A;
+}
+
 bool init_observations(observations_t *O, PyArrayObject *obs, PyArrayObject *atoms) {
   /* Initialize numpy. */
   import_array();
@@ -58,6 +63,7 @@ bool init_observations(observations_t *O, PyArrayObject *obs, PyArrayObject *ato
 
   O->A = A; O->S = S;
   O->n = n; O->m = m;
+  O->dense = false;
 
   return true;
 clingo_err:
@@ -77,3 +83,146 @@ void free_observations_contents(observations_t *O) {
 }
 
 void free_observations(observations_t *O) { free_observations_contents(O); free(O); }
+
+bool init_dense_observations(observations_t *O, PyArrayObject *obs, size_t batch) {
+  /* Initialize numpy. */
+  import_array();
+  size_t n = PyArray_DIM(obs, 0);
+  size_t m = PyArray_DIM(obs, 1);
+  if (batch > n || batch <= 0) batch = n;
+  batch = n > batch ? batch : (size_t) n;
+  size_t len = (size_t) PyArray_ITEMSIZE(obs);
+  clingo_symbol_t **V = NULL;
+  uint8_t **S = NULL;
+
+  V = (clingo_symbol_t**) malloc(batch*sizeof(clingo_symbol_t*));
+  if (!V) goto cleanup;
+  S = (uint8_t**) malloc(batch*sizeof(uint8_t*));
+  if (!S) goto cleanup;
+  for (size_t i = 0; i < batch; ++i) {
+    V[i] = (clingo_symbol_t*) calloc(m, sizeof(clingo_symbol_t));
+    if (!V[i]) {
+      for (size_t j = 0; j < i; ++j) { free(V[j]); free(S[j]); }
+      goto cleanup;
+    }
+    S[i] = (uint8_t*) malloc(m*sizeof(uint8_t));
+    if (!S[i]) {
+      for (size_t j = 0; j < i; ++j) { free(V[j]); free(S[j]); }
+      goto cleanup;
+    }
+  }
+  char a[MAX_ATOM_SIZE] = {0};
+  for (size_t i = 0; i < batch; ++i)
+    for (size_t j = 0; j < m; ++j) {
+      char *d = PyArray_GETPTR2(obs, i, j);
+      if (!d[0]) break;
+      bool o = d[0] == '~';
+      memcpy(a, d+o, len-o);
+      if (!clingo_parse_term(a, NULL, NULL, 20, &V[i][j])) goto clingo_err;
+      S[i][j] = !o;
+    }
+
+  O->V = V; O->S = S;
+  O->n = batch; O->m = m;
+  O->batch = batch; O->i = 0;
+  O->dense = true;
+
+  return true;
+clingo_err:
+  PyErr_SetString(PyExc_ValueError, "atoms given as observations are not in clingo syntax!");
+  if (clingo_error_code() != clingo_error_success)
+    wprintf(L"Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
+cleanup:
+  free(V); free(S);
+  return false;
+}
+
+bool next_dense_observations(observations_t *O, PyArrayObject *obs) {
+  size_t n = PyArray_DIM(obs, 0);
+  size_t len = (size_t) PyArray_ITEMSIZE(obs);
+  bool reset = O->i + O->batch >= n;
+  if (reset) O->i = 0;
+  size_t next = O->batch + O->i;
+  if (next > n) next = n;
+  size_t b = next - O->i;
+
+  char a[MAX_ATOM_SIZE] = {0};
+  for (size_t i = 0; i < b; ++i)
+    for (size_t j = 0; j < O->m; ++j) {
+      char *d = PyArray_GETPTR2(obs, O->i+i, j);
+      if (!d[0]) {
+        memset(O->V[i] + j, 0, (O->m-j)*sizeof(clingo_symbol_t));
+        break;
+      } else {
+        bool o = d[0] == '~';
+        memcpy(a, d+o, len-o);
+        if (!clingo_parse_term(a, NULL, NULL, 20, &O->V[i][j])) goto clingo_err;
+        O->S[i][j] = !o;
+      }
+    }
+  O->n = b;
+  O->i = (!reset)*next;
+
+  return true;
+clingo_err:
+  PyErr_SetString(PyExc_ValueError, "atoms given as observations are not in clingo syntax!");
+  if (clingo_error_code() != clingo_error_success)
+    wprintf(L"Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
+  return false;
+}
+
+void free_dense_observations_contents(observations_t *O) {
+  for (size_t i = 0; i < O->batch; ++i) { free(O->V[i]); free(O->S[i]); }
+  free(O->V); free(O->S);
+}
+
+void free_dense_observations(observations_t *O) { free_dense_observations_contents(O); free(O); }
+
+bool ll2array(PyObject *ll, PyArrayObject **obs) {
+  if (!PyList_Check(ll)) return false;
+  char *data = NULL;
+  size_t n = PyList_GET_SIZE(ll);
+  size_t m = 0;
+  Py_ssize_t c = 0;
+
+  for (size_t i = 0; i < n; ++i) {
+    PyObject *l = PyList_GET_ITEM(ll, i);
+    if (!PyList_Check(l)) return false;
+    size_t k = PyList_GET_SIZE(l);
+    for (size_t j = 0; j < k; ++j) {
+      Py_ssize_t s;
+      PyObject *e = PyList_GET_ITEM(l, j);
+      if (!PyUnicode_AsUTF8AndSize(e, &s)) return false;
+      c = (s > c)*s + (s <= c)*c;
+    }
+    m = (k > m)*k + (k <= m)*m;
+  }
+
+  data = calloc(n*m*c, sizeof(char));
+  if (!data) return false;
+
+  for (size_t i = 0; i < n; ++i) {
+    PyObject *l = PyList_GET_ITEM(ll, i);
+    size_t k = PyList_GET_SIZE(l);
+    for (size_t j = 0; j < k; ++j) {
+      Py_ssize_t s;
+      PyObject *e = PyList_GET_ITEM(l, j);
+      const char *str = PyUnicode_AsUTF8AndSize(e, &s);
+      if (!s) goto cleanup;
+      memcpy(data + i*m*c + j*c, str, s);
+    }
+  }
+
+  /* Initialize numpy. */
+  import_array();
+  npy_intp dims[2] = {n, m};
+  *obs = (PyArrayObject*) PyArray_New(&PyArray_Type, 2, dims, NPY_STRING, NULL, data, c,
+      NPY_ARRAY_CARRAY_RO, NULL);
+  if (!*obs) goto cleanup;
+  PyArray_ENABLEFLAGS(*obs, NPY_ARRAY_OWNDATA);
+
+  return true;
+cleanup:
+  free(data);
+  return false;
+}

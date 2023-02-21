@@ -4,6 +4,7 @@
 #include <numpy/arrayobject.h>
 
 #include "clearn.h"
+#include "cdata.h"
 
 #include "ground.h"
 #include "cprogram.h"
@@ -48,7 +49,7 @@ static PyObject* learn(PyObject *self, PyObject *args, PyObject *kwargs) {
       (atoms_n != (size_t) obs_dims[1]) || (PyArray_SIZE(obs_counts) != obs_dims[0]) ||
       (atoms_n == 0)) {
     PyErr_SetString(PyExc_ValueError, "unexpected size dimension for obs, obs_counts and/or atoms "
-        "in learn_fixpoint!");
+        "in learn!");
     goto cleanup;
   }
 
@@ -100,9 +101,80 @@ cleanup:
   return ok ? Py_None : NULL;
 }
 
+static PyObject* learn_batch(PyObject *self, PyObject *args, PyObject *kwargs) {
+  program_t P = {0};
+  PyObject *py_P, *py_obs;
+  PyArrayObject *obs;
+  bool ok = false, free_obs = false;
+  bool lstable_sat = true;
+  size_t niters = 30, batch = 100;
+  const char *alg_s = ALG_FIXPOINT_S;
+  uint8_t alg = ALG_FIXPOINT;
+  double eta = 0.1;
+  static char *kwlist[] = { "", "", "niters", "alg", "eta", "batch", "lstable_sat", NULL };
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OO|nsdnb", kwlist, &py_P, &py_obs, &niters,
+        &alg_s, &eta, &batch, &lstable_sat))
+    return NULL;
+
+  if (!PyArray_Check(py_obs)) {
+    if (!ll2array(py_obs, &obs)) {
+      PyErr_SetString(PyExc_TypeError, "obs must either be a numpy.ndarray object or a list of lists!");
+      return NULL;
+    }
+    free_obs = true;
+  } else obs = (PyArrayObject*) py_obs;
+
+  if (PyArray_NDIM(obs) != 2) {
+    PyErr_SetString(PyExc_ValueError, "unexpected size dimension for obs in learn!");
+    goto cleanup;
+  }
+
+  if (PyArray_TYPE(obs) != NPY_STRING) {
+    PyErr_SetString(PyExc_TypeError, "atoms must be a numpy.ndarray of type string (not unicode)!");
+    return NULL;
+  }
+
+  if (!strcmp(alg_s, ALG_FIXPOINT_S)) alg = ALG_FIXPOINT;
+  else if (!strcmp(alg_s, ALG_LAGRANGE_S)) alg = ALG_LAGRANGE;
+  else if (!strcmp(alg_s, ALG_NEURASP_S)) alg = ALG_NEURASP;
+  else {
+    PyErr_SetString(PyExc_ValueError, "alg must either be \"fixpoint\", \"lagrange\" or \"neurasp\"!");
+    return NULL;
+  }
+
+  if (!from_python_program(py_P, &P)) return NULL;
+
+  if (needs_ground(&P)) {
+    if (!ground(&P)) goto cleanup;
+    if (P.stable) if (!ground(P.stable)) goto cleanup;
+  }
+
+  lstable_sat = lstable_sat && (P.sem == LSTABLE_SEMANTICS);
+  switch(alg) {
+    case ALG_FIXPOINT:
+      /*if (!learn_fixpoint_batch(&P, obs, niters, batch, lstable_sat)) goto cleanup;*/
+      break;
+    case ALG_LAGRANGE:
+      if (!learn_lagrange_batch(&P, obs, niters, eta, batch, lstable_sat)) goto cleanup;
+      break;
+    case ALG_NEURASP:
+      /*if (!learn_neurasp_batch(&P, obs, niters, eta, batch, lstable_sat)) goto cleanup;*/
+      break;
+  }
+
+  ok = true;
+cleanup:
+  free_program_contents(&P);
+  if (free_obs) Py_XDECREF(obs);
+  return ok ? Py_None : NULL;
+}
+
 static PyMethodDef ClearnMethods[] = {
   {"learn", (PyCFunction) (void(*)(void)) learn, METH_VARARGS | METH_KEYWORDS,
     "Learns a program given data."},
+  {"learn_batch", (PyCFunction) (void(*)(void)) learn_batch, METH_VARARGS | METH_KEYWORDS,
+    "Learns a program given data in batch mode."},
   {NULL, NULL, 0, NULL},
 };
 

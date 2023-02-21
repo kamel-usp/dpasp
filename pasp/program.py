@@ -81,84 +81,114 @@ class AnnotatedDisjunction:
   def __getitem__(self, i: int) -> tuple[float, str]:
     return self.P[i], self.F[i]
   def __str__(self) -> str:
-    return "; ".join([f"{(p := round(self.P[i], ndigits = 3) if p > 0 else '*')}{'?' if self.learnable else ''}::{self.F[i]}" for i in range(len(self.P))])
+    return "; ".join([f"{(p if (p := round(self.P[i], ndigits = 3)) > 0 else '*')}{'?' if self.learnable else ''}::{self.F[i]}" for i in range(len(self.P))])
   def __repr__(self) -> str: return self.__str__()
 
-# Check torch.
-has_torch = False
 try:
-  import torch.utils.data
-  has_torch = True
+  import torch
 except ModuleNotFoundError:
   print("PyTorch not found! PyTorch must be installed for neural rules and neural ADs to be used "
         "in programs.")
 
-# Extend object to avoid errors when torch is not present.
-class Data(torch.utils.data.Dataset if has_torch else object):
-  def __init__(self, name: str, arg: str, data):
+class Data:
+  def __init__(self, name: str, arg: str, test, train = None):
     self.name = name
     self.arg = arg
     import pandas
-    if issubclass(type(data), pandas.DataFrame): self.data = torch.tensor(data.to_numpy())
-    else: self.data = data
+    if issubclass(type(test), pandas.DataFrame): self.test = torch.tensor(test.to_numpy())
+    else: self.test = test
+    if issubclass(type(train), pandas.DataFrame): self.train = torch.tensor(train.to_numpy())
+    else: self.train = train
 
-  def __len__(self): return len(self.data)
-  def __getitem__(self, i: int): return self.data[i]
-  def __str__(self): return f"{self.name}({self.arg}) ~ {self.data.shape}"
+    if self.train is not None:
+      assert self.test.shape[1:] == self.train.shape[1:], \
+        "Train and test sets must have same shape (excluding the first dimension)!"
+
+  def __str__(self):
+    if self.train is None: return f"{self.name}({self.arg}) ~ test({self.test.shape})"
+    else: return f"{self.name}({self.arg}) ~ test({self.test.shape}), train({self.train.shape})"
   def __repr__(self): return self.__str__()
 
-class NeuralRule:
-  def __init__(self, heads: list, bodies: list, signs: list, name: str, net, rep: str, data: list):
+class Neural:
+  def __init__(self, net, data, learnable, rep, nvals):
+    self.net = net
+    self.learnable = learnable
+    self.rep = rep
+    self.data = data
+    self.opt = torch.optim.SGD(net.parameters(), lr = 0.01, maximize = True)
+    self.test = torch.cat(tuple(d.test for d in data), dim = 0)
+    self.train = None if data[0].train is None else torch.cat(tuple(d.train for d in data), dim = 0)
+    self.out = None
+    # Derivatives of the logic program to be passed to backwards.
+    self.dw = torch.zeros((self.train.shape[0], nvals)) if learnable else None
+    self.net.train()
+
+  def __str__(self): return self.rep
+  def __repr__(self): return self.__str__()
+
+  def pr(self):
+    "Retrieves the probabilities of the neural rule from the test set."
+    with torch.inference_mode():
+      return self.net(self.test).cpu().numpy()
+
+  def forward(self, start: int = 0, end: int = None):
+    "Retrieves the probabilities of the neural rule from the train set."
+    if self.learnable:
+      self.out = self.net(self.train[start:end])
+      return self.out.data.cpu().numpy()
+    with torch.inference_mode():
+      return self.net(self.train[start:end]).cpu().numpy()
+
+  def backward(self, start: int = 0, end: int = None):
+    """ Performs backpropagation and runs the optimizer step.
+    Argument `dl` is the derivative of the program as a `numpy.ndarray`.
+    """
+    x = self.out[start:end]
+    dx = self.dw[start:end]
+    x.backward(dx)
+    # print("p(x)  =", x)
+    # print("dP/dp =", dx)
+    # w, b = (x for x in self.net.parameters())
+    # w = next(x for x in self.net.parameters())
+    # print("dp/dw =", w.grad)
+    # print("dp/db =", b.grad)
+    # print(w, b)
+    self.opt.step()
+    self.opt.zero_grad()
+    # print(w, b)
+
+  def ntest(self): return self.data[0].test.shape[0]
+  def ntrain(self): return self.data[0].train.shape[0] if self.learnable else 0
+
+class NeuralRule(Neural):
+  def __init__(self, heads: list, bodies: list, signs: list, name: str, net, rep: str, data: list,
+               learnable: bool):
+    super().__init__(net, data, learnable, rep, 1)
     # Heads and bodies must be numpy.uint64 values representing _rep, not Symbols.
     self.H = heads
     self.B = bodies
     self.S = signs
     self.name = name
-    self.net = net
-    self.rep = rep
-    self.data = data
-    self.input = torch.cat(tuple(d.data for d in data), dim = 0)
 
-    # Validate net during parsing so that it won't blow in our faces during inference or learning.
+    # Validate net during parsing so that it won't blow up in our faces during inference or learning.
     p = self.pr()
     assert p.ndim == 2, \
            "Networks embedded onto neural rules must output a single probability!"
-    # Number of instances.
-    self.m = p.shape[1]
 
-  def pr(self):
-    with torch.inference_mode():
-      return self.net(self.input).numpy()
-
-  def __str__(self): return self.rep
-  def __repr__(self): return self.__str__()
-
-class NeuralAD:
+class NeuralAD(Neural):
   def __init__(self, heads: list, bodies: list, signs: list, name: str, vals: list, net, rep: str, \
-               data: list):
+               data: list, learnable: bool):
+    super().__init__(net, data, learnable, rep, len(vals))
     self.H = heads
     self.B = bodies
     self.S = signs
     self.name  = name
-    self.net   = net
-    self.rep   = rep
-    self.data  = data
     self.vals  = vals
-    self.input = torch.cat(tuple(d.data for d in data), dim = 0)
 
-    # Validate net during parsing so that it won't blow in our faces during inference or learning.
+    # Validate net during parsing so that it won't blow up in our faces during inference or learning.
     p = self.pr()
     assert p.ndim == 2, \
            "Networks embedded onto neural rules must output a 1D probability tensor!"
-    # Number of instances.
-    self.m = p.shape[1]
-
-  def __str__(self): return self.rep
-  def __repr__(self): return self.__str__()
-
-  def pr(self):
-    with torch.inference_mode():
-      return self.net(self.input).numpy()
 
 class Semantics(enum.IntEnum):
   STABLE = 0
@@ -252,6 +282,16 @@ class Program:
     self.AD = AD
     self.NR = NR
     self.NA = NA
+
+    # Number of instances in data.
+    self.m_test = 0
+    self.m_train = 0
+    if (len(NR) > 0) or (len(NA) > 0):
+      self.m_test  = NR[0].ntest() if len(NR) > 0 else NA[0].ntest()
+      for nr in (NR + NA):
+        if nr.learnable:
+          self.m_train = nr.ntrain()
+          break
 
     self.gr_P = ""
 

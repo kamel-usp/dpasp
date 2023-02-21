@@ -30,7 +30,7 @@ FRAC: REAL "/" REAL
 PROB: FRAC | REAL
 
 // Constants.
-CONST: /[a-z]\w*/
+WORD: /[a-z]\w*/
 // Variables.
 VAR: /[A-Z]\w*/
 
@@ -49,19 +49,20 @@ path: "\"" (LOCAL_DATA | URL) "\""
 
 EXPAND: "+"
 LEARN:  "?"
+CONST:  "!"
 
 // Set.
-set: "{" (ID | CONST) ("," (ID | CONST))+ "}"
+set: "{" (ID | WORD) ("," (ID | WORD))+ "}"
 
 // Atom.
-_atom: CONST
+_atom: WORD
 // Interval.
-interval: (ID | CONST) ".." (ID | CONST)
+interval: (ID | WORD) ".." (ID | WORD)
 // Predicate.
 _ground: (_atom | grpred)
 _nground: (_atom | pred)
-grpred: CONST "(" (_ground | ID | interval) ("," (_ground | ID | interval))* ")"
-pred: CONST "(" (_nground | ID | interval | VAR) ("," (_nground | ID | interval | VAR))* ")"
+grpred: WORD "(" (_ground | ID | interval) ("," (_ground | ID | interval))* ")"
+pred: WORD "(" (_nground | ID | interval | VAR) ("," (_nground | ID | interval | VAR))* ")"
 // Literal.
 lit: NEG* _nground
 grlit: NEG* _ground
@@ -96,15 +97,17 @@ adr: (ad_head{_nground} | lad_head{_nground}) ":-" body "."
 _ad: ad | adr
 
 // Data special rule.
-data: CONST "(" CONST ")" "~" "data" "(" (path | ("@" PY_FUNC)) ")" "."
+test: "test" "(" (path | ("@" PY_FUNC)) ")"
+train: "train" "(" (path | ("@" PY_FUNC)) ")"
+data: WORD "(" (WORD | ID) ")" "~" test ("," train)? "."
 // Torch block.
 torch: "#torch" /(?:.|\n)+?(?=\#end\.)/ "#end."
 // PyTorch hub.
 hub: "@" PY_FUNC ("on" (("\"" LOCAL_NET "\"" ("at" "\"local\"")?) | ("\"" GITHUB "\"" "at" "\"github\"")))?
 // Neural fact.
-nrule: "?" "::" CONST "(" VAR ")" "as" hub ":-" lit ("," lit)* "."
+nrule: (LEARN | CONST) "::" WORD "(" VAR ")" "as" hub ":-" lit ("," lit)* "."
 // Neural annotated disjunction.
-nad: "?" "::" CONST "(" VAR "," set ")" "as" hub ":-" lit ("," lit)* "."
+nad: (LEARN | CONST) "::" WORD "(" VAR "," set ")" "as" hub ":-" lit ("," lit)* "."
 _neural: nrule | nad
 
 // Constraint.
@@ -114,12 +117,12 @@ constraint: ":-" body "."
 bop: ((ID | VAR | bop) OP (ID | VAR | bop)) | (VAR EQQ interval)
 
 // Query.
-qelement: (NEG | UND)? (CONST | grpred)
+qelement: (NEG | UND)? (WORD | grpred)
 interp: qelement ("," qelement)*
 query: "#query(" interp ("|" interp)? ")" "."?
 
 // Constant definition.
-constdef: "#const" CONST "=" ID "."
+constdef: "#const" WORD "=" ID "."
 
 plp: (constdef | _fact | _rule | _ad | _neural | data | torch | constraint | query)*
 

@@ -31,6 +31,8 @@ bool incr_total_choice_ad(total_choice_t *theta, program_t *P);
 void print_total_choice(total_choice_t *theta);
 
 double prob_total_choice(program_t *P, total_choice_t *theta);
+double prob_total_choice_prob(program_t *P, total_choice_t *theta);
+double prob_total_choice_neural(program_t *P, total_choice_t *theta, size_t offset, bool train);
 
 typedef struct {
   bool *cond_1, *cond_2, *cond_3, *cond_4;

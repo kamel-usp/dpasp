@@ -48,6 +48,16 @@ bool update_pr_neural_rule(neural_rule_t *nr) {
   nr->P = PyArray_DATA(py_P);
   return true;
 }
+bool update_forward_neural_rule(neural_rule_t *nr, size_t start, size_t end) {
+  PyArrayObject *py_P = (PyArrayObject*) PyObject_CallMethod(nr->self, "forward", "kk", start, end);
+  if (!py_P) return false;
+  nr->P = PyArray_DATA(py_P);
+  return true;
+}
+bool backward_neural_rule(neural_rule_t *nr, size_t start, size_t end) {
+  return PyObject_CallMethod(nr->self, "backward", "kk", start, end);
+}
+
 void free_neural_rule_contents(neural_rule_t *nr) {}
 void free_neural_rule(neural_rule_t *nr) { free_neural_rule_contents(nr); free(nr); }
 
@@ -57,6 +67,16 @@ bool update_pr_neural_annot_disj(neural_annot_disj_t *na) {
   na->P = PyArray_DATA(py_P);
   return true;
 }
+bool update_forward_neural_annot_disj(neural_annot_disj_t *na, size_t start, size_t end) {
+  PyArrayObject *py_P = (PyArrayObject*) PyObject_CallMethod(na->self, "forward", "kk", start, end);
+  if (!py_P) return false;
+  na->P = PyArray_DATA(py_P);
+  return true;
+}
+bool backward_neural_annot_disj(neural_annot_disj_t *na, size_t start, size_t end) {
+  return PyObject_CallMethod(na->self, "backward", "kk", start, end);
+}
+
 void free_neural_annot_disj_contents(neural_annot_disj_t *na) {}
 void free_neural_annot_disj(neural_annot_disj_t *na) { free_neural_annot_disj_contents(na); free(na); }
 
@@ -90,7 +110,7 @@ bool print_query_with_buffer(query_t *q, string_t *s) {
 bool print_query(query_t *Q) {
   string_t s = {NULL, 0};
   bool r = print_query_with_buffer(Q, &s);
-  free (s.s);
+  free(s.s);
   return r;
 }
 
@@ -585,21 +605,23 @@ cleanup:
 }
 
 bool from_python_neural_rule(PyObject *py_nr, neural_rule_t *nr) {
-  PyObject *py_m = NULL;
-  PyArrayObject *py_H, *py_B, *py_S = py_B = py_H = NULL;
+  PyObject *py_learnable = NULL, *py_tensor_dw = NULL;
+  PyArrayObject *py_H, *py_B, *py_S, *py_dw = py_S = py_B = py_H = NULL;
   clingo_symbol_t *H = NULL, *B = NULL;
+  float *dw;
   bool *S = NULL;
-  size_t n, m, k = 0;
+  long learnable;
+  size_t n, k = 0;
   bool ok = false;
 
-  py_m = PyObject_GetAttrString(py_nr, "m");
-  if (!py_m) {
-    PyErr_SetString(PyExc_AttributeError, "could not access field m of supposed NeuralRule object!");
+  py_learnable = PyObject_GetAttrString(py_nr, "learnable");
+  if (!py_learnable) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field learnable of supposed NeuralRule object!");
     goto cleanup;
   }
-  m = PyLong_AsUnsignedLong(py_m);
-  if ((m == (unsigned long) -1) && !PyErr_Occurred()) {
-    PyErr_SetString(PyExc_TypeError, "field m of NeuralRule must be an integer!");
+  learnable = PyLong_AsLong(py_learnable);
+  if ((learnable == (long) -1) && !PyErr_Occurred()) {
+    PyErr_SetString(PyExc_TypeError, "field learnable of NeuralRule must be a bool!");
     goto cleanup;
   }
 
@@ -629,34 +651,51 @@ bool from_python_neural_rule(PyObject *py_nr, neural_rule_t *nr) {
     S = PyArray_DATA(py_S);
   }
 
-  nr->m = m; nr->n = n; nr->k = k;
+  py_tensor_dw = PyObject_GetAttrString(py_nr, "dw");
+  if (!py_tensor_dw) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field dw of supposed NeuralRule object!");
+    goto cleanup;
+  }
+  py_dw = (PyArrayObject*) PyObject_CallMethod(py_tensor_dw, "numpy", NULL);
+  if (!py_dw) {
+    PyErr_SetString(PyExc_AttributeError, "could not call method numpy in tensor NeuralRule.dw!");
+    goto cleanup;
+  }
+  dw = (float*) PyArray_DATA(py_dw);
+
+  nr->n = n; nr->k = k;
   nr->P = NULL;
   nr->H = H; nr->B = B; nr->S = S;
+  nr->dw = dw;
+  nr->learnable = learnable;
   nr->self = py_nr;
 
   ok = true;
 cleanup:
   if (!ok) { free(H); free(B); free(S); }
-  Py_XDECREF(py_m); Py_XDECREF(py_H); Py_XDECREF(py_B); Py_XDECREF(py_S);
+  Py_XDECREF(py_H); Py_XDECREF(py_B); Py_XDECREF(py_S); Py_XDECREF(py_learnable);
+  Py_XDECREF(py_tensor_dw); Py_XDECREF(py_dw);
   return ok;
 }
 
 bool from_python_neural_ad(PyObject *py_nad, neural_annot_disj_t *nad) {
-  PyObject *py_m = NULL;
-  PyArrayObject *py_H, *py_B, *py_S = py_B = py_H = NULL;
+  PyObject *py_learnable = NULL, *py_tensor_dw = NULL;
+  PyArrayObject *py_H, *py_B, *py_S, *py_dw = py_S = py_B = py_H = NULL;
   clingo_symbol_t *H = NULL, *B = NULL;
   bool *S = NULL;
-  size_t n, m, v, k = 0;
+  float *dw;
+  long learnable;
+  size_t n, v, k = 0;
   bool ok = false;
 
-  py_m = PyObject_GetAttrString(py_nad, "m");
-  if (!py_m) {
-    PyErr_SetString(PyExc_AttributeError, "could not access field m of supposed NeuralRule object!");
+  py_learnable = PyObject_GetAttrString(py_nad, "learnable");
+  if (!py_learnable) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field learnable of supposed NeuralRule object!");
     goto cleanup;
   }
-  m = PyLong_AsUnsignedLong(py_m);
-  if ((m == (unsigned long) -1) && !PyErr_Occurred()) {
-    PyErr_SetString(PyExc_TypeError, "field m of NeuralRule must be an integer!");
+  learnable = PyLong_AsLong(py_learnable);
+  if ((learnable == (long) -1) && !PyErr_Occurred()) {
+    PyErr_SetString(PyExc_TypeError, "field learnable of NeuralRule must be a bool!");
     goto cleanup;
   }
 
@@ -696,15 +735,30 @@ bool from_python_neural_ad(PyObject *py_nad, neural_annot_disj_t *nad) {
     S = PyArray_DATA(py_S);
   }
 
-  nad->m = m; nad->n = n; nad->k = k; nad->v = v;
+  py_tensor_dw = PyObject_GetAttrString(py_nad, "dw");
+  if (!py_tensor_dw) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field dw of supposed NeuralRule object!");
+    goto cleanup;
+  }
+  py_dw = (PyArrayObject*) PyObject_CallMethod(py_tensor_dw, "numpy", NULL);
+  if (!py_dw) {
+    PyErr_SetString(PyExc_AttributeError, "could not call method numpy in tensor NeuralRule.dw!");
+    goto cleanup;
+  }
+  dw = (float*) PyArray_DATA(py_dw);
+
+  nad->n = n; nad->k = k; nad->v = v;
   nad->P = NULL;
   nad->H = H; nad->B = B; nad->S = S;
+  nad->dw = dw;
+  nad->learnable = learnable;
   nad->self = py_nad;
 
   ok = true;
 cleanup:
   if (!ok) { free(H); free(B); free(S); }
-  Py_XDECREF(py_m); Py_XDECREF(py_H); Py_XDECREF(py_B); Py_XDECREF(py_S);
+  Py_XDECREF(py_H); Py_XDECREF(py_B); Py_XDECREF(py_S); Py_XDECREF(py_learnable);
+  Py_XDECREF(py_tensor_dw); Py_XDECREF(py_dw);
   return ok;
 }
 
@@ -713,7 +767,7 @@ bool from_python_program(PyObject *py_P, program_t *P) {
   PyObject *py_P_P, *py_P_PF, *py_P_PF_L, *py_P_PR, *py_P_PR_L, *py_P_Q, *py_P_Q_L, *py_P_CF, *py_P_AD, *py_P_CF_L, *py_P_sem = NULL;
   PyObject *py_P_AD_L = py_P_AD = py_P_CF_L = py_P_CF = py_P_Q_L = py_P_Q = py_P_PR_L = py_P_PR = py_P_PF_L = py_P_PF = py_P_P = NULL;
   PyObject *py_P_NR, *py_P_NR_L, *py_P_NA, *py_P_NA_L = py_P_NA = py_P_NR_L = py_P_NR = NULL;
-  PyObject *py_P_stable = NULL, *py_gr_P = NULL;
+  PyObject *py_m = NULL, *py_P_stable = NULL, *py_gr_P = NULL;
   const char *P_P, *gr_P;
   prob_fact_t *PF = NULL;
   prob_rule_t *PR = NULL;
@@ -724,7 +778,7 @@ bool from_python_program(PyObject *py_P, program_t *P) {
   neural_annot_disj_t *NA = NULL;
   program_t *stable = NULL;
   semantics_t sem;
-  size_t i;
+  size_t i, m_train, m_test;
 
   py_P_P = PyObject_GetAttrString(py_P, "P");
   if (!py_P_P) {
@@ -770,6 +824,28 @@ bool from_python_program(PyObject *py_P, program_t *P) {
   py_P_NA = PyObject_GetAttrString(py_P, "NA");
   if (!py_P_NA) {
     PyErr_SetString(PyExc_AttributeError, "could not access field NA of supposed Program object!");
+    goto cleanup;
+  }
+
+  py_m = PyObject_GetAttrString(py_P, "m_test");
+  if (!py_m) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field m_test of supposed Program object!");
+    goto cleanup;
+  }
+  m_test = PyLong_AsUnsignedLong(py_m);
+  if ((m_test == (unsigned long) -1) && !PyErr_Occurred()) {
+    PyErr_SetString(PyExc_TypeError, "field m_test of Program must be an integer!");
+    goto cleanup;
+  }
+  Py_DECREF(py_m);
+  py_m = PyObject_GetAttrString(py_P, "m_train");
+  if (!py_m) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field m_train of supposed Program object!");
+    goto cleanup;
+  }
+  m_train = PyLong_AsUnsignedLong(py_m);
+  if ((m_train == (unsigned long) -1) && !PyErr_Occurred()) {
+    PyErr_SetString(PyExc_TypeError, "field m_train of Program must be an integer!");
     goto cleanup;
   }
 
@@ -866,6 +942,8 @@ bool from_python_program(PyObject *py_P, program_t *P) {
   P->AD = AD;
   P->NR = NR;
   P->NA = NA;
+
+  P->m_test = m_test; P->m_train = m_train;
 
   P->gr_P = gr_P;
   P->py_gr_P = py_gr_P;

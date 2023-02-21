@@ -44,23 +44,32 @@ typedef struct {
 } annot_disj_t;
 
 typedef struct {
+  /* Output probabilities. */
   float *P;
+  /* Heads. */
   clingo_symbol_t *H;
+  /* Bodies. */
   clingo_symbol_t *B;
+  /* Sign of literals in bodies. */
   bool *S;
   /* Number of ground rules. */
   size_t n;
   /* Number of subgoals in the rule's body. */
   size_t k;
-  /* Number of instances in data. */
-  size_t m;
+  /* Derivative tensor data. */
+  float *dw;
+  bool learnable;
   PyObject *self;
 } neural_rule_t;
 
 typedef struct {
+  /* Output probabilities. */
   float *P;
+  /* Heads. */
   clingo_symbol_t *H;
+  /* Bodies. */
   clingo_symbol_t *B;
+  /* Sign of literals in bodies. */
   bool *S;
   /* Number of ground rules. */
   size_t n;
@@ -68,8 +77,9 @@ typedef struct {
   size_t v;
   /* Number of subgoals in the rule's body. */
   size_t k;
-  /* Number of instances in data. */
-  size_t m;
+  /* Derivative tensor data. */
+  float *dw;
+  bool learnable;
   PyObject *self;
 } neural_annot_disj_t;
 
@@ -117,6 +127,11 @@ typedef struct program {
   neural_annot_disj_t *NA;
   size_t NA_n;
 
+  /* Number of instances in test data. */
+  size_t m_test;
+  /* Number of instances in train data. */
+  size_t m_train;
+
   semantics_t sem;
   struct program *stable;
   PyObject *py_P;
@@ -139,10 +154,14 @@ void free_annot_disj_contents(annot_disj_t *ad);
 void free_annot_disj(annot_disj_t *ad);
 
 bool update_pr_neural_rule(neural_rule_t *nr);
+bool update_forward_neural_rule(neural_rule_t *nr, size_t start, size_t end);
+bool backward_neural_rule(neural_rule_t *nr, size_t start, size_t end);
 void free_neural_rule_contents(neural_rule_t *nr);
 void free_neural_rule(neural_rule_t *nr);
 
 bool update_pr_neural_annot_disj(neural_annot_disj_t *na);
+bool update_forward_neural_annot_disj(neural_annot_disj_t *na, size_t start, size_t end);
+bool backward_neural_annot_disj(neural_annot_disj_t *na, size_t start, size_t end);
 void free_neural_annot_disj_contents(neural_annot_disj_t *na);
 void free_neural_annot_disj_rule(neural_annot_disj_t *na);
 

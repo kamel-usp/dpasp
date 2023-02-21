@@ -49,7 +49,7 @@ static PyObject* exact(PyObject *self, PyObject *args, PyObject *kwargs) {
   npy_intp dims[3];
   if (has_neural) {
     nd = 3;
-    dims[0] = p.NR_n > 0 ? p.NR[0].m : p.NA[0].m;
+    dims[0] = p.m_test;
     dims[1] = p.Q_n; dims[2] = psem == MAXENT_SEMANTICS ? 1 : 2;
   } else {
     nd = 2;

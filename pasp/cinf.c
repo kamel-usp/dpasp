@@ -1,10 +1,9 @@
 #include "cinf.h"
 #include "cutils.h"
 
-double prob_total_choice(program_t *P, total_choice_t *theta) {
+double prob_total_choice_prob(program_t *P, total_choice_t *theta) {
   prob_fact_t *PF = P->PF;
-  neural_rule_t *NR = P->NR;
-  size_t PF_n = P->PF_n, AD_n = P->AD_n, CF_n = P->CF_n, NR_n = P->NR_n;
+  size_t PF_n = P->PF_n, AD_n = P->AD_n, CF_n = P->CF_n;
   size_t i = 0;
   double p = 1.0;
   bool t;
@@ -12,19 +11,31 @@ double prob_total_choice(program_t *P, total_choice_t *theta) {
     t = bitvec_GET(&theta->pf, i + CF_n);
     p *= t*PF[i].p + (!t)*(1.0-PF[i].p);
   }
-  size_t r = CF_n + PF_n;
-  for (i = 0; i < NR_n; ++i)
-    for (size_t j = 0; j < NR[i].n; ++j) {
-      t = bitvec_GET(&theta->pf, r++);
-      double q = NR[i].P[j*NR[i].m];
+  for (i = 0; i < AD_n; ++i) p *= P->AD[i].P[theta->theta_ad[i]];
+  return p;
+}
+double prob_total_choice_neural(program_t *P, total_choice_t *theta, size_t offset, bool train) {
+  double p = 1.0;
+  size_t r = P->CF_n + P->PF_n;
+  size_t m = train*P->m_train + (!train)*P->m_test;
+  for (size_t i = 0; i < P->NR_n; ++i) {
+    float *prob = P->NR[i].P + offset*P->NR[i].n;
+    for (size_t j = 0; j < P->NR[i].n; ++j) {
+      bool t = bitvec_GET(&theta->pf, r++);
+      double q = prob[j*m];
       p *= t*q + (!t)*(1.0-q);
     }
-  for (i = 0; i < AD_n; ++i) p *= P->AD[i].P[theta->theta_ad[i]];
-  r = AD_n;
-  for (i = 0; i < P->NA_n; ++i)
+  }
+  r = P->AD_n;
+  for (size_t i = 0; i < P->NA_n; ++i) {
+    float *prob = P->NA[i].P + offset*P->NA[i].v*P->NA[i].n;
     for (size_t j = 0; j < P->NA[i].n; ++j)
-      p *= P->NA[i].P[j*P->NA[i].m*P->NA[i].v+theta->theta_ad[r++]];
+      p *= prob[j*m*P->NA[i].v+theta->theta_ad[r++]];
+  }
   return p;
+}
+double prob_total_choice(program_t *P, total_choice_t *theta) {
+  return prob_total_choice_prob(P, theta)*prob_total_choice_neural(P, theta, 0, false);
 }
 
 bool init_storage(storage_t *s, program_t *P, array_bool_t (*Pn)[4],
