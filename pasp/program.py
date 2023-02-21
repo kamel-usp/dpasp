@@ -110,7 +110,7 @@ class Data:
   def __repr__(self): return self.__str__()
 
 class Neural:
-  def __init__(self, net: torch.nn.Module, data: Data, learnable: bool, rep: str, nvals: int,
+  def __init__(self, net, data: Data, learnable: bool, rep: str, nvals: int,
                opt_params: dict):
     self.net = net
     self.learnable = learnable
