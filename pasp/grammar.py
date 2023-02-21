@@ -1,4 +1,4 @@
-import pathlib, enum, fractions, math, collections.abc
+import pathlib, enum, math, collections.abc
 import lark, lark.reconstruct, clingo, numpy
 from numpy import ascontiguousarray as contiguous
 from .program import ProbFact, Query, ProbRule, Program, CredalFact, unique_fact, Semantics, Data
@@ -32,7 +32,7 @@ def pred_sign(x: lark.Tree) -> bool:
 
 def is_prob(x: lark.Tree) -> iter:
   "Returns whether a node (in this case a fact or rule) is probabilistic."
-  return isinstance(x, lark.Tree) and len(x.children) > 0 and isinstance(x.children[0], lark.Token) and x.children[0].type == "PROB"
+  return isinstance(x, lark.Tree) and len(x.children) > 0 and isinstance(x.children[0], lark.Token) and x.children[0].type == "prob"
 
 def facts(x: lark.Tree) -> iter:
   "Returns an iterator containing all facts in the AST."
@@ -152,7 +152,7 @@ class StableTransformer(lark.Transformer):
 
   @staticmethod
   def register_nrule(TNR: list, NR: list, D: list):
-    for name, inp, net, body, rep, learnable in TNR:
+    for name, inp, net, body, rep, learnable, params in TNR:
       t = StableTransformer.find_data_pred(D, body, "rule", name)
       # Ground rules.
       H = contiguous(tuple(clingo.parse_term(f"{name}({t[i].arg})")._rep for i in range(len(t))), \
@@ -164,11 +164,11 @@ class StableTransformer(lark.Transformer):
                                                 else lit2atom(b[1]))._rep for i in range(len(t)) \
                               for b in body_no_data), dtype = numpy.uint64)
         S = contiguous(tuple(b[2][0] for i in range(len(t)) for b in body_no_data), dtype = bool)
-      NR.append(NeuralRule(H, B, S, name, net, rep, t, learnable))
+      NR.append(NeuralRule(H, B, S, name, net, rep, t, learnable, params))
 
   @staticmethod
   def register_nad(TNA: list, NA: list, D: list):
-    for name, inp, vals, net, body, rep, learnable in TNA:
+    for name, inp, vals, net, body, rep, learnable, params in TNA:
       t = StableTransformer.find_data_pred(D, body, "AD", name)
       # Ground rules.
       V = list(vals.keys())
@@ -182,7 +182,7 @@ class StableTransformer(lark.Transformer):
                                                 else lit2atom(b[1]))._rep for i in range(len(t)) \
                               for b in body_no_data), dtype = numpy.uint64)
         S = contiguous(tuple(b[2][0] for i in range(len(t)) for b in body_no_data), dtype = bool)
-      NA.append(NeuralAD(H, B, S, name, V, net, rep, t, learnable))
+      NA.append(NeuralAD(H, B, S, name, V, net, rep, t, learnable, params))
 
   # Terminals.
   def UND(self, u): return self.pack("UND", str(u))
@@ -193,10 +193,14 @@ class StableTransformer(lark.Transformer):
     return self.pack("VAR", x, scope = X)
   def ID(self, i): return self.pack("ID", val = int(i))
   def OP(self, o): return self.pack("OP", str(o))
-  def PROB(self, p): return self.pack("PROB", val = float(fractions.Fraction(p.value)))
+  def REAL(self, r): return self.pack("REAL", val = float(r))
+  def frac(self, f): return self.pack("frac", val = f[0][2]/f[1][2])
+  def prob(self, p): return self.pack("prob", val = p[0][2])
   def EXPAND(self, e): return self.pack("EXPAND",  str(e))
   def LEARN(self, l): return self.pack("LEARN", str(l))
   def CONST(self, c): return self.pack("CONST", str(c))
+  def BOOL(self, b): return self.pack("BOOL", v := b.lower(), v != "false")
+  def NULL(self, n): return self.pack("NULL", None, None)
 
   # Path.
   def path(self, p): return self.pack(p[0].type, p[0].value)
@@ -237,7 +241,7 @@ class StableTransformer(lark.Transformer):
     l, u, f = CF[0][2], CF[1][2], CF[2][1]
     return self.pack("cfact", "", CredalFact(l, u, f))
   def lpfact(self, PF):
-    if PF[0][0] == "PROB": p, f = PF[0][2], PF[1][1]
+    if PF[0][0] == "prob": p, f = PF[0][2], PF[1][1]
     else: p, f = 0.5, PF[0][2]
     return self.pack("pfact", "", ProbFact(p, f, learnable = True))
 
@@ -289,7 +293,7 @@ class StableTransformer(lark.Transformer):
     last = None
     while i < len(H):
       a = H[i]
-      if a[0] == "PROB":
+      if a[0] == "prob":
         P.append(a[2])
         F.append(H[i+1][1])
         i += 2
@@ -382,20 +386,29 @@ class StableTransformer(lark.Transformer):
       rep = f"@{func} on \"{path}\" at \"{source}\""
     return self.pack("hub", "", (N, rep))
 
+  # Optimizer parameters.
+  def params(self, P):
+    return self.pack("params", "", {P[i][1]: P[i+1][2] for i in range(0, len(P), 2)})
+
   # Neural rule.
   def nrule(self, A):
     learnable = A[0][0] == "LEARN"
     name = A[1][1]
     inp = A[2][1]
     net, hub_repr = A[3][2]
-    body = A[4:]
+    if A[4][0] == "params":
+      params = A[4][2]
+      body = A[5:]
+    else:
+      params = {}
+      body = A[4:]
     scope = self.join_scope(A)
 
     if len(scope) != 1:  raise ValueError(f"Neural rule {name} is not grounded!")
     if inp not in scope: raise ValueError(f"Neural rule {name} is unsafe!")
 
     rep = f"{A[0][1]}::{name}({inp}) as {hub_repr} :- {', '.join(getnths(body, 1))}."
-    return self.pack("nrule", "", (name, inp, net, body, rep, learnable))
+    return self.pack("nrule", "", (name, inp, net, body, rep, learnable, params))
 
   # Neural annotated disjunction.
   def nad(self, A):
@@ -404,14 +417,19 @@ class StableTransformer(lark.Transformer):
     inp = A[2][1]
     vals = A[3][2]
     net, hub_repr = A[4][2]
-    body = A[5:]
+    if A[5][0] == "params":
+      params = A[5][2]
+      body = A[6:]
+    else:
+      params = {}
+      body = A[5:]
     scope = self.join_scope(A)
 
     if len(scope) != 1:  raise ValueError(f"Neural annotated disjunction {name} is not grounded!")
     if inp not in scope: raise ValueError(f"Neural annotated disjunction {name} is unsafe!")
 
     rep = f"{A[0][1]}::{name}({inp}, {A[2][1]}) as {hub_repr} :- {', '.join(getnths(body, 1))}."
-    return self.pack("nad", "", (name, inp, vals, net, body, rep, learnable))
+    return self.pack("nad", "", (name, inp, vals, net, body, rep, learnable, params))
 
   # Constraint.
   def constraint(self, C): return self.pack("constraint", f":- {C[0][1]}.")

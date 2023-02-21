@@ -110,12 +110,18 @@ class Data:
   def __repr__(self): return self.__str__()
 
 class Neural:
-  def __init__(self, net, data, learnable, rep, nvals):
+  def __init__(self, net: torch.nn.Module, data: Data, learnable: bool, rep: str, nvals: int,
+               opt_params: dict):
     self.net = net
     self.learnable = learnable
     self.rep = rep
     self.data = data
-    self.opt = torch.optim.SGD(net.parameters(), lr = 0.01, maximize = True)
+
+    # Update default opt_params with given params.
+    _opt_params = {"lr": 0.01, "maximize": True}
+    _opt_params.update(opt_params)
+    self.opt = torch.optim.SGD(net.parameters(), **_opt_params)
+
     self.test = torch.cat(tuple(d.test for d in data), dim = 0)
     self.train = None if data[0].train is None else torch.cat(tuple(d.train for d in data), dim = 0)
     self.out = None
@@ -143,27 +149,17 @@ class Neural:
     """ Performs backpropagation and runs the optimizer step.
     Argument `dl` is the derivative of the program as a `numpy.ndarray`.
     """
-    x = self.out[start:end]
-    dx = self.dw[start:end]
-    x.backward(dx)
-    # print("p(x)  =", x)
-    # print("dP/dp =", dx)
-    # w, b = (x for x in self.net.parameters())
-    # w = next(x for x in self.net.parameters())
-    # print("dp/dw =", w.grad)
-    # print("dp/db =", b.grad)
-    # print(w, b)
+    self.out[start:end].backward(self.dw[start:end])
     self.opt.step()
     self.opt.zero_grad()
-    # print(w, b)
 
   def ntest(self): return self.data[0].test.shape[0]
   def ntrain(self): return self.data[0].train.shape[0] if self.learnable else 0
 
 class NeuralRule(Neural):
   def __init__(self, heads: list, bodies: list, signs: list, name: str, net, rep: str, data: list,
-               learnable: bool):
-    super().__init__(net, data, learnable, rep, 1)
+               learnable: bool, params: dict):
+    super().__init__(net, data, learnable, rep, 1, params)
     # Heads and bodies must be numpy.uint64 values representing _rep, not Symbols.
     self.H = heads
     self.B = bodies
@@ -177,8 +173,8 @@ class NeuralRule(Neural):
 
 class NeuralAD(Neural):
   def __init__(self, heads: list, bodies: list, signs: list, name: str, vals: list, net, rep: str, \
-               data: list, learnable: bool):
-    super().__init__(net, data, learnable, rep, len(vals))
+               data: list, learnable: bool, params: dict):
+    super().__init__(net, data, learnable, rep, len(vals), params)
     self.H = heads
     self.B = bodies
     self.S = signs

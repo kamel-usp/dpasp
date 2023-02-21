@@ -26,13 +26,18 @@ OP: ADD
   | LEQ
   | GEQ
 
-FRAC: REAL "/" REAL
-PROB: FRAC | REAL
+frac: REAL "/" REAL
+prob: frac | REAL
 
 // Constants.
 WORD: /[a-z]\w*/
 // Variables.
 VAR: /[A-Z]\w*/
+
+// Boolean type.
+BOOL: (/true/i | /false/i)
+// Null type.
+NULL: (/null/i | /none/i)
 
 // URL.
 URL: /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/
@@ -70,10 +75,10 @@ grlit: NEG* _ground
 // Fact.
 fact: _ground "."
 // Probabilistic fact.
-pfact: PROB "::" _ground "."
-lpfact: PROB? "?" "::" _ground "."
+pfact: prob "::" _ground "."
+lpfact: prob? "?" "::" _ground "."
 // Credal fact.
-cfact: "[" PROB "," PROB "]" "::" _ground "."
+cfact: "[" prob "," prob "]" "::" _ground "."
 _fact: fact | pfact | lpfact | cfact
 
 // Head of a rule.
@@ -84,13 +89,13 @@ body: (lit | bop) ("," (lit | bop))*
 // Rule.
 rule: head ":-" body "."
 // Probabilistic rule.
-prule: PROB (EXPAND? LEARN? | LEARN? EXPAND?) "::" ohead ":-" body "."
+prule: prob (EXPAND? LEARN? | LEARN? EXPAND?) "::" ohead ":-" body "."
 _rule: prule | rule
 
 // Annotated disjunction head.
-ad_head{arg}: PROB "::" arg (";" PROB "::" arg)+
+ad_head{arg}: prob "::" arg (";" prob "::" arg)+
 // Learnable annotated disjunction head.
-lad_head{arg}: PROB? "?" "::" arg (";" PROB? "?" "::" arg)+
+lad_head{arg}: prob? "?" "::" arg (";" prob? "?" "::" arg)+
 // Annotated disjunctions.
 ad: (ad_head{_ground} | lad_head{_ground}) "."
 adr: (ad_head{_nground} | lad_head{_nground}) ":-" body "."
@@ -104,10 +109,14 @@ data: WORD "(" (WORD | ID) ")" "~" test ("," train)? "."
 torch: "#torch" /(?:.|\n)+?(?=\#end\.)/ "#end."
 // PyTorch hub.
 hub: "@" PY_FUNC ("on" (("\"" LOCAL_NET "\"" ("at" "\"local\"")?) | ("\"" GITHUB "\"" "at" "\"github\"")))?
+// Optimizer parameters.
+_param: WORD "=" (REAL | BOOL | NULL)
+// Sequence of parameters.
+params: _param ("," _param)*
 // Neural fact.
-nrule: (LEARN | CONST) "::" WORD "(" VAR ")" "as" hub ":-" lit ("," lit)* "."
+nrule: (LEARN | CONST) "::" WORD "(" VAR ")" "as" hub ("with" params)? ":-" lit ("," lit)* "."
 // Neural annotated disjunction.
-nad: (LEARN | CONST) "::" WORD "(" VAR "," set ")" "as" hub ":-" lit ("," lit)* "."
+nad: (LEARN | CONST) "::" WORD "(" VAR "," set ")" "as" hub ("with" params)? ":-" lit ("," lit)* "."
 _neural: nrule | nad
 
 // Constraint.
