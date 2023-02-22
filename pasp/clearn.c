@@ -38,7 +38,7 @@ bool init_indices(indices_t *I, program_t *P) {
     }
   }
 
-  for (size_t i = 0; i < P->NA_n; ++i) if (!P->NA[i].learnable) ++na;
+  for (size_t i = 0; i < P->NA_n; ++i) if (P->NA[i].learnable) ++na;
   if (na) {
     I_NA = (uint16_t*) malloc(na*sizeof(uint16_t));
     if (!I_NA) goto cleanup;
@@ -293,7 +293,7 @@ bool learn_lagrange_batch(program_t *P, PyArrayObject *obs, size_t niters, doubl
         neural_annot_disj_t *A = &P->NA[I.NA[i_na]];
         float dP = 0.0;
         for (size_t j = 0; j < A->v; ++j) dP += W->NA[i_na][j];
-        for (size_t j = 0; j < A->v; ++j) A->dw[i_o*A->v + j] = (W->A[i_na][j] - dP/A->v)/W->o;
+        for (size_t j = 0; j < A->v; ++j) A->dw[i_o*A->v + j] = (W->NA[i_na][j] - dP/A->v)/W->o;
       }
     }
 

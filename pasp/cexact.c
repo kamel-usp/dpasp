@@ -534,34 +534,37 @@ fail:
 
 bool init_learnable_neural_indices(program_t *P, uint16_t *I_NR, uint16_t *I_NA, size_t n_lnr,
     size_t n_lna, uint16_t *O_NR, uint16_t *O_NA, prob_storage_t *S) {
-  if (!(n_lnr || n_lna)) {
+  if (!n_lnr) {
     neural_rule_t *NR = P->NR;
-    neural_annot_disj_t *NA = P->NA;
-    size_t i, n = P->NR_n, m = P->NA_n;
-    O_NA = I_NA = O_NR = I_NR = NULL;
-    n_lnr = n_lna = 0;
+    size_t i, n = P->NR_n;
     for (i = n_lnr = 0; i < n; ++i) if (NR[i].learnable) ++n_lnr;
     if (n_lnr) {
+      I_NR = O_NR = NULL;
       I_NR = (uint16_t*) malloc(n_lnr*sizeof(uint16_t));
       if (!I_NR) goto fail;
       O_NR = (uint16_t*) malloc(n_lnr*sizeof(uint16_t));
       if (!O_NR) goto fail;
       size_t s = P->PF_n;
       for (size_t j = i = 0; i < n; ++i) {
-        s += NR[i].n;
         if (NR[i].learnable) { I_NR[j] = i; O_NR[j++] = s; }
+        s += NR[i].n;
       }
     }
+  }
+  if (!n_lna) {
+    neural_annot_disj_t *NA = P->NA;
+    size_t i, m = P->NA_n;
     for (i = n_lna = 0; i < m; ++i) if (NA[i].learnable) ++n_lna;
     if (n_lna) {
+      I_NA = O_NA = NULL;
       I_NA = (uint16_t*) malloc(n_lna*sizeof(uint16_t));
       if (!I_NA) goto fail;
       O_NA = (uint16_t*) malloc(n_lna*sizeof(uint16_t));
       if (!O_NA) goto fail;
       size_t s = P->AD_n;
       for (size_t j = i = 0; i < m; ++i) {
-        s += NA[i].n;
         if (NA[i].learnable) { I_NA[j] = i; O_NA[j++] = s; }
+        s += NA[i].n;
       }
     }
   }
@@ -611,7 +614,7 @@ bool init_learnable_neural_storage(neural_annot_disj_t *NA, uint16_t *I_NA, size
   }
   if (n_lna) {
     A = (double**) malloc(n_lna*sizeof(double*));
-    if (!NA) goto fail;
+    if (!A) goto fail;
     for (size_t i = 0; i < n_lna; ++i) {
       A[i] = (double*) calloc(NA[I_NA[i]].v, sizeof(double));
       if (!A[i]) {
@@ -798,7 +801,6 @@ bool init_prob_storage(prob_storage_t *Q, program_t *P, uint16_t *I_F, size_t n_
   if (!init_learnable_neural_indices(P, I_NR, I_NA, n_lnr, n_lna, O_NR, O_NA, Q)) goto cleanup;
   for (size_t i = 0; i < O->n; ++i) {
     prob_obs_storage_t *o = po + i;
-    o->NR = NULL; o->NA = NULL;
     if (!init_learnable_storage(P->AD, I_A, Q->n, Q->m, o)) goto cleanup;
     if (!init_learnable_neural_storage(P->NA, I_NA, Q->nr, Q->na, o)) goto cleanup;
     o->o = 0.0; o->N = 0;
@@ -937,10 +939,10 @@ solve_cleanup:
       }
       for (size_t j = 0; j < prob->na; ++j) {
         neural_annot_disj_t *A = &P->NA[prob->I_NA[j]];
-        float *q = A->P;
+        float *q = A->P + i*A->n*A->v;
         for (size_t g = 0; g < A->n; ++g) {
           uint8_t u = theta->theta_ad[prob->O_NA[j]];
-          pr->NA[j][u] += p_o/q[g*A->v+g];
+          pr->NA[j][u] += p_o/q[g*A->v+u];
         }
       }
     } else {
