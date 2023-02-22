@@ -5,30 +5,30 @@ dependencies = ["torch"]
 def test_mlp():
   """ Test MLP for neural rule testing.
 
-  Network encoding the following discrete distribution:
+  Network encoding the following conditional probability table on the probabilistic fact f:
 
-    +---+---+---------+
-    | a | b | P(a, b) |
-    +---+---+---------+
-    | 0 | 0 |   0.3   |
-    | 0 | 1 |   0.5   |
-    | 1 | 0 |   0.6   |
-    | 1 | 1 |   1.0   |
-    +---+---+---------+
+    +---+---+-------------+
+    | a | b | P(f | a, b) |
+    +---+---+-------------+
+    | 0 | 0 |     0.3     |
+    | 0 | 1 |     0.5     |
+    | 1 | 0 |     0.6     |
+    | 1 | 1 |     1.0     |
+    +---+---+-------------+
   """
   N = torch.nn.Sequential(
     torch.nn.Linear(2, 2),
     torch.nn.Sigmoid(),
     torch.nn.Linear(2, 1),
-    # Make sure output is non-negative.
-    torch.nn.ReLU()
+    # Make sure output is non-negative and at most 1.
+    torch.nn.Sigmoid()
   )
   S = {
-    "0.weight": torch.tensor([[1.0795750617980957, 0.7900891304016113],
-                              [1.2740952968597412, 0.9654174447059631]]),
-    "0.bias":   torch.tensor([-2.386507511138916, -2.486057996749878]),
-    "2.weight": torch.tensor([[0.7259771823883057, 1.3539804220199585]]),
-    "2.bias":   torch.tensor([0.1348256766796112])
+    "0.weight": torch.tensor([[5.404379367828369, 5.935782432556152],
+                              [4.996634006500244, 4.26226806640625]]),
+    "0.bias":   torch.tensor([-9.917333602905273, -5.738117694854736]),
+    "2.weight": torch.tensor([[10.780776977539062, 3.557007312774658]]),
+    "2.bias":   torch.tensor([-0.8592491745948792])
   }
   N.load_state_dict(S)
   return N
@@ -40,16 +40,16 @@ def test_ad_mlp():
 
     P(a)::f(X, a); P(b)::f(X, b); P(c)::f(X, c).
 
-  The network encodes the following discrete distribution:
+  The network encodes the following conditional probability table on the annotated disjunction d:
 
-    +-----+-----+------+------+------+
-    | X_0 | X_1 | P(a) | P(b) | P(c) |
-    +-----+-----+------+------+------+
-    |  0  |  0  |  .3  |  .2  |  .5  |
-    |  0  |  1  |  .5  |  .1  |  .4  |
-    |  1  |  0  |  .6  |  .3  |  .1  |
-    |  1  |  1  |  1.  |  .0  |  .0  |
-    +---+---+---+------+------+------+
+    +-----+-----+----------+----------+----------+
+    | X_0 | X_1 | P(d | a) | P(d | b) | P(d | c) |
+    +-----+-----+----------+----------+----------+
+    |  0  |  0  |    .3    |    .2    |    .5    |
+    |  0  |  1  |    .5    |    .1    |    .4    |
+    |  1  |  0  |    .6    |    .3    |    .1    |
+    |  1  |  1  |    1.    |    .0    |    .0    |
+    +-----+-----+----------+----------+----------+
   """
   N = torch.nn.Sequential(
     torch.nn.Linear(2, 4),
