@@ -15,7 +15,7 @@ some examples to show how to do inference with this package.
 Let's first take a look at the popular `asia` Bayesian network, here encoded as the probabilistic
 logic program [`examples/asia.lp`](examples/asia.lp).
 
-```clingo
+```pasp
 0.01::trip. 0.5::smoking.
 0.05::tuberculosis :- trip.
 0.01::tuberculosis :- not trip.
@@ -40,7 +40,7 @@ we call them *probabilistic rules*. Probabilistic rules follow the same syntax a
 facts; in fact, they are only syntax sugar, as the package unrolls them as a rule with a unique
 probabilistic fact as one of its subgoals.
 
-```clingo
+```pasp
 % The following probabilistic rule
 0.05::tuberculosis :- trip.
 
@@ -61,7 +61,7 @@ new grounded program would have to be generated.
 Let's take a look at the remaining lines in [`examples/asia.lp`](examples/asia.lp). To query for
 probabilities, we use a similar syntax to [PASOCS](https://arxiv.org/abs/2105.10908).
 
-```clingo
+```pasp
 #query(trip)
 #query(tuberculosis | trip)
 #query(cancer | smoking)
@@ -142,7 +142,7 @@ Since [`examples/asia.lp`](examples/asia.lp) comes from a Bayesian network and t
 acyclic PLP, the probabilities returned are sharp. Let's take a look at another (very simple)
 example where this is not the case: [`examples/insomnia.lp`](examples/insomnia.lp).
 
-```clingo
+```pasp
 sleep :- not work, not insomnia. work :- not sleep.
 0.3::insomnia.
 
@@ -194,7 +194,7 @@ in `pasp`. As of now, the following semantics are implemented:
 
 Let us first examine the Barber Paradox example (see [`examples/barber.lp`](examples/barber.lp)).
 
-```
+```pasp
 shaves(X, Y) :- barber(X), villager(Y), not shaves(Y, Y).
 villager(a). barber(b). 0.5::villager(b).
 ```
@@ -203,14 +203,14 @@ Under the stable semantics, we find ourselves in a pickle. With probability half
 chosen (or not) to appear in the program. Suppose it does not; then we know that when grounding the
 program we get
 
-```
+```pasp
 shaves(b, a) :- barber(b), villager(a), not shaves(a, a).
 ```
 
 which is fine, since `shaves(a, a)` is not in any model. Now suppose `villager(b)` is, in fact,
 added to the program; then we have
 
-```
+```pasp
 shaves(b, b) :- barber(b), villager(b), not shaves(b, b).
 ```
 
@@ -260,7 +260,7 @@ Another interesting semantic is the *L-stable semantics*, which in practice agre
 model semantics when there exist stable models and with the partial semantics otherwise. Let us
 take a look at the 3-coloring graph problem (see [`examples/3coloring.lp`](examples/3coloring.lp)).
 
-```
+```pasp
 #const n = 5.
 v(1..n).
 0.5::e(X, Y) :- v(X), v(Y), X < Y.
@@ -274,7 +274,7 @@ f :- not f, e(X, Y), c(X, Z), c(Y, Z).
 The program above models the 3-coloring problem of graphs with `n = 5` vertices. Each total choice
 models a different graph based on the presence (or not) of edges `e(X, Y)`. Here, the rule
 
-```
+```pasp
 f :- not f, e(X, Y), c(X, Z), c(Y, Z).
 ```
 
@@ -313,7 +313,7 @@ minimal models with `undef` when stable models are found.
 
 Consider the game example shown in [`examples/game.lp`](examples/game.lp).
 
-```
+```pasp
 wins(X) :- move(X, Y), not wins(Y).
 move(a, b). move(b, a). move(b, c). 0.3::move(c, d).
 ```
