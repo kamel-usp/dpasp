@@ -122,7 +122,13 @@ class StableTransformer(lark.Transformer):
 
   @staticmethod
   def pack(t: str, rep: str = None, val = None, scope: dict = {}) -> tuple[str, str, str, dict]:
-    return t, str(val) if rep is None else rep, rep if val is None else val, scope
+    class Pack(tuple):
+      @staticmethod
+      def __new__(cls, tp: str, r: str = None, v = None, sc: dict = {}):
+        return super(Pack, cls).__new__(cls, (tp, str(v) if r is None else r, r if v is None else v, sc))
+      def __str__(self): return self[1]
+      def __repr__(self): return self.str()
+    return Pack(t, rep, val, scope)
 
   @staticmethod
   def join_scope(A: list) -> dict: return dict((y, None) for S in A for y in S[3])
