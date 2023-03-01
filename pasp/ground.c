@@ -196,8 +196,9 @@ static bool ground(program_t *P) {
   ok = true;
 error:
   if (clingo_error_code() != clingo_error_success) {
-    wprintf(L"Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
-    PyErr_SetString(PyExc_Exception, "Clingo or unknown error!");
+    char err_buff[200];
+    sprintf(err_buff, "Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
+    PyErr_SetString(PyExc_Exception, err_buff);
   }
   array_clingo_symbol_t_free_contents(&gr_PF);
   array_double_free_contents(&gr_pr);
