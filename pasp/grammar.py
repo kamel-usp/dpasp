@@ -190,6 +190,10 @@ class StableTransformer(lark.Transformer):
         S = contiguous(tuple(b[2][0] for i in range(len(t)) for b in body_no_data), dtype = bool)
       NA.append(NeuralAD(H, B, S, name, V, net, rep, t, learnable, params))
 
+  # Components which are directly translated to clingo.
+  def CMP_OP(self, o): return self.pack("CMP_OP", str(o))
+  def aggr(self, A): return self.pack("aggr", "".join(str(x) for x in A))
+
   # Terminals.
   def UND(self, u): return self.pack("UND", str(u))
   def WORD(self, c): return self.pack("WORD", str(c))

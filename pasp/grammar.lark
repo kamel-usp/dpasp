@@ -26,6 +26,14 @@ OP: ADD
   | LEQ
   | GEQ
 
+// Comparison operators.
+CMP_OP: EQQ
+      | NEQ
+      | LES
+      | GRT
+      | LEQ
+      | GEQ
+
 frac: REAL "/" REAL
 prob: frac | REAL
 
@@ -71,6 +79,9 @@ pred: WORD "(" (_nground | ID | interval | VAR) ("," (_nground | ID | interval |
 // Literal.
 lit: NEG* _nground
 grlit: NEG* _ground
+
+// Aggregate constraints.
+!aggr: (/[0-9]+/ CMP_OP)? ("#" ("sum" | "count" | "sum+" | "min" | "max"))? "{" /[^\}]+/ "}" (CMP_OP /[0-9]+/)? "."
 
 // Fact.
 fact: _ground "."
@@ -133,7 +144,7 @@ query: "#query(" interp ("|" interp)? ")" "."?
 // Constant definition.
 constdef: "#const" WORD "=" ID "."
 
-plp: (constdef | _fact | _rule | _ad | _neural | data | torch | constraint | query)*
+plp: (constdef | _fact | _rule | _ad | _neural | data | torch | constraint | query | aggr)*
 
 COMMENT: "%" /[^\n]*/ NEWLINE
 
