@@ -193,6 +193,8 @@ class StableTransformer(lark.Transformer):
   # Components which are directly translated to clingo.
   def CMP_OP(self, o): return self.pack("CMP_OP", str(o))
   def aggr(self, A): return self.pack("aggr", "".join(str(x) for x in A))
+  def raggr(self, A): return self.pack("raggr", "".join(str(x) for x in A))
+  def caggr(self, A): return self.pack("caggr", "".join(str(x) for x in A))
 
   # Terminals.
   def UND(self, u): return self.pack("UND", str(u))

@@ -7,7 +7,7 @@ DIV: "/"
 MOD: "\\"
 MUL: "*"
 NEQ: "!="
-EQQ: "="
+EQQ: "=" | "=="
 LES: "<"
 GRT: ">"
 LEQ: "<="
@@ -81,7 +81,10 @@ lit: NEG* _nground
 grlit: NEG* _ground
 
 // Aggregate constraints.
-!aggr: (/[0-9]+/ CMP_OP)? ("#" ("sum" | "count" | "sum+" | "min" | "max"))? "{" /[^\}]+/ "}" (CMP_OP /[0-9]+/)? "."
+!aggr: (/[0-9]+/ CMP_OP)? ("#" ("sum" | "count" | "sum+" | "min" | "max"))? "{" /[^\}]+/ "}" (CMP_OP /[0-9]+/)?
+!raggr: (_ground | _nground)? ":-" (_ground | _nground | aggr) ("," (_ground | _nground | aggr))* "."
+!caggr: aggr "."
+_aggr: aggr | raggr | caggr
 
 // Fact.
 fact: _ground "."
@@ -144,7 +147,7 @@ query: "#query(" interp ("|" interp)? ")" "."?
 // Constant definition.
 constdef: "#const" WORD "=" ID "."
 
-plp: (constdef | _fact | _rule | _ad | _neural | data | torch | constraint | query | aggr)*
+plp: (constdef | _fact | _rule | _ad | _neural | data | torch | constraint | query | _aggr)*
 
 COMMENT: "%" /[^\n]*/ NEWLINE
 
