@@ -159,7 +159,7 @@ void free_program_contents(program_t *P) {
   free(P->NR);
   for (i = 0; i < P->NA_n; ++i) free_neural_annot_disj_contents(&P->NA[i]);
   free(P->NA);
-  Py_DECREF(P->py_gr_P);
+  Py_XDECREF(P->py_gr_P);
   if (P->stable) free_program(P->stable);
 }
 void free_program(program_t *P) { free_program_contents(P); free(P); }
