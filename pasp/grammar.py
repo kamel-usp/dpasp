@@ -127,7 +127,7 @@ class StableTransformer(lark.Transformer):
       def __new__(cls, tp: str, r: str = None, v = None, sc: dict = {}):
         return super(Pack, cls).__new__(cls, (tp, str(v) if r is None else r, r if v is None else v, sc))
       def __str__(self): return self[1]
-      def __repr__(self): return self.str()
+      def __repr__(self): return self.__str__()
     return Pack(t, rep, val, scope)
 
   @staticmethod
@@ -252,7 +252,7 @@ class StableTransformer(lark.Transformer):
     return self.pack("cfact", "", CredalFact(l, u, f))
   def lpfact(self, PF):
     if PF[0][0] == "prob": p, f = PF[0][2], PF[1][1]
-    else: p, f = 0.5, PF[0][2]
+    else: p, f = 0.5, PF[0][1]
     return self.pack("pfact", "", ProbFact(p, f, learnable = True))
 
   # Heads.
