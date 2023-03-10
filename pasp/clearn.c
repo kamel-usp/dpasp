@@ -287,13 +287,13 @@ bool learn_lagrange_batch(program_t *P, PyArrayObject *obs, size_t niters, doubl
       }
       /* Accumulate neural rule derivatives. */
       for (size_t i_nr = 0; i_nr < I.nr; ++i_nr)
-        P->NR[I.NR[i_nr]].dw[i_o] = ((W->NR[i_nr][1] - W->NR[i_nr][0])*0.5)/W->o;
+        P->NR[I.NR[i_nr]].dw[i_o] = eta*((W->NR[i_nr][1] - W->NR[i_nr][0])*0.5)/W->o;
       /* Accumulate neural annotated disjunction derivatives. */
       for (size_t i_na = 0; i_na < I.na; ++i_na) {
         neural_annot_disj_t *A = &P->NA[I.NA[i_na]];
         float dP = 0.0;
         for (size_t j = 0; j < A->v; ++j) dP += W->NA[i_na][j];
-        for (size_t j = 0; j < A->v; ++j) A->dw[i_o*A->v + j] = (W->NA[i_na][j] - dP/A->v)/W->o;
+        for (size_t j = 0; j < A->v; ++j) A->dw[i_o*A->v + j] = eta*(W->NA[i_na][j] - dP/A->v)/W->o;
       }
     }
 
