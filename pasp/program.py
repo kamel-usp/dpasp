@@ -149,7 +149,8 @@ class Neural:
     """ Performs backpropagation and runs the optimizer step.
     Argument `dl` is the derivative of the program as a `numpy.ndarray`.
     """
-    self.out[start:end].backward(self.dw[start:end])
+    x = self.out[start:end]
+    x.backward(self.dw[start:start+len(x)])
     self.opt.step()
     self.opt.zero_grad()
 

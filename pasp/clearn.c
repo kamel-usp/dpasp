@@ -371,6 +371,82 @@ cleanup:
   return ok;
 }
 
+bool learn_neurasp_batch(program_t *P, PyArrayObject *obs, size_t niters, double eta,
+    size_t batch, bool lstable_sat) {
+  observations_t O = {0}; /* Dense representation of observations. */
+  prob_storage_t Q[NUM_PROCS] = {{0}}; /* Storage for observation probabilities. */
+  indices_t I = {0};
+  size_t num_procs = 0;
+  bool ok = false;
+
+  if (!init_dense_observations(&O, obs, batch)) goto cleanup;
+  if (!init_indices(&I, P)) goto cleanup;
+  Q[0].I_F = I.F; Q[0].n = I.n; Q[0].I_A = I.A; Q[0].m = I.m;
+  Q[0].I_NR = I.NR; Q[0].I_NA = I.NA; Q[0].nr = I.nr; Q[0].na = I.na;
+  Q[0].O_NR = I.O_NR; Q[0].O_NA = I.O_NA;
+  if (!(I.n || I.m || I.nr || I.na)) {
+    PyErr_SetString(PyExc_ValueError, "program is not learnable!");
+    return false;
+  }
+  if (!(num_procs = init_prob_storage_seq(Q, P, &O))) goto cleanup;
+
+  for (size_t i = 0; i < niters; ++i) {
+    for (size_t j = 0; j < P->NR_n; ++j)
+      if (!update_forward_neural_rule(&P->NR[j], O.i, O.i+O.n)) goto cleanup;
+    for (size_t j = 0; j < P->NA_n; ++j)
+      if (!update_forward_neural_annot_disj(&P->NA[j], O.i, O.i+O.n)) goto cleanup;
+
+    /* Compute probabilities. */
+    if (!prob_obs_reuse(P, &O, lstable_sat, NULL, Q, true)) goto cleanup;
+
+    /* Update parameters. */
+    for (size_t i_o = 0; i_o < O.n; ++i_o) {
+      prob_obs_storage_t *W = &Q[0].P[i_o];
+
+      /* Update probabilistic facts. */
+      for (size_t i_pf = 0; i_pf < I.n; ++i_pf)
+        P->PF[I.F[i_pf]].p += eta*((W->F[i_pf][1] - W->F[i_pf][0])/W->o);
+      /* Update annotated disjunctions. */
+      for (size_t i_ad = 0; i_ad < I.m; ++i_ad) {
+        annot_disj_t *AD = &P->AD[I.A[i_ad]];
+        double dP = 0.0;
+        for (size_t j = 0; j < AD->n; ++j) dP += W->A[i_ad][j];
+        for (size_t j = 0; j < AD->n; ++j) AD->P[j] += eta*((W->A[i_ad][j] - dP)/W->o);
+      }
+      /* Accumulate neural rule derivatives. */
+      for (size_t i_nr = 0; i_nr < I.nr; ++i_nr)
+        P->NR[I.NR[i_nr]].dw[i_o] = eta*(W->NR[i_nr][1] - W->NR[i_nr][0])/W->o;
+      /* Accumulate neural annotated disjunction derivatives. */
+      for (size_t i_na = 0; i_na < I.na; ++i_na) {
+        neural_annot_disj_t *A = &P->NA[I.NA[i_na]];
+        float dP = 0.0;
+        for (size_t j = 0; j < A->v; ++j) dP += W->NA[i_na][j];
+        for (size_t j = 0; j < A->v; ++j) A->dw[i_o*A->v + j] = eta*(W->NA[i_na][j] - dP)/W->o;
+      }
+    }
+
+    /* Backpropagate neural components. */
+    for (size_t i_nr = 0; i_nr < I.nr; ++i_nr)
+      if (!backward_neural_rule(&P->NR[I.NR[i_nr]], 0, O.n)) goto cleanup;
+    for (size_t i_na = 0; i_na < I.na; ++i_na)
+      if (!backward_neural_annot_disj(&P->NA[I.NA[i_na]], 0, O.n)) goto cleanup;
+
+    if (!next_dense_observations(&O, obs)) goto cleanup;
+  }
+
+  if (!update_program_parameters(P, &I)) {
+    PyErr_SetString(PyExc_AttributeError, "could not update program parameters!");
+    goto cleanup;
+  }
+
+  ok = true;
+cleanup:
+  free_dense_observations_contents(&O);
+  for (size_t i = 0; i < num_procs; ++i) free_prob_storage_contents(&Q[i], false);
+  free_indices_contents(&I);
+  return ok;
+}
+
 bool update_program_parameters(program_t *P, indices_t *I) {
   for (size_t i = 0; i < I->n; ++i) {
     prob_fact_t *pf = &P->PF[I->F[i]];

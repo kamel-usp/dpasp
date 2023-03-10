@@ -159,7 +159,7 @@ static PyObject* learn_batch(PyObject *self, PyObject *args, PyObject *kwargs) {
       if (!learn_lagrange_batch(&P, obs, niters, eta, batch, lstable_sat)) goto cleanup;
       break;
     case ALG_NEURASP:
-      /*if (!learn_neurasp_batch(&P, obs, niters, eta, batch, lstable_sat)) goto cleanup;*/
+      if (!learn_neurasp_batch(&P, obs, niters, eta, batch, lstable_sat)) goto cleanup;
       break;
   }
 
