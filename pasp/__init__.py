@@ -15,7 +15,7 @@ __version__ = "0.0.2-2"
 def learn(P: Program, D: np.ndarray, A: np.ndarray = None, niters: int = 30, alg: str = "fixpoint",
           eta: float = 0.001, batch: int = 100, lstable_sat: bool = True):
   if A is None:
-    if type(D) is np.ndarray: data = D if np.issubdtype(A.dtype, bytes) else A.astype(bytes)
+    if type(D) is np.ndarray: data = D if np.issubdtype(D.dtype, bytes) else D.astype(bytes)
     else: data = D
     from learn import learn_batch as clearn_batch
     return clearn_batch(P, data, niters = niters, alg = alg, eta = eta, batch = batch, lstable_sat = lstable_sat)
