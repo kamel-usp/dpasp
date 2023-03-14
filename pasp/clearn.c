@@ -353,7 +353,7 @@ bool learn_neurasp(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
         annot_disj_t *AD = &P->AD[I.A[i_ad]];
         double dP = 0.0;
         for (size_t j = 0; j < AD->n; ++j) dP += W->A[i_ad][j];
-        for (size_t j = 0; j < AD->n; ++j) AD->P[j] += eta*c*((W->A[i_ad][j] - dP)/W->o);
+        for (size_t j = 0; j < AD->n; ++j) AD->P[j] += eta*c*((2*W->A[i_ad][j] - dP)/W->o);
       }
     }
   }
@@ -421,7 +421,7 @@ bool learn_neurasp_batch(program_t *P, PyArrayObject *obs, size_t niters, double
         neural_annot_disj_t *A = &P->NA[I.NA[i_na]];
         float dP = 0.0;
         for (size_t j = 0; j < A->v; ++j) dP += W->NA[i_na][j];
-        for (size_t j = 0; j < A->v; ++j) A->dw[i_o*A->v + j] = eta*(W->NA[i_na][j] - dP)/W->o;
+        for (size_t j = 0; j < A->v; ++j) A->dw[i_o*A->v + j] = eta*(2*W->NA[i_na][j] - dP)/W->o;
       }
     }
 

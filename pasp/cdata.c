@@ -140,7 +140,10 @@ cleanup:
 bool next_dense_observations(observations_t *O, PyArrayObject *obs) {
   size_t n = PyArray_DIM(obs, 0);
   size_t len = (size_t) PyArray_ITEMSIZE(obs);
-  bool reset = O->i + O->batch >= n;
+
+  O->i += O->n;
+
+  bool reset = (O->i + O->batch) >= n;
   if (reset) O->i = 0;
   size_t next = O->batch + O->i;
   if (next > n) next = n;
@@ -161,7 +164,6 @@ bool next_dense_observations(observations_t *O, PyArrayObject *obs) {
       }
     }
   O->n = b;
-  O->i = (!reset)*next;
 
   return true;
 clingo_err:
