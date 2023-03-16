@@ -656,12 +656,14 @@ bool from_python_neural_rule(PyObject *py_nr, neural_rule_t *nr) {
     PyErr_SetString(PyExc_AttributeError, "could not access field dw of supposed NeuralRule object!");
     goto cleanup;
   }
-  py_dw = (PyArrayObject*) PyObject_CallMethod(py_tensor_dw, "numpy", NULL);
-  if (!py_dw) {
-    PyErr_SetString(PyExc_AttributeError, "could not call method numpy in tensor NeuralRule.dw!");
-    goto cleanup;
-  }
-  dw = (float*) PyArray_DATA(py_dw);
+  if (learnable) {
+    py_dw = (PyArrayObject*) PyObject_CallMethod(py_tensor_dw, "numpy", NULL);
+    if (!py_dw) {
+      PyErr_SetString(PyExc_AttributeError, "could not call method numpy in tensor NeuralRule.dw!");
+      goto cleanup;
+    }
+    dw = (float*) PyArray_DATA(py_dw);
+  } else dw = NULL;
 
   nr->n = n; nr->k = k;
   nr->P = NULL;
@@ -740,12 +742,14 @@ bool from_python_neural_ad(PyObject *py_nad, neural_annot_disj_t *nad) {
     PyErr_SetString(PyExc_AttributeError, "could not access field dw of supposed NeuralRule object!");
     goto cleanup;
   }
-  py_dw = (PyArrayObject*) PyObject_CallMethod(py_tensor_dw, "numpy", NULL);
-  if (!py_dw) {
-    PyErr_SetString(PyExc_AttributeError, "could not call method numpy in tensor NeuralRule.dw!");
-    goto cleanup;
-  }
-  dw = (float*) PyArray_DATA(py_dw);
+  if (learnable) {
+    py_dw = (PyArrayObject*) PyObject_CallMethod(py_tensor_dw, "numpy", NULL);
+    if (!py_dw) {
+      PyErr_SetString(PyExc_AttributeError, "could not call method numpy in tensor NeuralRule.dw!");
+      goto cleanup;
+    }
+    dw = (float*) PyArray_DATA(py_dw);
+  } else dw = NULL;
 
   nad->n = n; nad->k = k; nad->v = v;
   nad->P = NULL;
