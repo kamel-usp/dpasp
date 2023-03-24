@@ -190,6 +190,7 @@ class Semantics(enum.IntEnum):
   STABLE = 0
   PARTIAL = 1
   LSTABLE = 2
+  SMPROBLOG = 3
 
 class Query:
   """

@@ -133,6 +133,38 @@ bool model_contains(const clingo_model_t *M, query_t *q, size_t i, bool *c, bool
   return true;
 }
 
+bool compute_smproblog(program_t *P, total_choice_t *theta, storage_t *st, bool *undef,
+    psemantics_t psem) {
+  if (!has_total_model(P, theta, theta->theta_ad, undef)) return false;
+  *undef = !*undef;
+  /* There is an undefined atom in one of the models. */
+  if (*undef) {
+    double p = prob_total_choice(P, theta);
+    /* Under the SMProbLog semantics, if there is an undefined atom in a total choice, then all
+     * atoms must be set to undefined. */
+    for (size_t i = 0; i < P->Q_n; ++i) {
+      bool evi_all_undef = true;
+      for (size_t j = 0; j < P->Q[i].E_n; ++j)
+        evi_all_undef &= P->Q[i].E_s[j] == QUERY_TERM_UND;
+      bool que_all_undef = true, que_any_undef = false;
+      for (size_t j = 0; j < P->Q[i].Q_n; ++j) {
+        bool is_undef = P->Q[i].Q_s[j] == QUERY_TERM_UND;
+        que_all_undef &= is_undef;
+        que_any_undef |= is_undef;
+      }
+      if (psem == CREDAL_SEMANTICS) {
+        bool u = evi_all_undef && que_all_undef, v = evi_all_undef && !que_any_undef;
+        st->a[i] += u*p; st->b[i] += u*p;
+        st->c[i] += v*p; st->d[i] += v*p;
+      } else /* psem == MAXENT_SEMANTICS */ {
+        st->a[i] += (evi_all_undef && que_all_undef)*p;
+        st->b[i] += evi_all_undef*p;
+      }
+    }
+  }
+  return true;
+}
+
 void compute_total_choice(void *data) {
   storage_t *st = (storage_t*) data;
   size_t i, m;
@@ -152,6 +184,13 @@ void compute_total_choice(void *data) {
     bool has;
     if (!has_total_model(P, theta, theta->theta_ad, &has)) goto cleanup;
     if (has) P = P->stable;
+  } else if (P->sem == SMPROBLOG_SEMANTICS) {
+    bool undef;
+    if (!compute_smproblog(P, theta, st, &undef, CREDAL_SEMANTICS)) goto cleanup;
+    if (undef) {
+      st->fail = false;
+      goto cleanup;
+    } else P = P->stable;
   }
 
   size_t CF_n = P->CF_n;
@@ -272,6 +311,13 @@ void compute_total_choice_maxent(void *data) {
     bool has;
     if (!has_total_model(P, theta, theta->theta_ad, &has)) goto cleanup;
     if (has) P = P->stable;
+  } else if (P->sem == SMPROBLOG_SEMANTICS) {
+    bool undef;
+    if (!compute_smproblog(P, theta, st, &undef, MAXENT_SEMANTICS)) goto cleanup;
+    if (undef) {
+      st->fail = false;
+      goto cleanup;
+    } else P = P->stable;
   }
 
   size_t Q_n = P->Q_n, Q_n_bytes = Q_n*sizeof(size_t);

@@ -13,6 +13,7 @@ ARGUMENTS_VALUES = {
     ("stable", "Stable model semantics."),
     ("lstable", "L-stable model semantics."),
     ("partial", "Partial model semantics."),
+    ("smproblog", "SMProbLog semantics."),
   ],
   "psem": [
     ("credal", "Credal semantics."),

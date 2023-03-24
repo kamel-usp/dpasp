@@ -103,6 +103,7 @@ typedef enum semantics {
   STABLE_SEMANTICS = 0,
   PARTIAL_SEMANTICS = 1,
   LSTABLE_SEMANTICS = 2,
+  SMPROBLOG_SEMANTICS = 3,
 } semantics_t;
 
 typedef struct program {

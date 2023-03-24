@@ -496,7 +496,12 @@ class PartialTransformer(StableTransformer):
   def __init__(self, sem: str):
     super().__init__(sem)
     self.PT = set()
-    self.semantics = Semantics.LSTABLE if sem == "lstable" else Semantics.PARTIAL
+    if sem == "lstable":
+      self.semantics = Semantics.LSTABLE
+    elif sem == "smproblog":
+      self.semantics = Semantics.SMPROBLOG
+    else:
+      self.semantics = Semantics.PARTIAL
     self.o_tree = None
 
   @staticmethod
@@ -597,4 +602,5 @@ parse.trans_map = {}
 parse.trans_map["stable"] = StableTransformer
 parse.trans_map["lstable"] = PartialTransformer
 parse.trans_map["partial"] = PartialTransformer
+parse.trans_map["smproblog"] = PartialTransformer
 
