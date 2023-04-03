@@ -5,7 +5,7 @@ import pasp
 import numpy as np
 import math
 
-N_SAMPLES  = 2000
+N_SAMPLES  = 7000
 "Epsilon for all test cases based on the number of samples."
 EPS = hoeffding(N_SAMPLES)
 

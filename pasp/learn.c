@@ -6,7 +6,7 @@
 #include "clearn.h"
 #include "cdata.h"
 
-#include "ground.h"
+#include "cground.h"
 #include "cprogram.h"
 
 #define ALG_FIXPOINT_S "fixpoint"
@@ -77,11 +77,6 @@ static PyObject* learn(PyObject *self, PyObject *args, PyObject *kwargs) {
 
   if (!from_python_program(py_P, &P)) return NULL;
 
-  if (needs_ground(&P)) {
-    if (!ground(&P)) goto cleanup;
-    if (P.stable) if (!ground(P.stable)) goto cleanup;
-  }
-
   lstable_sat = lstable_sat && (P.sem == LSTABLE_SEMANTICS);
   switch(alg) {
     case ALG_FIXPOINT:
@@ -145,11 +140,6 @@ static PyObject* learn_batch(PyObject *self, PyObject *args, PyObject *kwargs) {
 
   if (!from_python_program(py_P, &P)) return NULL;
 
-  if (needs_ground(&P)) {
-    if (!ground(&P)) goto cleanup;
-    if (P.stable) if (!ground(P.stable)) goto cleanup;
-  }
-
   lstable_sat = lstable_sat && (P.sem == LSTABLE_SEMANTICS);
   switch(alg) {
     case ALG_FIXPOINT:
@@ -191,7 +181,6 @@ PyMODINIT_FUNC PyInit_learn(void) {
 
   m = PyModule_Create(&learnmodule);
   if (!m) return NULL;
-  if (import_ground() < 0) return NULL;
   import_array();
 
   return m;

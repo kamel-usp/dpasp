@@ -128,9 +128,9 @@ _param: WORD "=" (REAL | BOOL | NULL)
 // Sequence of parameters.
 params: _param ("," _param)*
 // Neural fact.
-nrule: (LEARN | CONST) "::" WORD "(" VAR ")" "as" hub ("with" params)? ":-" lit ("," lit)* "."
+nrule: (LEARN | CONST) "::" WORD "(" VAR ("|" set)? ")" "as" hub ("with" params)? ":-" lit ("," lit)* "."
 // Neural annotated disjunction.
-nad: (LEARN | CONST) "::" WORD "(" VAR "," set ")" "as" hub ("with" params)? ":-" lit ("," lit)* "."
+nad: (LEARN | CONST) "::" WORD "(" VAR "," set ("|" set)? ")" "as" hub ("with" params)? ":-" lit ("," lit)* "."
 _neural: nrule | nad
 
 // Constraint.

@@ -6,7 +6,7 @@
 #include "cexact.h"
 
 #include "cprogram.h"
-#include "ground.h"
+#include "cground.h"
 #include "cinf.h"
 
 static PyObject* exact(PyObject *self, PyObject *args, PyObject *kwargs) {
@@ -36,8 +36,8 @@ static PyObject* exact(PyObject *self, PyObject *args, PyObject *kwargs) {
   }
 
   if (needs_ground(&p)) {
-    if (!ground(&p)) goto cleanup;
-    if (p.stable) if (!ground(p.stable)) goto cleanup;
+    if (!ground_all(&p, NULL)) goto cleanup;
+    if (p.stable) if (!ground_all(p.stable, NULL)) goto cleanup;
   }
 
   lstable_sat = lstable_sat && (p.sem == LSTABLE_SEMANTICS);
@@ -143,7 +143,6 @@ PyMODINIT_FUNC PyInit_exact(void) {
 
   m = PyModule_Create(&exactmodule);
   if (!m) return NULL;
-  if (import_ground() < 0) return NULL;
   import_array();
 
   return m;

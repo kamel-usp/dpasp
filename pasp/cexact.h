@@ -33,6 +33,8 @@ typedef struct {
   double (*F)[2];
   /* Probabilities for each learnable AD. */
   double **A;
+  /* Probabilities for each learnable PR. */
+  double (*R)[2];
   /* Probabilities for each learnable (grounded) NR. */
   double (*NR)[2];
   /* Probabilities for each learnable (grounded) NA. */
@@ -48,6 +50,8 @@ typedef struct {
   size_t n;
   /* Number of learnable annotated disjunctions. */
   size_t m;
+  /* Number of learnable probabilistic rules. */
+  size_t pr;
   /* Number of learnable neural rules. */
   size_t nr;
   /* Number of learnable neural annotated disjunctions. */
@@ -60,6 +64,8 @@ typedef struct {
   uint16_t *I_F;
   /* Indices of learnable ADs within the global AD array. */
   uint16_t *I_A;
+  /* Indices of learnable PRs within the global PR array. */
+  uint16_t *I_PR;
   /* Indices of learnable NRs within the global NR array. */
   uint16_t *I_NR;
   /* Indices of learnable NAs within the global NA array. */
@@ -68,16 +74,17 @@ typedef struct {
   uint16_t *O_NR;
   /* Index values for locating NAs within the total choice bitvector. */
   uint16_t *O_NA;
+  /* Arrays for identifying the indices of ground rules. */
+  array_uint8_t *I_GR;
 } prob_storage_t;
 
-bool init_prob_storage(prob_storage_t *Q, program_t *P, uint16_t *I_F, size_t n_lpf, uint16_t *I_A,
-    size_t n_lad, uint16_t *I_NR, size_t n_lnr, uint16_t *I_NA, size_t n_lna, uint16_t *O_NR,
-    uint16_t *O_NA, observations_t *O);
+bool init_prob_storage(prob_storage_t *Q, program_t *P, prob_storage_t *U, observations_t *O);
 /* Note: If Q[0] is zero-initialized, then Q[0].I_A and Q[0].I_F are allocated and dynamically set
  * according to P. However, if they are not NULL, then init_prob_storage_seq reuses found values. */
 size_t init_prob_storage_seq(prob_storage_t Q[NUM_PROCS], program_t *P, observations_t *O);
 void free_prob_storage_contents(prob_storage_t *Q, bool free_shared);
 void free_prob_storage(prob_storage_t *Q);
+bool prob_storage_learnable(prob_storage_t *S);
 
 /* Compute the probability of an observation O (a '\0' terminating const char*), returning the
  * probability ℙ(θ, O) and ℙ(O), where θ covers learnable PFs and ADs. The probabilities are not

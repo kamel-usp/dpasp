@@ -6,6 +6,8 @@
 #include "carray.h"
 #include "coptimize.h"
 #include "cutils.h"
+#include "cground.h"
+#include "cthread.h"
 
 bool setup_polynomial(array_bool_t (**Pn)[4], array_double_t (**K)[4], program_t *P) {
   size_t i;
@@ -135,7 +137,7 @@ bool model_contains(const clingo_model_t *M, query_t *q, size_t i, bool *c, bool
 
 bool compute_smproblog(program_t *P, total_choice_t *theta, storage_t *st, bool *undef,
     psemantics_t psem) {
-  if (!has_total_model(P, theta, theta->theta_ad, undef)) return false;
+  if (!has_total_model(P, theta, undef)) return false;
   *undef = !*undef;
   /* There is an undefined atom in one of the models. */
   if (*undef) {
@@ -182,7 +184,7 @@ void compute_total_choice(void *data) {
   /* Check SAT if partial and lstable_sat. */
   if (P->sem == LSTABLE_SEMANTICS && st->lstable_sat) {
     bool has;
-    if (!has_total_model(P, theta, theta->theta_ad, &has)) goto cleanup;
+    if (!has_total_model(P, theta, &has)) goto cleanup;
     if (has) P = P->stable;
   } else if (P->sem == SMPROBLOG_SEMANTICS) {
     bool undef;
@@ -197,8 +199,8 @@ void compute_total_choice(void *data) {
   size_t Q_n = P->Q_n, Q_n_bytes = Q_n*sizeof(size_t);
   bool is_partial = P->sem, has_credal = P->CF_n;
 
-  /* Add credal, probabilistic, and grounded probabilistic facts. */
-  if (!prepare_control(&C, P, theta, theta->theta_ad, "0", false, NULL)) goto cleanup;
+  if (!prepare_control(&C, P, theta, "0", false, NULL)) goto cleanup;
+
   /* Zero-initialize counters and flags. */
   memset(cond_1, 0, Q_n); memset(cond_2, 0, Q_n);
   memset(cond_3, 0, Q_n); memset(cond_4, 0, Q_n);
@@ -309,7 +311,7 @@ void compute_total_choice_maxent(void *data) {
 
   if (P->sem == LSTABLE_SEMANTICS && st->lstable_sat) {
     bool has;
-    if (!has_total_model(P, theta, theta->theta_ad, &has)) goto cleanup;
+    if (!has_total_model(P, theta, &has)) goto cleanup;
     if (has) P = P->stable;
   } else if (P->sem == SMPROBLOG_SEMANTICS) {
     bool undef;
@@ -323,7 +325,7 @@ void compute_total_choice_maxent(void *data) {
   size_t Q_n = P->Q_n, Q_n_bytes = Q_n*sizeof(size_t);
   bool is_partial = P->sem;
 
-  if (!prepare_control(&C, P, theta, theta->theta_ad, "0", false, NULL)) goto cleanup;
+  if (!prepare_control(&C, P, theta, "0", false, NULL)) goto cleanup;
 
   memset(count_q_e, 0, Q_n_bytes);
   memset(count_e, 0, Q_n_bytes);
@@ -542,16 +544,30 @@ cleanup:
   return exact_num_ok;
 }
 
-/* Initializes learnable indices I_F and I_A in storage S according to PF and AD of size n and m
- * respectively. If fail, goto fail. */
-bool init_learnable_indices(program_t *P, uint16_t *I_F, uint16_t *I_A, size_t n_lpf, size_t n_lad,
-    prob_storage_t *S, count_storage_t *C) {
-  if (!(n_lpf || n_lad)) {
+/* Initializes learnable indices U->I_F and U->I_A in storage S according to PF and AD of size n
+ * and m respectively. If fail, goto fail. */
+bool init_learnable_indices(program_t *P, prob_storage_t *U, count_storage_t *V, prob_storage_t *S,
+    count_storage_t *C) {
+  size_t n_lpf, n_lad, n_pr;
+  uint16_t *I_F, *I_A, *I_PR;
+  array_uint8_t *I_GR = NULL;
+  if (U) {
+    n_lpf = U->n; n_lad = U->m;
+    I_F = U->I_F; I_A = U->I_A;
+    n_pr = U->pr; I_PR = U->I_PR;
+    I_GR = U->I_GR;
+  } else {
+    n_lpf = V->n, n_lad = V->m;
+    I_F = V->I_F, I_A = V->I_A;
+    /* Currently not supported. */
+    n_pr = 0; I_PR = NULL;
+  }
+
+  if (!(n_lpf || n_lad || n_pr)) {
     prob_fact_t *PF = P->PF;
     annot_disj_t *AD = P->AD;
     size_t n = P->PF_n, m = P->AD_n, i;
-    I_F = I_A = NULL;
-    n_lpf = n_lad = 0;
+    I_F = I_A = I_PR = NULL;
     for (i = n_lpf = 0; i < n; ++i) if (PF[i].learnable) ++n_lpf;
     if (n_lpf) {
       I_F = (uint16_t*) malloc(n_lpf*sizeof(uint16_t));
@@ -562,24 +578,45 @@ bool init_learnable_indices(program_t *P, uint16_t *I_F, uint16_t *I_A, size_t n
     if (n_lad) {
       I_A = (uint16_t*) malloc(n_lad*sizeof(uint16_t));
       if (!I_A) goto fail;
-      for (size_t j = i = 0; i < m; ++i) if (PF[i].learnable) I_A[j++] = i;
+      for (size_t j = i = 0; i < m; ++i) if (AD[i].learnable) I_A[j++] = i;
+    }
+    if (S) {
+      for (i = n_pr = 0; i < P->PR_n; ++i) if (P->PR[i].learnable) ++n_pr;
+      if (n_pr) {
+        I_PR = (uint16_t*) malloc(n_pr*sizeof(uint16_t));
+        if (!I_PR) goto fail;
+        for (size_t j = i = 0; i < P->PR_n; ++i) if (P->PR[i].learnable) I_PR[j++] = i;
+      }
     }
   }
   if (S) {
+    if (n_pr && !I_GR) {
+      I_GR = (array_uint8_t*) malloc(n_pr*sizeof(array_uint8_t));
+      if (!I_GR) goto fail;
+      for (size_t i = 0; i < n_pr; ++i)
+        if (!array_uint8_t_init(&I_GR[i])) {
+          for (size_t j = 0; j < i; ++j) array_uint8_t_free_contents(&I_GR[j]);
+          goto fail;
+        }
+    }
     S->I_F = I_F; S->I_A = I_A;
     S->n = n_lpf; S->m = n_lad;
+    S->pr = n_pr; S->I_PR = I_PR; S->I_GR = I_GR;
   } else {
     C->I_F = I_F; C->I_A = I_A;
     C->n = n_lpf; C->m = n_lad;
   }
   return true;
 fail:
-  free(I_F); free(I_A);
+  PyErr_SetString(PyExc_MemoryError, "could not allocate memory!");
+  free(I_F); free(I_A); free(I_GR); free(I_PR);
   return false;
 }
 
-bool init_learnable_neural_indices(program_t *P, uint16_t *I_NR, uint16_t *I_NA, size_t n_lnr,
-    size_t n_lna, uint16_t *O_NR, uint16_t *O_NA, prob_storage_t *S) {
+bool init_learnable_neural_indices(program_t *P, prob_storage_t *U, prob_storage_t *S) {
+  uint16_t *I_NR = U->I_NR, *I_NA = U->I_NA;
+  size_t n_lnr = U->nr, n_lna = U->na;
+  uint16_t *O_NR = U->O_NR, *O_NA = U->O_NA;
   if (!n_lnr) {
     neural_rule_t *NR = P->NR;
     size_t i, n = P->NR_n;
@@ -618,16 +655,19 @@ bool init_learnable_neural_indices(program_t *P, uint16_t *I_NR, uint16_t *I_NA,
   S->nr = n_lnr; S->na = n_lna;
   return true;
 fail:
+  PyErr_SetString(PyExc_MemoryError, "could not allocate memory!");
   free(I_NR); free(I_NA); free(O_NR); free(O_NA);
   return false;
 }
 
 /* Initializes learnable statements F and A in storage S according to PF and AD of size n and m
  * respectively. Initialized data is of type type_t. If fail, goto fail. */
-bool init_learnable_storage(annot_disj_t *AD, uint16_t *I_A, size_t n_lpf, size_t n_lad,
-    prob_obs_storage_t *S) {
+bool init_learnable_storage(annot_disj_t *AD, prob_storage_t *U, prob_obs_storage_t *S) {
+  uint16_t *I_A = U->I_A;
+  size_t n_lpf = U->n, n_lad = U->m;
   double (*F)[2] = NULL;
   double **A = NULL;
+  double (*R)[2] = NULL;
   if (n_lpf) {
     F = (double(*)[2]) calloc(n_lpf, sizeof(double[2]));
     if (!F) goto fail;
@@ -643,15 +683,21 @@ bool init_learnable_storage(annot_disj_t *AD, uint16_t *I_A, size_t n_lpf, size_
       }
     }
   }
-  S->F = F; S->A = A;
+  if (U->pr) {
+    R = (double(*)[2]) calloc(U->pr, sizeof(double[2]));
+    if (!F) goto fail;
+  }
+  S->F = F; S->A = A; S->R = R;
   return true;
 fail:
-  free(F); free(A);
+  free(F); free(A); free(R);
   return false;
 }
 
-bool init_learnable_neural_storage(neural_annot_disj_t *NA, uint16_t *I_NA, size_t n_lnr,
-    size_t n_lna, prob_obs_storage_t *S) {
+bool init_learnable_neural_storage(neural_annot_disj_t *NA, prob_storage_t *U,
+    prob_obs_storage_t *S) {
+  uint16_t *I_NA = U->I_NA;
+  size_t n_lnr = U->nr, n_lna = U->na;
   double (*R)[2] = NULL;
   double **A = NULL;
   if (n_lnr) {
@@ -676,9 +722,8 @@ fail:
   return false;
 }
 
-bool init_count_storage(count_storage_t *C, program_t *P, uint16_t *I_F, size_t n_lpf,
-    uint16_t *I_A, size_t n_lad) {
-  if (!init_learnable_indices(P, I_F, I_A, n_lpf, n_lad, NULL, C)) goto cleanup;
+bool init_count_storage(count_storage_t *C, program_t *P, count_storage_t *U) {
+  if (!init_learnable_indices(P, NULL, U, NULL, C)) goto cleanup;
   if (C->n) {
     C->F = (uint16_t(*)[2]) calloc(C->n, sizeof(uint16_t[2]));
     if (!C->F) goto cleanup;
@@ -725,11 +770,11 @@ void compute_model_count(void *args) {
 
   if (P->sem == LSTABLE_SEMANTICS && st->lstable_sat) {
     bool has;
-    if (!has_total_model(P, theta, theta->theta_ad, &has)) goto cleanup;
+    if (!has_total_model(P, theta, &has)) goto cleanup;
     if (has) P = P->stable;
   }
 
-  if (!prepare_control(&C, P, theta, theta->theta_ad, "0", false, NULL)) goto cleanup;
+  if (!prepare_control(&C, P, theta, "0", false, NULL)) goto cleanup;
 
   {
     bool ok = false;
@@ -786,10 +831,7 @@ bool count_models(program_t *P, bool lstable_sat, count_storage_t *ret) {
 
   for (i = 0; i < num_procs; ++i) {
     /* These are zero-initialized when i = 0. */
-    uint16_t *I_F = C[0].I_F, *I_A = C[0].I_A;
-    size_t n_lpf = C[0].n, n_lad = C[0].m;
-    if (!init_count_storage(&C[i], P, I_F, n_lpf, I_A, n_lad))
-      goto cleanup;
+    if (!init_count_storage(&C[i], P, &C[0])) goto cleanup;
     if (!(C[0].n || C[0].m)) goto cleanup;
     S[i].pid = i; S[i].mu = &mu; S[i].wakeup = &wakeup; S[i].avail = &avail;
     S[i].busy_procs = busy_procs; S[i].lstable_sat = lstable_sat;
@@ -837,18 +879,16 @@ cleanup:
   return ok;
 }
 
-bool init_prob_storage(prob_storage_t *Q, program_t *P, uint16_t *I_F, size_t n_lpf, uint16_t *I_A,
-    size_t n_lad, uint16_t *I_NR, size_t n_lnr, uint16_t *I_NA, size_t n_lna, uint16_t *O_NR,
-    uint16_t *O_NA, observations_t *O) {
+bool init_prob_storage(prob_storage_t *Q, program_t *P, prob_storage_t *U, observations_t *O) {
   prob_obs_storage_t *po = NULL;
   po = (prob_obs_storage_t*) malloc(O->n*sizeof(prob_obs_storage_t));
   if (!po) goto cleanup;
-  if (!init_learnable_indices(P, I_F, I_A, n_lpf, n_lad, Q, NULL)) goto cleanup;
-  if (!init_learnable_neural_indices(P, I_NR, I_NA, n_lnr, n_lna, O_NR, O_NA, Q)) goto cleanup;
+  if (!init_learnable_indices(P, U, NULL, Q, NULL)) goto cleanup;
+  if (!init_learnable_neural_indices(P, U, Q)) goto cleanup;
   for (size_t i = 0; i < O->n; ++i) {
     prob_obs_storage_t *o = po + i;
-    if (!init_learnable_storage(P->AD, I_A, Q->n, Q->m, o)) goto cleanup;
-    if (!init_learnable_neural_storage(P->NA, I_NA, Q->nr, Q->na, o)) goto cleanup;
+    if (!init_learnable_storage(P->AD, U, o)) goto cleanup;
+    if (!init_learnable_neural_storage(P->NA, U, o)) goto cleanup;
     o->o = 0.0; o->N = 0;
   }
   Q->o = O->n;
@@ -860,18 +900,19 @@ cleanup:
   return false;
 }
 
+bool prob_storage_learnable(prob_storage_t *S) { return S->n || S->m || S->pr || S->nr || S->na; }
+
 size_t init_prob_storage_seq(prob_storage_t Q[NUM_PROCS], program_t *P, observations_t *O) {
   size_t total_choice_n = get_num_facts(P);
   size_t num_procs = estimate_nprocs(total_choice_n + P->AD_n);
   size_t i = 0;
 
   for (i = 0; i < num_procs; ++i) {
-    uint16_t *I_F = Q[0].I_F, *I_A = Q[0].I_A, *I_NR = Q[0].I_NR, *I_NA = Q[0].I_NA;
-    uint16_t *O_NR = Q[0].O_NR, *O_NA = Q[0].O_NA;
-    size_t n_lpf = Q[0].n, n_lad = Q[0].m, n_lnr = Q[0].nr, n_lna = Q[0].na;
-    if (!init_prob_storage(&Q[i], P, I_F, n_lpf, I_A, n_lad, I_NR, n_lnr, I_NA, n_lna, O_NR, O_NA, O))
+    if (!init_prob_storage(&Q[i], P, &Q[0], O)) goto cleanup;
+    if (!prob_storage_learnable(&Q[i])) {
+      PyErr_SetString(PyExc_ValueError, "program is not learnable!");
       goto cleanup;
-    if (!(Q[0].n || Q[0].m || Q[0].nr || Q[0].na)) goto cleanup;
+    }
   }
 
   return num_procs;
@@ -886,12 +927,14 @@ void free_prob_storage_contents(prob_storage_t *Q, bool free_shared) {
     free(Q->P[i].F);
     for (size_t j = 0; j < Q->m; ++j) free(Q->P[i].A[j]);
     free(Q->P[i].A);
+    free(Q->P[i].R);
     free(Q->P[i].NR);
     for (size_t j = 0; j < Q->na; ++j) free(Q->P[i].NA[j]);
     free(Q->P[i].NA);
   }
+  for (size_t i = 0; i < Q->pr; ++i) array_uint8_t_free_contents(&Q->I_GR[i]);
   if (free_shared) {
-    free(Q->I_F); free(Q->I_A);
+    free(Q->I_F); free(Q->I_A); free(Q->I_PR); free(Q->I_GR);
     free(Q->I_NR); free(Q->I_NA);
     free(Q->O_NR); free(Q->O_NA);
   }
@@ -912,11 +955,11 @@ void compute_prob_obs(void *args) {
 
   if (P->sem == LSTABLE_SEMANTICS && st->lstable_sat) {
     bool has;
-    if (!has_total_model(P, theta, theta->theta_ad, &has)) goto cleanup;
+    if (!has_total_model(P, theta, &has)) goto cleanup;
     if (has) P = P->stable;
   }
 
-  if (!prepare_control(&C, P, theta, theta->theta_ad, "0", false, NULL)) goto cleanup;
+  if (!prepare_control(&C, P, theta, "0", false, NULL)) goto cleanup;
 
   /* Reset observation counting. */
   for (size_t i = 0; i < obs->n; ++i) prob->P[i].N = 0;
@@ -975,6 +1018,14 @@ solve_cleanup:
         uint8_t u = theta->theta_ad[prob->I_A[j]];
         pr->A[j][u] += p_o/(P->AD[prob->I_A[j]].P[u]);
       }
+      for (size_t j = 0; j < prob->pr; ++j) {
+        uint8_t pos = 0;
+        array_uint8_t *gr_pf = &prob->I_GR[j];
+        for (size_t l = 0; l < gr_pf->n; ++l) pos += bitvec_GET(&theta->pf, gr_pf->d[l]);
+        double p_pr = P->PR[prob->I_PR[j]].p;
+        pr->R[j][0] = (gr_pf->n-pos)*p_o/(1-p_pr);
+        pr->R[j][1] = pos*p_o/p_pr;
+      }
       for (size_t j = 0; j < prob->nr; ++j) {
         neural_rule_t *R = &P->NR[prob->I_NR[j]];
         float *q = R->P + i*R->n;
@@ -996,6 +1047,12 @@ solve_cleanup:
         pr->F[j][bitvec_GET(&theta->pf, j)] += p_o;
       for (size_t j = 0; j < prob->m; ++j)
         pr->A[j][theta->theta_ad[prob->I_A[j]]] += p_o;
+      for (size_t j = 0; j < prob->pr; ++j) {
+        uint8_t pos = 0;
+        array_uint8_t *gr_pf = &prob->I_GR[j];
+        for (size_t l = 0; l < gr_pf->n; ++l) pos += bitvec_GET(&theta->pf, gr_pf->d[l]);
+        pr->R[j][1] += pos*p_o;
+      }
     }
   }
 
@@ -1057,6 +1114,7 @@ bool prob_obs_reuse(program_t *P, observations_t *obs, bool lstable_sat, prob_st
       prob_obs_storage_t *pr = &Q[i].P[j];
       memset(pr->F, 0, Q[0].n*sizeof(double[2]));
       for (size_t j = 0; j < Q[0].m; ++j) memset(pr->A[j], 0, STORAGE_AD_DIM(P, &Q[0], j)*sizeof(double));
+      memset(pr->R, 0, Q[0].pr*sizeof(double[2]));
       memset(pr->NR, 0, Q[0].nr*sizeof(double[2]));
       for (size_t j = 0; j < Q[0].na; ++j) memset(pr->NA[j], 0, P->NA[Q[0].I_NA[j]].v*sizeof(double));
       pr->o = 0.0;
@@ -1067,7 +1125,10 @@ bool prob_obs_reuse(program_t *P, observations_t *obs, bool lstable_sat, prob_st
     do {
       int id = retr_free_proc(busy_procs, num_procs, &wakeup, &avail);
       if (!dispatch_job_with_payload(&theta, &wakeup, busy_procs, S, num_procs, pool, &avail, id,
-            compute_prob_obs, &tuple[id])) goto cleanup;
+            compute_prob_obs, &tuple[id])) {
+        PyErr_SetString(PyExc_ChildProcessError, "compute_prob_obs returned an error code!");
+        goto cleanup;
+      }
     } while (incr_total_choice_ad(&theta, P));
   } while (incr_total_choice(&theta));
   thpool_wait(pool);
@@ -1084,6 +1145,10 @@ bool prob_obs_reuse(program_t *P, observations_t *obs, bool lstable_sat, prob_st
         size_t k = P->AD[Q[0].I_A[j]].n;
         for (size_t c = 0; c < k; ++c)
           qr->A[j][c] += pr->A[j][c];
+      }
+      for (size_t j = 0; j < Q[0].pr; ++j) {
+        qr->R[j][0] += pr->R[j][0];
+        qr->R[j][1] += pr->R[j][1];
       }
       for (size_t j = 0; j < Q[0].nr; ++j) {
         qr->NR[j][0] += pr->NR[j][0];
@@ -1103,12 +1168,14 @@ bool prob_obs_reuse(program_t *P, observations_t *obs, bool lstable_sat, prob_st
     ret->nr = Q[0].nr; ret->na = Q[0].na;
     ret->I_F = Q[0].I_F; ret->I_A = Q[0].I_A;
     ret->I_NR = Q[0].I_NR; ret->I_NA = Q[0].I_NA;
+    ret->I_PR = Q[0].I_PR;
     for (size_t o = 0; o < obs->n; ++o) {
       prob_obs_storage_t *qr = &ret->P[o];
       prob_obs_storage_t *pr = &Q[0].P[o];
       qr->F = pr->F; qr->A = pr->A;
       qr->NR = pr->NR; qr->NA = pr->NA;
       qr->o = pr->o;
+      qr->R = pr->R;
     }
   }
 

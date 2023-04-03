@@ -4,8 +4,7 @@
 #include <numpy/arrayobject.h>
 
 #include "csample.h"
-
-#include "ground.h"
+#include "cground.h"
 #include "cprogram.h"
 
 static PyObject* sample(PyObject *self, PyObject *args, PyObject *kwargs) {
@@ -41,8 +40,8 @@ static PyObject* sample(PyObject *self, PyObject *args, PyObject *kwargs) {
 
   if (!from_python_program(py_P, &P)) goto cleanup;
   if (needs_ground(&P)) {
-    if (!ground(&P)) goto cleanup;
-    if (P.stable) if (!ground(P.stable)) goto cleanup;
+    if (!ground_all(&P, NULL)) goto cleanup;
+    if (P.stable) if (!ground_all(P.stable, NULL)) goto cleanup;
   }
 
   lstable_sat = lstable_sat && (P.sem == LSTABLE_SEMANTICS);
@@ -74,7 +73,6 @@ PyMODINIT_FUNC PyInit_sample(void) {
 
   m = PyModule_Create(&samplemodule);
   if (!m) return NULL;
-  if (import_ground() < 0) return NULL;
   import_array();
 
   return m;

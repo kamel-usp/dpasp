@@ -2,7 +2,7 @@ import pathlib, enum, math, collections.abc
 import lark, lark.reconstruct, clingo, numpy
 from numpy import ascontiguousarray as contiguous
 from .program import ProbFact, Query, ProbRule, Program, CredalFact, unique_fact, Semantics, Data
-from .program import AnnotatedDisjunction, NeuralRule, NeuralAD
+from .program import AnnotatedDisjunction, NeuralRule, NeuralAD, unique_pgrule_id
 
 def is_fact(x: lark.Tree) -> bool:
   "Returns whether a node in the AST is a fact."
@@ -119,6 +119,7 @@ class StableTransformer(lark.Transformer):
     super().__init__()
     self.semantics = Semantics.STABLE
     self.torch_scope = {}
+    self.n_prules = 0
 
   @staticmethod
   def pack(t: str, rep: str = None, val = None, scope: dict = {}) -> tuple[str, str, str, dict]:
@@ -157,38 +158,56 @@ class StableTransformer(lark.Transformer):
           raise ValueError("Train data must have same number of instances!")
 
   @staticmethod
+  def cont_head_sym(name: str, T: list, O: list, V: list = None):
+    g = None
+    if V is None:
+      if O is None:
+        g = (clingo.parse_term(f"{name}({t.arg})")._rep for t in T)
+        print(tuple(f"{name}({t.arg})" for t in T))
+      else:
+        g = (clingo.parse_term(f"{name}({t.arg}, {o})")._rep for t in T for o in O)
+        print(tuple(f"{name}({t.arg}, {o})" for t in T for o in O))
+    if O is None:
+      if O is None:
+        g = (clingo.parse_term(f"{name}({t.arg}, {v})")._rep for t in T for v in V)
+        print(tuple(f"{name}({t.arg}, {v})" for t in T for v in V))
+      else:
+        g = (clingo.parse_term(f"{name}({t.arg}, {v}, {o})")._rep for t in T for o in O for v in V)
+        print(tuple(f"{name}({t.arg}, {v}, {o})" for t in T for o in O for v in V))
+    return contiguous(tuple(g), dtype=numpy.uint64)
+
+  @staticmethod
   def register_nrule(TNR: list, NR: list, D: list):
-    for name, inp, net, body, rep, learnable, params in TNR:
+    for name, inp, O, net, body, rep, learnable, params in TNR:
       t = StableTransformer.find_data_pred(D, body, "rule", name)
       # Ground rules.
-      H = contiguous(tuple(clingo.parse_term(f"{name}({t[i].arg})")._rep for i in range(len(t))), \
-                      dtype = numpy.uint64)
+      H = StableTransformer.cont_head_sym(name, t, O)
       B, S = None, None
       if len(body) > 1:
+        # B and S do not depend on the number of outcomes |O|, only on |t| and |body|.
         body_no_data = [b for b in body if b[2][1] != t[0].name]
         B = contiguous(tuple(clingo.parse_term(f"{b[2][1]}({t[i].arg})" if len(b[3]) > 0 \
                                                 else lit2atom(b[1]))._rep for i in range(len(t)) \
                               for b in body_no_data), dtype = numpy.uint64)
         S = contiguous(tuple(b[2][0] for i in range(len(t)) for b in body_no_data), dtype = bool)
-      NR.append(NeuralRule(H, B, S, name, net, rep, t, learnable, params))
+      NR.append(NeuralRule(H, B, S, name, net, rep, t, learnable, params, O))
 
   @staticmethod
   def register_nad(TNA: list, NA: list, D: list):
-    for name, inp, vals, net, body, rep, learnable, params in TNA:
+    for name, inp, vals, O, net, body, rep, learnable, params in TNA:
       t = StableTransformer.find_data_pred(D, body, "AD", name)
       # Ground rules.
       V = list(vals.keys())
-      H = contiguous(tuple(clingo.parse_term(f"{name}({t[i].arg}, {V[j]})")._rep \
-                            for i in range(len(t)) for j in range(len(V))))
+      H = StableTransformer.cont_head_sym(name, t, O, V)
       B, S = None, None
       if len(body) > 1:
         body_no_data = [b for b in body if b[2][1] != t[0].name]
-        # B and S do not depend on the number of values |V|, only on |t| and |body|.
+        # B and S do not depend on the number of values |V| or outcomes |O|, only on |t| and |body|.
         B = contiguous(tuple(clingo.parse_term(f"{b[2][1]}({t[i].arg})" if len(b[3]) > 0 \
                                                 else lit2atom(b[1]))._rep for i in range(len(t)) \
                               for b in body_no_data), dtype = numpy.uint64)
         S = contiguous(tuple(b[2][0] for i in range(len(t)) for b in body_no_data), dtype = bool)
-      NA.append(NeuralAD(H, B, S, name, V, net, rep, t, learnable, params))
+      NA.append(NeuralAD(H, B, S, name, V, net, rep, t, learnable, params, O))
 
   # Components which are directly translated to clingo.
   def CMP_OP(self, o): return self.pack("CMP_OP", str(o))
@@ -271,25 +290,25 @@ class StableTransformer(lark.Transformer):
     h, b = R[-2], R[-1]
     o = f"{h[1]} :- {b[1]}"
     p = R[0][2]
-    if e:
-      S = self.join_scope(R)
-      if len(S) == 0:
-        pr = ProbRule(p, o, is_prop = True)
-        return self.pack("prule", pr.prop_f, pr)
-      # Invariant: len(b) > 0, otherwise the rule is unsafe.
-      name = h[2]
-      # hscope is guaranteed to be ordered by Python dict's definition.
-      hscope = h[3]
-      body_preds = [x for x in b[2] if x[0] != "bop"]
-      h_s = ", ".join(hscope) + ", " if len(hscope) > 0 else ""
-      b_s = ", ".join(map(lambda x: f"1, {x[1]}" if x[2][0] else f"0, {x[1][4:]}", body_preds))
-      # The number of body arguments is twice as we need to store the sugoal's sign and symbol.
-      u = f"{name}(@unify(\"{p}\", {name}, {int(l)}, {len(hscope)}, {2*len(body_preds)}, {h_s}{b_s})) :- {b[1]}."
-      return self.pack("prule", "", ProbRule(p, o, is_prop = False, unify = u, learnable = l))
-    else:
-      # TODO: parameter tying
-      pr = ProbRule(p, o, is_prop = True, learnable = l)
+    S = self.join_scope(R)
+    if len(S) == 0:
+      pr = ProbRule(p, o, is_prop = True)
+      self.n_prules += 1
       return self.pack("prule", pr.prop_f, pr)
+    # Invariant: len(b) > 0, otherwise the rule is unsafe.
+    name = h[2]
+    # hscope is guaranteed to be ordered by Python dict's definition.
+    hscope = h[3]
+    body_preds = [x for x in b[2] if x[0] != "bop"]
+    h_s = ", ".join(hscope) + ", " if len(hscope) > 0 else ""
+    b_s = ", ".join(map(lambda x: f"1, {x[1]}" if x[2][0] else f"0, {x[1][4:]}", body_preds))
+    # If parameters are shared, then we require a special ID.
+    upr = -1 if (e or not l) else unique_pgrule_id()
+    # The number of body arguments is twice as we need to store the sugoal's sign and symbol.
+    rid = self.n_prules; self.n_prules += 1
+    u = f"{name}(@unify({rid}, {name}, {int(l)}, {upr}, {len(hscope)}, {2*len(body_preds)}, {h_s}{b_s})) :- {b[1]}."
+    return self.pack("prule", "", ProbRule(p, o, is_prop = False, unify = u, learnable = l,
+                                           sharing = not e))
 
   # Annotated disjunction head.
   def ad_head(self, H):
@@ -407,20 +426,26 @@ class StableTransformer(lark.Transformer):
     learnable = A[0][0] == "LEARN"
     name = A[1][1]
     inp = A[2][1]
-    net, hub_repr = A[3][2]
-    if A[4][0] == "params":
-      params = A[4][2]
-      body = A[5:]
+    offset = 3
+    outcomes = None
+    # Has more than one outcome within the neural network.
+    if A[offset][0] == "set":
+      outcomes = list(A[offset][2].keys())
+      offset += 1
+    net, hub_repr = A[offset][2]
+    if A[offset+1][0] == "params":
+      params = A[offset+1][2]
+      body = A[offset+2:]
     else:
       params = {}
-      body = A[4:]
+      body = A[offset+1:]
     scope = self.join_scope(A)
 
     if len(scope) != 1:  raise ValueError(f"Neural rule {name} is not grounded!")
     if inp not in scope: raise ValueError(f"Neural rule {name} is unsafe!")
 
-    rep = f"{A[0][1]}::{name}({inp}) as {hub_repr} :- {', '.join(getnths(body, 1))}."
-    return self.pack("nrule", "", (name, inp, net, body, rep, learnable, params))
+    rep = f"{A[0][1]}::{name}({inp}{'' if outcomes is None else f' | {A[offset-1][1]}'}) as {hub_repr} :- {', '.join(getnths(body, 1))}."
+    return self.pack("nrule", "", (name, inp, outcomes, net, body, rep, learnable, params))
 
   # Neural annotated disjunction.
   def nad(self, A):
@@ -428,20 +453,25 @@ class StableTransformer(lark.Transformer):
     name = A[1][1]
     inp = A[2][1]
     vals = A[3][2]
-    net, hub_repr = A[4][2]
-    if A[5][0] == "params":
-      params = A[5][2]
-      body = A[6:]
+    outcomes = None
+    offset = 4
+    if A[offset][0] == "set":
+      outcomes = list(A[offset][2].keys())
+      offset += 1
+    net, hub_repr = A[offset][2]
+    if A[offset+1][0] == "params":
+      params = A[offset+1][2]
+      body = A[offset+2:]
     else:
       params = {}
-      body = A[5:]
+      body = A[offset+1:]
     scope = self.join_scope(A)
 
     if len(scope) != 1:  raise ValueError(f"Neural annotated disjunction {name} is not grounded!")
     if inp not in scope: raise ValueError(f"Neural annotated disjunction {name} is unsafe!")
 
-    rep = f"{A[0][1]}::{name}({inp}, {A[2][1]}) as {hub_repr} :- {', '.join(getnths(body, 1))}."
-    return self.pack("nad", "", (name, inp, vals, net, body, rep, learnable, params))
+    rep = f"{A[0][1]}::{name}({inp}, {A[3][1]}{'' if outcomes is None else f' | {A[offset-1][1]}'}) as {hub_repr} :- {', '.join(getnths(body, 1))}."
+    return self.pack("nad", "", (name, inp, vals, outcomes, net, body, rep, learnable, params))
 
   # Constraint.
   def constraint(self, C): return self.pack("constraint", f":- {C[0][1]}.")
@@ -543,23 +573,23 @@ class PartialTransformer(StableTransformer):
     o1, o2 = f"{h[1]} :- {b1}", f"_{h[1]} :- {b2}"
     self.PT.add(h[1])
     uid = unique_fact()
-    if e:
-      S = self.join_scope(R)
-      if len(S) == 0:
-        pr1, pr2 = ProbRule(p, o1, ufact = uid), ProbRule(p, o2, ufact = uid)
-        return self.pack("prule", [pr1.prop_f, pr2.prop_f], [pr1, pr2])
-      # Invariant: len(b) > 0, otherwise the rule is unsafe.
-      name = h[2]
-      hscope = h[3]
-      body_preds = [x for x in b[2] if x[0] != "bop"]
-      h_s = ", ".join(hscope) + ", " if len(hscope) > 0 else ""
-      b1_s = ", ".join(map(lambda x: f"1, {x[1]}" if x[2][0] else f"0, _{x[1][4:]}", body_preds))
-      # Let the grounder deal with the _f rule.
-      u1 = f"{name}(@unify(\"{p}\", {name}, {int(l)}, {len(hscope)}, {2*len(body_preds)}, {h_s}{b1_s})) :- {b1}."
-      return self.pack("prule", "", ProbRule(p, o1, is_prop = False, unify = u1, learnable = l))
-    else:
+    S = self.join_scope(R)
+    if len(S) == 0:
       pr1, pr2 = ProbRule(p, o1, ufact = uid, learnable = l), ProbRule(p, o2, ufact = uid)
+      self.n_prules += 2
       return self.pack("prule", [pr1.prop_f, pr2.prop_f], [pr1, pr2])
+    # Invariant: len(b) > 0, otherwise the rule is unsafe.
+    name = h[2]
+    hscope = h[3]
+    body_preds = [x for x in b[2] if x[0] != "bop"]
+    h_s = ", ".join(hscope) + ", " if len(hscope) > 0 else ""
+    b1_s = ", ".join(map(lambda x: f"1, {x[1]}" if x[2][0] else f"0, _{x[1][4:]}", body_preds))
+    # If parameters are shared, then we require a special ID.
+    upr = -1 if (e or not l) else unique_pgrule_id()
+    # Let the grounder deal with the _f rule.
+    rid = self.n_prules; self.n_prules += 1
+    u1 = f"{name}(@unify({rid}, {name}, {int(l)}, {upr}, {len(hscope)}, {2*len(body_preds)}, {h_s}{b1_s})) :- {b1}."
+    return self.pack("prule", "", ProbRule(p, o1, is_prop = False, unify = u1, learnable = l))
 
   def plp(self, C: list[tuple]) -> Program:
     # Logic Program.

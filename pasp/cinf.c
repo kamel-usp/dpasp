@@ -1,5 +1,6 @@
 #include "cinf.h"
 #include "cutils.h"
+#include <string.h>
 
 double prob_total_choice_prob(program_t *P, total_choice_t *theta) {
   prob_fact_t *PF = P->PF;
@@ -36,6 +37,15 @@ double prob_total_choice_neural(program_t *P, total_choice_t *theta, size_t offs
 }
 double prob_total_choice(program_t *P, total_choice_t *theta) {
   return prob_total_choice_prob(P, theta)*prob_total_choice_neural(P, theta, 0, false);
+}
+double prob_total_choice_ground(array_prob_fact_t *PF, total_choice_t *theta) {
+  double p = 1.0;
+  bool t;
+  for (size_t i = 0; i < PF->n; ++i) {
+    t = bitvec_GET(&theta->pf, i);
+    p *= t*PF->d[i].p + (!t)*(1.0-PF->d[i].p);
+  }
+  return p;
 }
 
 bool init_storage(storage_t *s, program_t *P, array_bool_t (*Pn)[4],
@@ -229,10 +239,167 @@ bool dispatch_job(total_choice_t *theta, pthread_mutex_t *wakeup, bool *busy_pro
 #define PROCS_XSTR(x) PROCS_STR(x)
 #define NUM_PROCS_CONFIG_STR PROCS_XSTR(NUM_PROCS)
 
-bool prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
-    uint8_t *theta_ad, const char *nmodels, bool parallelize_clingo, const char *append) {
-  size_t i;
-  clingo_backend_t *back = NULL;
+bool add_facts_from_total_choice(clingo_control_t *C, array_prob_fact_t *PF, total_choice_t *theta) {
+  clingo_backend_t *back;
+  if (!clingo_control_backend(C, &back)) return false;
+  if (!clingo_backend_begin(back)) goto cleanup;
+  for (size_t i = 0; i < PF->n; ++i) {
+    clingo_atom_t a;
+    if (!CHOICE_IS_TRUE(theta, i)) continue;
+    if (!clingo_backend_add_atom(back, &PF->d[i].cl_f, &a)) goto cleanup;
+    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) goto cleanup;
+  }
+cleanup:
+  if (!clingo_backend_end(back)) return false;
+  return true;
+}
+
+void join_ad_choice(char *dst, char **src, size_t n) {
+  *dst++ = '{';
+  for (size_t i = 0; i < n; ++i, ++dst) {
+    for (char *t = src[i]; *t; ++t) *dst++ = *t;
+    *dst = ';';
+  }
+  *(dst-1) = '}'; dst[0] = '='; dst[1] = '1'; dst[2] = '.'; dst[3] = '\0';
+}
+
+bool join_ad_choice_sym(char *dst, size_t max_size, clingo_symbol_t *S, size_t n) {
+  *dst++ = '{';
+  for (size_t i = 0; i < n; ++i, ++dst) {
+    if (!clingo_symbol_to_string(S[i], dst, max_size)) return false;
+    dst += strlen(dst); *dst = ';';
+  }
+  *(dst-1) = '}'; dst[0] = '='; dst[1] = '1'; dst[2] = '.'; dst[3] = '\0';
+  return true;
+}
+
+bool add_all_atoms_as_choice(clingo_control_t *C, program_t *P) {
+  bool ok = false;
+  clingo_backend_t *back;
+  clingo_atom_t *heads = NULL;
+  size_t nheads = P->PF_n + P->CF_n + P->NR_n;
+
+  /* Get the control's backend. */
+  if (!clingo_control_backend(C, &back)) return false;
+  /* Startup the backend. */
+  if (!clingo_backend_begin(back)) goto cleanup;
+
+  /* Collect all probabilistic facts. */
+  heads = (clingo_atom_t*) malloc(nheads*sizeof(clingo_atom_t));
+  if (!heads) goto cleanup;
+  size_t i_head = 0;
+  for (size_t i = 0; i < P->PF_n; ++i)
+    if (!clingo_backend_add_atom(back, &P->PF[i].cl_f, &heads[i_head++])) goto cleanup;
+  for (size_t i = 0; i < P->CF_n; ++i)
+    if (!clingo_backend_add_atom(back, &P->CF[i].cl_f, &heads[i_head++])) goto cleanup;
+  for (size_t i = 0; i < P->NR_n; ++i)
+    for (size_t j = 0; j < P->NR[i].n; ++j)
+      if (!clingo_backend_add_atom(back, &P->NR[i].H[j], &heads[i_head++])) goto cleanup;
+
+  /* Add them to the backend as a single choice. */
+  if (!clingo_backend_rule(back, true, heads, nheads, NULL, 0)) goto cleanup;
+
+  /* We're done with backend. */
+  if (!clingo_backend_end(back)) { back = NULL; goto cleanup; }
+  back = NULL;
+
+  /* Add each AD as a choice with cardinality constraint of one. */
+  char ad_choices[2048];
+  for (size_t i = 0; i < P->AD_n; ++i) {
+    join_ad_choice(ad_choices, (char**) P->AD[i].F, P->AD[i].n);
+    if (!clingo_control_add(C, "base", NULL, 0, ad_choices)) goto cleanup;
+  }
+  /* Add neural ADs the same way. */
+  for (size_t i = 0; i < P->NA_n; ++i)
+    for (size_t j = 0; j < P->NA[i].n; ++j) {
+      if (!join_ad_choice_sym(ad_choices, 2048, P->NA[i].H+j*P->NA[i].v, P->NA[i].v)) goto cleanup;
+      if (!clingo_control_add(C, "base", NULL, 0, ad_choices)) goto cleanup;
+    }
+  ok = true;
+cleanup:
+  free(heads);
+  /* Cleanup backend. */
+  if (back) if (!clingo_backend_end(back)) return false;
+  return ok;
+}
+
+bool add_atoms_from_total_choice(clingo_control_t *C, program_t *P, total_choice_t *theta) {
+  bool ok = false;
+  clingo_backend_t *back;
+  /* Get the control's backend. */
+  if (!clingo_control_backend(C, &back)) return false;
+  /* Startup the backend. */
+  if (!clingo_backend_begin(back)) goto cleanup;
+  /* Add the credal facts according to the total rule. */
+  for (size_t i = 0; i < P->CF_n; ++i) {
+    clingo_atom_t a;
+    if (!CHOICE_IS_TRUE(theta, i)) continue;
+    if (!clingo_backend_add_atom(back, &P->CF[i].cl_f, &a)) goto cleanup;
+    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) goto cleanup;
+  }
+  /* Add the probabilistic facts according to the total rule. */
+  for (size_t i = 0; i < P->PF_n; ++i) {
+    clingo_atom_t a;
+    if (!CHOICE_IS_TRUE(theta, i + P->CF_n)) continue;
+    if (!clingo_backend_add_atom(back, &P->PF[i].cl_f, &a)) goto cleanup;
+    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) goto cleanup;
+  }
+  /* Add the neural rules according to the total rule. */
+  {
+    clingo_atom_t h;
+    clingo_literal_t B[64];
+    size_t c = P->CF_n + P->PF_n;
+    for (size_t i = 0; i < P->NR_n; ++i)
+      for (size_t j = 0; j < P->NR[i].n; ++j)
+        for (size_t o = 0; o < P->NR[i].o; ++o) {
+          if (!CHOICE_IS_TRUE(theta, c++)) continue;
+          if (!clingo_backend_add_atom(back, &P->NR[i].H[j*P->NR[i].o+o], &h)) goto cleanup;
+          for (size_t b = 0; b < P->NR[i].k; ++b) {
+            size_t u = j*P->NR[i].k+b;
+            if (!clingo_backend_add_atom(back, &P->NR[i].B[u], (clingo_atom_t*) &B[b]))
+              goto cleanup;
+            if (!P->NR[i].S[u]) B[b] = -B[b];
+          }
+          if (!clingo_backend_rule(back, false, &h, 1, B, P->NR[i].k)) goto cleanup;
+        }
+  }
+  /* Add the annotated disjunction rules according to the total rule encoded by theta_ad. */
+  for (size_t i = 0; i < P->AD_n; ++i) {
+    clingo_atom_t a;
+    if (!clingo_backend_add_atom(back, &P->AD[i].cl_F[theta->theta_ad[i]], &a)) goto cleanup;
+    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) goto cleanup;
+  }
+  /* Add the neural annotated disjunction rules according to the total rule encoded by theta_ad. */
+  {
+    clingo_atom_t h;
+    clingo_literal_t B[64];
+    size_t r = P->AD_n;
+    for (size_t i = 0; i < P->NA_n; ++i) {
+      for (size_t j = 0; j < P->NA[i].n; ++j) {
+        for (size_t o = 0; o < P->NA[i].o; ++o) {
+          if (!clingo_backend_add_atom(back, &P->NA[i].H[j*P->NA[i].v*P->NA[i].o +
+                o*P->NA[i].v + theta->theta_ad[r++]], &h))
+            goto cleanup;
+          for (size_t b = 0; b < P->NA[i].k; ++b) {
+            size_t u = j*P->NA[i].k+b;
+            if (!clingo_backend_add_atom(back, &P->NA[i].B[u], (clingo_atom_t*) &B[b]))
+              goto cleanup;
+            if (!P->NA[i].S[u]) B[b] = -B[b];
+          }
+          if (!clingo_backend_rule(back, false, &h, 1, B, P->NA[i].k)) goto cleanup;
+        }
+      }
+    }
+  }
+  ok = true;
+cleanup:
+  /* Cleanup backend. */
+  if (!clingo_backend_end(back)) return false;
+  return ok;
+}
+
+bool _prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
+    const char *nmodels, bool parallelize_clingo, const char *append) {
   /* Create new clingo controller. */
   if (!clingo_control_new(NULL, 0, undef_atom_ignore, NULL, 20, C)) return false;
   /* Config to enumerate all models. */
@@ -242,72 +409,33 @@ bool prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
   if (append) if (!clingo_control_add(*C, "base", NULL, 0, append)) return false;
   /* Add grounded probabilistic rules. */
   if (P->gr_P[0]) if (!clingo_control_add(*C, "base", NULL, 0, P->gr_P)) return false;
-  /* Get the control's backend. */
-  if (!clingo_control_backend(*C, &back)) return false;
-  /* Startup the backend. */
-  if (!clingo_backend_begin(back)) return false;
-  /* Add the credal facts according to the total rule. */
-  for (i = 0; i < P->CF_n; ++i) {
-    clingo_atom_t a;
-    if (!CHOICE_IS_TRUE(theta, i)) continue;
-    if (!clingo_backend_add_atom(back, &P->CF[i].cl_f, &a)) return false;
-    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) return false;
-  }
-  /* Add the probabilistic facts according to the total rule. */
-  for (i = 0; i < P->PF_n; ++i) {
-    clingo_atom_t a;
-    if (!CHOICE_IS_TRUE(theta, i + P->CF_n)) continue;
-    if (!clingo_backend_add_atom(back, &P->PF[i].cl_f, &a)) return false;
-    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) return false;
-  }
-  /* Add the neural rules according to the total rule. */
-  {
-    clingo_atom_t h;
-    clingo_literal_t B[64];
-    size_t c = P->CF_n + P->PF_n;
-    for (i = 0; i < P->NR_n; ++i) {
-      for (size_t j = 0; j < P->NR[i].n; ++j) {
-        if (!CHOICE_IS_TRUE(theta, c++)) continue;
-        if (!clingo_backend_add_atom(back, &P->NR[i].H[j], &h)) return false;
-        for (size_t b = 0; b < P->NR[i].k; ++b) {
-          size_t u = j*P->NR[i].k+b;
-          if (!clingo_backend_add_atom(back, &P->NR[i].B[u], (clingo_atom_t*) &B[b]))
-            return false;
-          if (!P->NR[i].S[u]) B[b] = -B[b];
-        }
-        if (!clingo_backend_rule(back, false, &h, 1, B, P->NR[i].k)) return false;
-      }
-    }
-  }
-  /* Add the annotated disjunction rules according to the total rule encoded by theta_ad. */
-  for (i = 0; i < P->AD_n; ++i) {
-    clingo_atom_t a;
-    if (!clingo_backend_add_atom(back, &P->AD[i].cl_F[theta_ad[i]], &a)) return false;
-    if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) return false;
-  }
-  /* Add the neural annotated disjunction rules according to the total rule encoded by theta_ad. */
-  {
-    clingo_atom_t h;
-    clingo_literal_t B[64];
-    size_t r = P->AD_n;
-    for (i = 0; i < P->NA_n; ++i) {
-      for (size_t j = 0; j < P->NA[i].n; ++j) {
-        if (!clingo_backend_add_atom(back, &P->NA[i].H[j*P->NA[i].v+theta->theta_ad[r++]], &h))
-          return false;
-        for (size_t b = 0; b < P->NA[i].k; ++b) {
-          size_t u = j*P->NA[i].k+b;
-          if (!clingo_backend_add_atom(back, &P->NA[i].B[u], (clingo_atom_t*) &B[b]))
-            return false;
-          if (!P->NA[i].S[u]) B[b] = -B[b];
-        }
-        if (!clingo_backend_rule(back, false, &h, 1, B, P->NA[i].k)) return false;
-      }
-    }
-  }
-  /* Cleanup backend. */
-  if (!clingo_backend_end(back)) return false;
+  if (!add_atoms_from_total_choice(*C, P, theta)) return false;
+  return true;
+}
+
+bool prepare_control_preground(clingo_control_t **C, program_t *P, total_choice_t *theta,
+    const char *nmodels, bool parallelize_clingo, const char *append, array_prob_fact_t *gr_PF,
+    total_choice_t *gr_theta) {
+  if (!_prepare_control(C, P, theta, nmodels, parallelize_clingo, append)) return false;
+  if (!add_facts_from_total_choice(*C, gr_PF, gr_theta)) return false;
   /* Ground atoms. */
-  if(!clingo_control_ground(*C, GROUND_DEFAULT_PARTS, 1, NULL, NULL)) return false;
+  if (!atomic_ground(*C, NULL, NULL)) return false;
+  return true;
+}
+
+bool atomic_ground(clingo_control_t *C, clingo_ground_callback_t gcb, void *gdata) {
+  static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
+  bool ok;
+  pthread_mutex_lock(&mu);
+  ok = clingo_control_ground(C, GROUND_DEFAULT_PARTS, 1, gcb, gdata);
+  pthread_mutex_unlock(&mu);
+  return ok;
+}
+
+bool prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
+    const char *nmodels, bool parallelize_clingo, const char *append) {
+  if (!_prepare_control(C, P, theta, nmodels, parallelize_clingo, append)) return false;
+  if (!clingo_control_ground(*C, GROUND_DEFAULT_PARTS, 1, NULL, NULL)) return false;
   return true;
 }
 
@@ -330,12 +458,12 @@ bool setup_config(clingo_control_t *C, const char *nmodels, bool parallelize_cli
   return true;
 }
 
-bool has_total_model(program_t *P, total_choice_t *theta, uint8_t *theta_ad, bool *has) {
+bool has_total_model(program_t *P, total_choice_t *theta, bool *has) {
   clingo_control_t *C = NULL;
   clingo_solve_handle_t *handle;
   clingo_solve_result_bitset_t res;
   /* Prepare control according to the stable semantics. */
-  if (!prepare_control(&C, P->stable, theta, theta_ad, "1", false, NULL)) goto cleanup;
+  if (!prepare_control(&C, P->stable, theta, "1", false, NULL)) goto cleanup;
   /* Solve and determine if there exists a (total) model. */
   if (!clingo_control_solve(C, clingo_solve_mode_yield, NULL, 0, NULL, NULL, &handle)) goto cleanup;
   if (!clingo_solve_handle_get(handle, &res)) goto cleanup;

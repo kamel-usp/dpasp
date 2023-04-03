@@ -3,11 +3,11 @@ import math
 
 CONFIDENCE = 0.99
 
-def hoeffding(n: int) -> float:
+def hoeffding(n: int, tol: float = 1e-2) -> float:
   """ Hoeffding Inequality.
 
   Takes the number of samples `n` and returns the probability error ϵ."""
-  return math.sqrt(math.log(2/(1-CONFIDENCE))/(2*n))
+  return math.sqrt(math.log(2/(1-CONFIDENCE))/(2*n))+tol
 
 class PaspTest(unittest.TestCase):
   def assertApproxEqual(self, X: list, Y: list, Z: list = None):

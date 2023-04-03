@@ -16,13 +16,20 @@ typedef struct {
   PyObject *self;
 } prob_fact_t;
 
+ARRAY_DECL(prob_fact_t)
+typedef array_prob_fact_t_t array_prob_fact_t;
+
 typedef struct {
   double p;
   const char *f;
   PyObject *f_obj;
   bool is_prop;
+  bool learnable;
+  bool sharing;
   const char *unify;
+  array_uint8_t_t PF;
   PyObject *unify_obj;
+  PyObject *self;
 } prob_rule_t;
 
 typedef struct {
@@ -56,6 +63,8 @@ typedef struct {
   size_t n;
   /* Number of subgoals in the rule's body. */
   size_t k;
+  /* Number of outcomes in the neural network. */
+  size_t o;
   /* Derivative tensor data. */
   float *dw;
   bool learnable;
@@ -77,6 +86,8 @@ typedef struct {
   size_t v;
   /* Number of subgoals in the rule's body. */
   size_t k;
+  /* Number of outcomes in the neural network. */
+  size_t o;
   /* Derivative tensor data. */
   float *dw;
   bool learnable;

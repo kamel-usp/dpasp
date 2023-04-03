@@ -33,6 +33,7 @@ void print_total_choice(total_choice_t *theta);
 double prob_total_choice(program_t *P, total_choice_t *theta);
 double prob_total_choice_prob(program_t *P, total_choice_t *theta);
 double prob_total_choice_neural(program_t *P, total_choice_t *theta, size_t offset, bool train);
+double prob_total_choice_ground(array_prob_fact_t *PF, total_choice_t *theta);
 
 typedef struct {
   bool *cond_1, *cond_2, *cond_3, *cond_4;
@@ -75,10 +76,17 @@ bool dispatch_job_with_payload(total_choice_t *theta, pthread_mutex_t *wakeup, b
 /* Determine if the i-th position in PF total choice t is true. */
 #define CHOICE_IS_TRUE(t, i) bitvec_GET(&(t)->pf, i)
 
+bool add_facts_from_total_choice(clingo_control_t *C, array_prob_fact_t *PF, total_choice_t *theta);
+bool add_all_atoms_as_choice(clingo_control_t *C, program_t *P);
+bool add_atoms_from_total_choice(clingo_control_t *C, program_t *P, total_choice_t *theta);
 bool prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
-    uint8_t *theta_ad, const char *nmodels, bool parallelize_clingo, const char *append);
+    const char *nmodels, bool parallelize_clingo, const char *append);
+bool prepare_control_preground(clingo_control_t **C, program_t *P, total_choice_t *theta,
+    const char *nmodels, bool parallelize_clingo, const char *append, array_prob_fact_t *gr_PF,
+    total_choice_t *gr_theta);
 
 bool setup_config(clingo_control_t *C, const char *nmodels, bool parallelize_clingo);
-bool has_total_model(program_t *P, total_choice_t *theta, uint8_t *theta_ad, bool *has);
+bool has_total_model(program_t *P, total_choice_t *theta, bool *has);
+bool atomic_ground(clingo_control_t *C, clingo_ground_callback_t gcb, void *gdata);
 
 #endif

@@ -14,6 +14,13 @@ def unique_fact(i: int = None) -> str:
   return f"__unique_id_{i}"
 unique_fact.i = 0
 
+def unique_pgrule_id(gen: bool = True):
+  if gen:
+    unique_pgrule_id.i += 1
+    return unique_pgrule_id.i
+  return unique_pgrule_id.i
+unique_pgrule_id.i = -1
+
 class ProbFact:
   """
   A Probabilistic Fact (PF) is a (Logic Program) fact which is "chosen" with some probability.
@@ -37,16 +44,20 @@ class ProbRule:
   """
 
   def __init__(self, p: str, f: str, is_prop: bool = True, unify: str = None, ufact: str = None,
-               learnable: bool = False):
+               learnable: bool = False, sharing: bool = False):
     self.p = p
     self.f = f
     self.is_prop = is_prop
     self.learnable = learnable
     self.unify = unify
-    self.prop_pf = ProbFact(p, unique_fact() if ufact is None else ufact, learnable = learnable)
+    self.sharing = sharing # sharing parameter i.e. parameter tying.
+    self.prop_pf = ProbFact(p, unique_fact() if ufact is None else ufact,
+                            learnable = learnable and sharing)
     self.prop_f = f"{f}, {self.prop_pf.f}."
+    self.pf_ids = None
 
-  def __str__(self) -> str: return f"{self.p}{'+' if self.unify else '' + '?' if self.learnable else ''}::{self.f}"
+  def __str__(self) -> str:
+    return f"{self.p}{('' if (self.sharing or self.is_prop) else '+') + ('?' if self.learnable else '')}::{self.f}"
   def __repr__(self) -> str: return self.__str__()
 
 class CredalFact:
@@ -111,11 +122,12 @@ class Data:
 
 class Neural:
   def __init__(self, net, data: Data, learnable: bool, rep: str, nvals: int,
-               opt_params: dict):
+               opt_params: dict, outcomes: list):
     self.net = net
     self.learnable = learnable
     self.rep = rep
     self.data = data
+    self.outcomes = 0 if outcomes is None else len(outcomes)
 
     # Update default opt_params with given params.
     _opt_params = {"lr": 0.01, "maximize": True}
@@ -158,8 +170,8 @@ class Neural:
 
 class NeuralRule(Neural):
   def __init__(self, heads: list, bodies: list, signs: list, name: str, net, rep: str, data: list,
-               learnable: bool, params: dict):
-    super().__init__(net, data, learnable, rep, 1, params)
+               learnable: bool, params: dict, outcomes: list):
+    super().__init__(net, data, learnable, rep, 1, params, outcomes)
     # Heads and bodies must be numpy.uint64 values representing _rep, not Symbols.
     self.H = heads
     self.B = bodies
@@ -173,8 +185,8 @@ class NeuralRule(Neural):
 
 class NeuralAD(Neural):
   def __init__(self, heads: list, bodies: list, signs: list, name: str, vals: list, net, rep: str, \
-               data: list, learnable: bool, params: dict):
-    super().__init__(net, data, learnable, rep, len(vals), params)
+               data: list, learnable: bool, params: dict, outcomes: list):
+    super().__init__(net, data, learnable, rep, len(vals), params, outcomes)
     self.H = heads
     self.B = bodies
     self.S = signs

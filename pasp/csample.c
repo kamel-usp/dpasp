@@ -102,11 +102,11 @@ void compute_sample(void *args) {
 
     if (P->sem == LSTABLE_SEMANTICS && S->lstable_sat) {
       bool has;
-      if (!has_total_model(P, theta, theta->theta_ad, &has)) goto cleanup;
+      if (!has_total_model(P, theta, &has)) goto cleanup;
       if (has) P = P->stable;
     }
 
-    if (!prepare_control(&C, P, theta, theta->theta_ad, "0", false, NULL)) goto cleanup;
+    if (!prepare_control(&C, P, theta, "0", false, NULL)) goto cleanup;
 
     size_t m = 0;
     {

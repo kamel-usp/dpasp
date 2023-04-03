@@ -8,6 +8,9 @@
 
 #include "cutils.h"
 
+/* Implement dynamic array of prob_fact_t's. */
+ARRAY_IMPL(prob_fact_t)
+
 void print_prob_fact(prob_fact_t *pf) {
   if (pf->learnable) wprintf(L"%f?::%s", pf->p, pf->f);
   else wprintf(L"%f::%s", pf->p, pf->f);
@@ -17,7 +20,7 @@ void free_prob_fact(prob_fact_t *pf) { free_prob_fact_contents(pf); free(pf); }
 
 void print_prob_rule(prob_rule_t *pr) { wprintf(L"%f::%s", pr->p, pr->f); }
 void free_prob_rule_contents(prob_rule_t *pr) {
-  if (pr) { Py_DECREF(pr->f_obj); Py_XDECREF(pr->unify_obj); }
+  if (pr) { Py_DECREF(pr->f_obj); Py_XDECREF(pr->unify_obj); array_uint8_t_free_contents(&pr->PF); }
 }
 void free_prob_rule(prob_rule_t *pr) { free_prob_rule_contents(pr); free(pr); }
 
@@ -166,9 +169,10 @@ void free_program(program_t *P) { free_program_contents(P); free(P); }
 
 bool from_python_prob_rule(PyObject *py_pr, prob_rule_t *pr) {
   PyObject *py_p, *py_f, *py_is_prop, *py_unify = py_is_prop = py_f = py_p = NULL;
+  PyObject *py_pf_ids, *py_learnable, *py_sharing = py_learnable = py_pf_ids = NULL;
   double p;
   const char *f;
-  long is_prop_l;
+  long is_prop_l, learnable, sharing;
   const char *unify = NULL;
   bool r = false;
 
@@ -218,18 +222,67 @@ bool from_python_prob_rule(PyObject *py_pr, prob_rule_t *pr) {
     }
   }
 
+  py_learnable = PyObject_GetAttrString(py_pr, "learnable");
+  if (!py_learnable) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field learnable of supposed ProbRule object!");
+    goto cleanup;
+  }
+  learnable = PyLong_AsLong(py_learnable);
+  if ((learnable == (long) -1) && !PyErr_Occurred()) {
+    PyErr_SetString(PyExc_TypeError, "field learnable of ProbRule must be a bool!");
+    goto cleanup;
+  }
+
+  py_sharing = PyObject_GetAttrString(py_pr, "sharing");
+  if (!py_sharing) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field sharing of supposed ProbRule object!");
+    goto cleanup;
+  }
+  sharing = PyLong_AsLong(py_sharing);
+  if ((sharing == (long) -1) && !PyErr_Occurred()) {
+    PyErr_SetString(PyExc_TypeError, "field sharing of ProbRule must be a bool!");
+    goto cleanup;
+  }
+
+  py_pf_ids = PyObject_GetAttrString(py_pr, "pf_ids");
+  if (!py_pf_ids) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field pf_ids of supposed ProbRule object!");
+    goto cleanup;
+  }
+  if (PyList_Check(py_pf_ids)) {
+    size_t pf_ids_n = PyList_GET_SIZE(py_pf_ids);
+    if (!array_uint8_t_initn(&pr->PF, pf_ids_n)) goto cleanup;
+    for (size_t i = 0; i < pf_ids_n; ++i) {
+      PyObject *e = PyList_GET_ITEM(py_pf_ids, i);
+      uint8_t u = PyLong_AsUnsignedLong(e);
+      if ((u == (uint8_t) -1) && !PyErr_Occurred()) {
+        PyErr_SetString(PyExc_TypeError, "field pf_ids of ProbRule must be a list of integers!");
+        goto cleanup;
+      }
+      pr->PF.d[i] = u;
+    }
+  } else { /* py_pf_ids should be Py_None, but we don't have to check for this case. */
+    pr->PF.d = NULL; pr->PF.n = 0; pr->PF.c = 0;
+  }
+
   pr->p = p;
   pr->f = f;
   pr->f_obj = py_f;
   pr->is_prop = (bool) is_prop_l;
   pr->unify = unify;
   pr->unify_obj = py_unify;
+  pr->learnable = learnable;
+  pr->sharing = sharing;
+  pr->self = py_pr;
   r = true;
 
 cleanup:
   Py_XDECREF(py_p);
   if (!r) { Py_XDECREF(py_f); Py_XDECREF(py_unify); }
   Py_XDECREF(py_is_prop);
+  Py_XDECREF(py_pf_ids);
+  Py_XDECREF(py_learnable);
+  Py_XDECREF(py_sharing);
   return r;
 }
 
@@ -605,13 +658,13 @@ cleanup:
 }
 
 bool from_python_neural_rule(PyObject *py_nr, neural_rule_t *nr) {
-  PyObject *py_learnable = NULL, *py_tensor_dw = NULL;
+  PyObject *py_learnable = NULL, *py_tensor_dw = NULL, *py_o = NULL;
   PyArrayObject *py_H, *py_B, *py_S, *py_dw = py_S = py_B = py_H = NULL;
   clingo_symbol_t *H = NULL, *B = NULL;
   float *dw;
   bool *S = NULL;
   long learnable;
-  size_t n, k = 0;
+  size_t n, k = 0, o;
   bool ok = false;
 
   py_learnable = PyObject_GetAttrString(py_nr, "learnable");
@@ -665,29 +718,41 @@ bool from_python_neural_rule(PyObject *py_nr, neural_rule_t *nr) {
     dw = (float*) PyArray_DATA(py_dw);
   } else dw = NULL;
 
+  py_o = PyObject_GetAttrString(py_o, "outcomes");
+  if (!py_o) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field outcomes of supposed NeuralRule object!");
+    goto cleanup;
+  }
+  o = PyLong_AsUnsignedLong(py_o);
+  if ((o == (size_t) -1) && !PyErr_Occurred()) {
+    PyErr_SetString(PyExc_TypeError, "field outcomes of NeuralRule must be an integer!");
+    goto cleanup;
+  }
+
   nr->n = n; nr->k = k;
   nr->P = NULL;
   nr->H = H; nr->B = B; nr->S = S;
   nr->dw = dw;
   nr->learnable = learnable;
   nr->self = py_nr;
+  nr->o = o;
 
   ok = true;
 cleanup:
   if (!ok) { free(H); free(B); free(S); }
   Py_XDECREF(py_H); Py_XDECREF(py_B); Py_XDECREF(py_S); Py_XDECREF(py_learnable);
-  Py_XDECREF(py_tensor_dw); Py_XDECREF(py_dw);
+  Py_XDECREF(py_tensor_dw); Py_XDECREF(py_dw); Py_XDECREF(py_o);
   return ok;
 }
 
 bool from_python_neural_ad(PyObject *py_nad, neural_annot_disj_t *nad) {
-  PyObject *py_learnable = NULL, *py_tensor_dw = NULL;
+  PyObject *py_learnable = NULL, *py_tensor_dw = NULL, *py_o = NULL;
   PyArrayObject *py_H, *py_B, *py_S, *py_dw = py_S = py_B = py_H = NULL;
   clingo_symbol_t *H = NULL, *B = NULL;
   bool *S = NULL;
   float *dw;
   long learnable;
-  size_t n, v, k = 0;
+  size_t n, v, k = 0, o;
   bool ok = false;
 
   py_learnable = PyObject_GetAttrString(py_nad, "learnable");
@@ -750,6 +815,16 @@ bool from_python_neural_ad(PyObject *py_nad, neural_annot_disj_t *nad) {
     }
     dw = (float*) PyArray_DATA(py_dw);
   } else dw = NULL;
+  py_o = PyObject_GetAttrString(py_o, "outcomes");
+  if (!py_o) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field outcomes of supposed NeuralRule object!");
+    goto cleanup;
+  }
+  o = PyLong_AsUnsignedLong(py_o);
+  if ((o == (size_t) -1) && !PyErr_Occurred()) {
+    PyErr_SetString(PyExc_TypeError, "field outcomes of NeuralRule must be an integer!");
+    goto cleanup;
+  }
 
   nad->n = n; nad->k = k; nad->v = v;
   nad->P = NULL;
@@ -757,12 +832,13 @@ bool from_python_neural_ad(PyObject *py_nad, neural_annot_disj_t *nad) {
   nad->dw = dw;
   nad->learnable = learnable;
   nad->self = py_nad;
+  nad->o = o;
 
   ok = true;
 cleanup:
   if (!ok) { free(H); free(B); free(S); }
   Py_XDECREF(py_H); Py_XDECREF(py_B); Py_XDECREF(py_S); Py_XDECREF(py_learnable);
-  Py_XDECREF(py_tensor_dw); Py_XDECREF(py_dw);
+  Py_XDECREF(py_tensor_dw); Py_XDECREF(py_dw); Py_XDECREF(py_o);
   return ok;
 }
 

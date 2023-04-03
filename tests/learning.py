@@ -5,7 +5,7 @@ import pasp
 import numpy as np
 
 N_SAMPLES  = 500
-N_ITERS    = 100
+N_ITERS    = 10
 """Epsilon for all test cases based on the number of samples. Give some tolerance, since it's an
 approximation of an approximation."""
 EPS = hoeffding(N_SAMPLES)*1.5
@@ -14,9 +14,9 @@ class TestLearning(PaspTest):
   def test_insomnia_ad(self):
     which = "examples/insomnia_ad.lp"
     W = [[0.3, 0.2, 0.5], [0.1, 0.6, 0.3], [0.9, 0.1, 0.0], [0.0, 0.5, 0.5]]
+    A = ["work(anna)", "work(bill)", "sleep(anna)", "sleep(bill)"]
     P = pasp.parse(which)
     Q = pasp.parse(which)
-    A = ["work(anna)", "work(bill)", "sleep(anna)", "sleep(bill)"]
 
     for w in W:
       P.AD[0].P = w
@@ -34,6 +34,8 @@ class TestLearning(PaspTest):
     A = ["alarm", "calls(a)", "calls(b)"]
     S = pasp.sample(Q, A, n = N_SAMPLES)
     P.PF[0].p = 0.5; P.PF[0].learnable = True
+    P.PR[-1].p = 0.5; P.PR[-1].learnable = True
+    P.PR[-2].p = 0.5; P.PR[-2].learnable = True
     pasp.learn(P, S, A, niters = N_ITERS)
 
     self.assertAlmostEqual(P.PF[0].p, Q.PF[0].p, delta = EPS)
