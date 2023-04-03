@@ -7,7 +7,6 @@
 #include "coptimize.h"
 #include "cutils.h"
 #include "cground.h"
-#include "cthread.h"
 
 bool setup_polynomial(array_bool_t (**Pn)[4], array_double_t (**K)[4], program_t *P) {
   size_t i;
