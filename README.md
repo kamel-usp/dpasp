@@ -428,7 +428,7 @@ python setup.py install
 
 `pasp` is also available as a command:
 
-```bash
+```
 % Prints the help message.
 pasp --help
 
