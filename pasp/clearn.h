@@ -11,6 +11,10 @@
 
 #include "cexact.h"
 
+#define ALG_FIXPOINT 0
+#define ALG_LAGRANGE 1
+#define ALG_NEURASP  2
+
 bool learn_fixpoint(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
     PyArrayObject *atoms, size_t niters, bool lstable_sat);
 bool learn_lagrange(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,

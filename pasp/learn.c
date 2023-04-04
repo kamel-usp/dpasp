@@ -13,10 +13,6 @@
 #define ALG_LAGRANGE_S "lagrange"
 #define ALG_NEURASP_S  "neurasp"
 
-#define ALG_FIXPOINT 0
-#define ALG_LAGRANGE 1
-#define ALG_NEURASP  2
-
 static PyObject* learn(PyObject *self, PyObject *args, PyObject *kwargs) {
   program_t P = {0};
   PyObject *py_P, *py_obs, *py_obs_counts, *py_atoms;
