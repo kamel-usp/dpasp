@@ -39,7 +39,7 @@ g(x) ~ test(@test), train(@train).
 %   print("Initial probability values:")
 %   pasp.exact(P, psemantics = "maxent")
 %   # The fix-point learning algorithm does not support neural components.
-%   pasp.learn(P, D, niters = 500, alg = "lagrange")
+%   pasp.learn(P, D, niters = 500, alg = "lagrange", eta = 1.)
 %   print("Post-learning probabilities:")
 %   pasp.exact(P, psemantics = "maxent")
 %

@@ -30,7 +30,7 @@ g(x) ~ test(@test), train(@train).
 %   D = [["f(x, a)"], ["f(x, a)"], ["f(x, b)"], ["f(x, b)"], ["f(x, b)"], ["f(x, b)"], ["f(x, b)"],
 %        ["f(x, c)"], ["f(x, a)"], ["f(x, b)"], ["f(x, b)"], ["f(x, c)"], ["f(x, a)"], ["f(x, b)"],
 %        ["f(x, b)"], ["f(x, c)"], ["f(x, c)"], ["f(x, a)"], ["f(x, b)"], ["f(x, c)"]]
-%   pasp.learn(P, D, niters = 1000, alg = "lagrange")
+%   pasp.learn(P, D, niters = 1000, alg = "lagrange", eta = 1.)
 %   print("Post-learning probabilities:")
 %   pasp.exact(P, psemantics = "maxent")
 %
