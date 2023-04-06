@@ -503,8 +503,8 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
 
     /* Move memory for next batch. */
     I += Q_n*sem_stride;
-    for (i = 0; i < P->NR_n; ++i) ++P->NR[i].P;
-    for (i = 0; i < P->NA_n; ++i) P->NA[i].P += P->NA[i].v;
+    for (i = 0; i < P->NR_n; ++i) P->NR[i].P += P->NR[i].o;
+    for (i = 0; i < P->NA_n; ++i) P->NA[i].P += P->NA[i].v*P->NA[i].o;
     /* Reset memory for next batch. */
     if ((data_stride > 1) && !P->CF_n) {
       size_t s = Q_n*sizeof(double);
@@ -625,10 +625,10 @@ bool init_learnable_neural_indices(program_t *P, prob_storage_t *U, prob_storage
       if (!I_NR) goto fail;
       O_NR = (uint16_t*) malloc(n_lnr*sizeof(uint16_t));
       if (!O_NR) goto fail;
-      size_t s = P->PF_n;
+      size_t s = P->PF_n + P->CF_n;
       for (size_t j = i = 0; i < n; ++i) {
         if (NR[i].learnable) { I_NR[j] = i; O_NR[j++] = s; }
-        s += NR[i].n;
+        s += NR[i].n*NR[i].o;
       }
     }
   }
@@ -645,7 +645,7 @@ bool init_learnable_neural_indices(program_t *P, prob_storage_t *U, prob_storage
       size_t s = P->AD_n;
       for (size_t j = i = 0; i < m; ++i) {
         if (NA[i].learnable) { I_NA[j] = i; O_NA[j++] = s; }
-        s += NA[i].n;
+        s += NA[i].n*NA[i].o;
       }
     }
   }
@@ -692,21 +692,28 @@ fail:
   return false;
 }
 
-bool init_learnable_neural_storage(neural_annot_disj_t *NA, prob_storage_t *U,
+bool init_learnable_neural_storage(neural_rule_t *NR, neural_annot_disj_t *NA, prob_storage_t *U,
     prob_obs_storage_t *S) {
   uint16_t *I_NA = U->I_NA;
   size_t n_lnr = U->nr, n_lna = U->na;
-  double (*R)[2] = NULL;
+  double **R = NULL;
   double **A = NULL;
   if (n_lnr) {
-    R = (double(*)[2]) calloc(n_lnr, sizeof(double[2]));
+    R = (double**) malloc(n_lnr*sizeof(double*));
     if (!R) goto fail;
+    for (size_t i = 0; i < n_lnr; ++i) {
+      R[i] = (double*) calloc(2*NR[U->I_NR[i]].o, sizeof(double));
+      if (!R[i]) {
+        for (size_t j = 0; j < i; ++j) free(R[j]);
+        goto fail;
+      }
+    }
   }
   if (n_lna) {
     A = (double**) malloc(n_lna*sizeof(double*));
     if (!A) goto fail;
     for (size_t i = 0; i < n_lna; ++i) {
-      A[i] = (double*) calloc(NA[I_NA[i]].v, sizeof(double));
+      A[i] = (double*) calloc(NA[I_NA[i]].v*NA[I_NA[i]].o, sizeof(double));
       if (!A[i]) {
         for (size_t j = 0; j < i; ++j) free(A[j]);
         goto fail;
@@ -885,7 +892,7 @@ bool init_prob_storage(prob_storage_t *Q, program_t *P, prob_storage_t *U, obser
   for (size_t i = 0; i < O->n; ++i) {
     prob_obs_storage_t *o = po + i;
     if (!init_learnable_storage(P->AD, U, o)) goto cleanup;
-    if (!init_learnable_neural_storage(P->NA, U, o)) goto cleanup;
+    if (!init_learnable_neural_storage(P->NR, P->NA, U, o)) goto cleanup;
     o->o = 0.0; o->N = 0;
   }
   Q->o = O->n;
@@ -925,6 +932,7 @@ void free_prob_storage_contents(prob_storage_t *Q, bool free_shared) {
     for (size_t j = 0; j < Q->m; ++j) free(Q->P[i].A[j]);
     free(Q->P[i].A);
     free(Q->P[i].R);
+    for (size_t j = 0; j < Q->nr; ++j) free(Q->P[i].NR[j]);
     free(Q->P[i].NR);
     for (size_t j = 0; j < Q->na; ++j) free(Q->P[i].NA[j]);
     free(Q->P[i].NA);

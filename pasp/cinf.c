@@ -20,18 +20,21 @@ double prob_total_choice_neural(program_t *P, total_choice_t *theta, size_t offs
   size_t r = P->CF_n + P->PF_n;
   size_t m = train*P->m_train + (!train)*P->m_test;
   for (size_t i = 0; i < P->NR_n; ++i) {
-    float *prob = P->NR[i].P + offset*P->NR[i].n;
+    float *prob = P->NR[i].P + offset*P->NR[i].o;
     for (size_t j = 0; j < P->NR[i].n; ++j) {
-      bool t = bitvec_GET(&theta->pf, r++);
-      double q = prob[j*m];
-      p *= t*q + (!t)*(1.0-q);
+      for (size_t o = 0; o < P->NR[i].o; ++o) {
+        bool t = bitvec_GET(&theta->pf, r++);
+        double q = prob[j*m+o];
+        p *= t*q + (!t)*(1.0-q);
+      }
     }
   }
   r = P->AD_n;
   for (size_t i = 0; i < P->NA_n; ++i) {
-    float *prob = P->NA[i].P + offset*P->NA[i].v*P->NA[i].n;
+    float *prob = P->NA[i].P + offset*P->NA[i].v*P->NR[i].o;
     for (size_t j = 0; j < P->NA[i].n; ++j)
-      p *= prob[j*m*P->NA[i].v+theta->theta_ad[r++]];
+      for (size_t o = 0; o < P->NA[i].o; ++o)
+        p *= prob[j*m*P->NA[i].v*P->NA[i].o + o*P->NA[i].v + theta->theta_ad[r++]];
   }
   return p;
 }
@@ -139,7 +142,7 @@ bool _init_total_choice(total_choice_t *theta, size_t n, size_t m) {
 }
 bool init_total_choice(total_choice_t *theta, size_t n, program_t *P) {
   size_t l = P->AD_n;
-  for (size_t i = 0; i < P->NA_n; ++i) l += P->NA[i].n;
+  for (size_t i = 0; i < P->NA_n; ++i) l += P->NA[i].n*P->NA[i].o;
   return _init_total_choice(theta, n, l);
 }
 void free_total_choice_contents(total_choice_t *theta) {
@@ -149,7 +152,7 @@ void free_total_choice_contents(total_choice_t *theta) {
 
 size_t get_num_facts(program_t *P) {
   size_t n = P->PF_n + P->CF_n;
-  for (size_t i = 0; i < P->NR_n; ++i) n += P->NR[i].n;
+  for (size_t i = 0; i < P->NR_n; ++i) n += P->NR[i].n*P->NR[i].o;
   return n;
 }
 
@@ -178,7 +181,7 @@ bool _incr_total_choice_nad(uint8_t *theta, neural_annot_disj_t *nad, size_t i, 
     size_t nad_n) {
   if (!nad_n) return true;
   if (a == nad_n-1) return (theta[a] = (theta[a] + 1) % nad[i].v) == 0;
-  if (j == nad[i].n) j = 0, ++i;
+  if (j == nad[i].n*nad[i].o) j = 0, ++i;
   bool c = _incr_total_choice_nad(theta, nad, i, j+1, a+1, nad_n);
   bool l = theta[a] == nad[i].v-1;
   theta[a] = (theta[a] + c) % nad[i].v;
@@ -323,6 +326,52 @@ cleanup:
   return ok;
 }
 
+bool add_neural_rule_atoms(clingo_backend_t *back, program_t *P, total_choice_t *theta) {
+  clingo_atom_t h;
+  clingo_literal_t B[64];
+  size_t c = P->CF_n + P->PF_n;
+  for (size_t i = 0; i < P->NR_n; ++i)
+    for (size_t j = 0; j < P->NR[i].n; ++j) {
+      /* Record body literals. */
+      for (size_t b = 0; b < P->NR[i].k; ++b) {
+        size_t u = j*P->NR[i].k+b;
+        if (!clingo_backend_add_atom(back, &P->NR[i].B[u], (clingo_atom_t*) &B[b]))
+          return false;
+        if (!P->NR[i].S[u]) B[b] = -B[b];
+      }
+      /* Select head from outcomes. */
+      for (size_t o = 0; o < P->NR[i].o; ++o) {
+        if (!CHOICE_IS_TRUE(theta, c++)) continue;
+        if (!clingo_backend_add_atom(back, &P->NR[i].H[j*P->NR[i].o+o], &h)) return false;
+        /* Add neural rule. */
+        if (!clingo_backend_rule(back, false, &h, 1, B, P->NR[i].k)) return false;
+      }
+    }
+  return true;
+}
+
+bool add_neural_ad_atoms(clingo_backend_t *back, program_t *P, total_choice_t *theta) {
+  clingo_atom_t h;
+  clingo_literal_t B[64];
+  size_t r = P->AD_n;
+  for (size_t i = 0; i < P->NA_n; ++i)
+    for (size_t j = 0; j < P->NA[i].n; ++j) {
+      for (size_t b = 0; b < P->NA[i].k; ++b) {
+        size_t u = j*P->NA[i].k+b;
+        if (!clingo_backend_add_atom(back, &P->NA[i].B[u], (clingo_atom_t*) &B[b]))
+          return false;
+        if (!P->NA[i].S[u]) B[b] = -B[b];
+      }
+      for (size_t o = 0; o < P->NA[i].o; ++o) {
+        if (!clingo_backend_add_atom(back, &P->NA[i].H[j*P->NA[i].v*P->NA[i].o +
+              o*P->NA[i].v + theta->theta_ad[r++]], &h))
+          return false;
+        if (!clingo_backend_rule(back, false, &h, 1, B, P->NA[i].k)) return false;
+      }
+    }
+  return true;
+}
+
 bool add_atoms_from_total_choice(clingo_control_t *C, program_t *P, total_choice_t *theta) {
   bool ok = false;
   clingo_backend_t *back;
@@ -345,24 +394,7 @@ bool add_atoms_from_total_choice(clingo_control_t *C, program_t *P, total_choice
     if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) goto cleanup;
   }
   /* Add the neural rules according to the total rule. */
-  {
-    clingo_atom_t h;
-    clingo_literal_t B[64];
-    size_t c = P->CF_n + P->PF_n;
-    for (size_t i = 0; i < P->NR_n; ++i)
-      for (size_t j = 0; j < P->NR[i].n; ++j)
-        for (size_t o = 0; o < P->NR[i].o; ++o) {
-          if (!CHOICE_IS_TRUE(theta, c++)) continue;
-          if (!clingo_backend_add_atom(back, &P->NR[i].H[j*P->NR[i].o+o], &h)) goto cleanup;
-          for (size_t b = 0; b < P->NR[i].k; ++b) {
-            size_t u = j*P->NR[i].k+b;
-            if (!clingo_backend_add_atom(back, &P->NR[i].B[u], (clingo_atom_t*) &B[b]))
-              goto cleanup;
-            if (!P->NR[i].S[u]) B[b] = -B[b];
-          }
-          if (!clingo_backend_rule(back, false, &h, 1, B, P->NR[i].k)) goto cleanup;
-        }
-  }
+  if (!add_neural_rule_atoms(back, P, theta)) goto cleanup;
   /* Add the annotated disjunction rules according to the total rule encoded by theta_ad. */
   for (size_t i = 0; i < P->AD_n; ++i) {
     clingo_atom_t a;
@@ -370,27 +402,7 @@ bool add_atoms_from_total_choice(clingo_control_t *C, program_t *P, total_choice
     if (!clingo_backend_rule(back, false, &a, 1, NULL, 0)) goto cleanup;
   }
   /* Add the neural annotated disjunction rules according to the total rule encoded by theta_ad. */
-  {
-    clingo_atom_t h;
-    clingo_literal_t B[64];
-    size_t r = P->AD_n;
-    for (size_t i = 0; i < P->NA_n; ++i) {
-      for (size_t j = 0; j < P->NA[i].n; ++j) {
-        for (size_t o = 0; o < P->NA[i].o; ++o) {
-          if (!clingo_backend_add_atom(back, &P->NA[i].H[j*P->NA[i].v*P->NA[i].o +
-                o*P->NA[i].v + theta->theta_ad[r++]], &h))
-            goto cleanup;
-          for (size_t b = 0; b < P->NA[i].k; ++b) {
-            size_t u = j*P->NA[i].k+b;
-            if (!clingo_backend_add_atom(back, &P->NA[i].B[u], (clingo_atom_t*) &B[b]))
-              goto cleanup;
-            if (!P->NA[i].S[u]) B[b] = -B[b];
-          }
-          if (!clingo_backend_rule(back, false, &h, 1, B, P->NA[i].k)) goto cleanup;
-        }
-      }
-    }
-  }
+  if (!add_neural_ad_atoms(back, P, theta)) goto cleanup;
   ok = true;
 cleanup:
   /* Cleanup backend. */

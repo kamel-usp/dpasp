@@ -163,17 +163,13 @@ class StableTransformer(lark.Transformer):
     if V is None:
       if O is None:
         g = (clingo.parse_term(f"{name}({t.arg})")._rep for t in T)
-        print(tuple(f"{name}({t.arg})" for t in T))
       else:
         g = (clingo.parse_term(f"{name}({t.arg}, {o})")._rep for t in T for o in O)
-        print(tuple(f"{name}({t.arg}, {o})" for t in T for o in O))
-    if O is None:
+    else:
       if O is None:
         g = (clingo.parse_term(f"{name}({t.arg}, {v})")._rep for t in T for v in V)
-        print(tuple(f"{name}({t.arg}, {v})" for t in T for v in V))
       else:
         g = (clingo.parse_term(f"{name}({t.arg}, {v}, {o})")._rep for t in T for o in O for v in V)
-        print(tuple(f"{name}({t.arg}, {v}, {o})" for t in T for o in O for v in V))
     return contiguous(tuple(g), dtype=numpy.uint64)
 
   @staticmethod
@@ -246,10 +242,12 @@ class StableTransformer(lark.Transformer):
   def interval(self, I): return self.pack("interval", f"{I[0][2]}..{I[1][2]}")
 
   # Predicates.
-  def pred(self, P):
+  def pred(self, P, replace_semicolons = False):
     name = P[0][1]
-    return self.pack("pred", f"{name}({', '.join(getnths(P[1:], 1))})", name, self.join_scope(P))
+    rep = f"{name}({', '.join(getnths(P[1:], 1))})"
+    return self.pack("pred", rep.replace(";", ",") if replace_semicolons else rep, name, self.join_scope(P))
   def grpred(self, P): return self.pred(P)
+  def query_grpred(self, P): return self.pred(P, replace_semicolons = True)
 
   # Literals.
   def lit(self, P):
@@ -444,7 +442,7 @@ class StableTransformer(lark.Transformer):
     if len(scope) != 1:  raise ValueError(f"Neural rule {name} is not grounded!")
     if inp not in scope: raise ValueError(f"Neural rule {name} is unsafe!")
 
-    rep = f"{A[0][1]}::{name}({inp}{'' if outcomes is None else f' | {A[offset-1][1]}'}) as {hub_repr} :- {', '.join(getnths(body, 1))}."
+    rep = f"{A[0][1]}::{name}({inp}{'' if outcomes is None else f'; {A[offset-1][1]}'}) as {hub_repr} :- {', '.join(getnths(body, 1))}."
     return self.pack("nrule", "", (name, inp, outcomes, net, body, rep, learnable, params))
 
   # Neural annotated disjunction.
@@ -470,16 +468,18 @@ class StableTransformer(lark.Transformer):
     if len(scope) != 1:  raise ValueError(f"Neural annotated disjunction {name} is not grounded!")
     if inp not in scope: raise ValueError(f"Neural annotated disjunction {name} is unsafe!")
 
-    rep = f"{A[0][1]}::{name}({inp}, {A[3][1]}{'' if outcomes is None else f' | {A[offset-1][1]}'}) as {hub_repr} :- {', '.join(getnths(body, 1))}."
+    rep = f"{A[0][1]}::{name}({inp}, {A[3][1]}{'' if outcomes is None else f'; {A[offset-1][1]}'}) as {hub_repr} :- {', '.join(getnths(body, 1))}."
     return self.pack("nad", "", (name, inp, vals, outcomes, net, body, rep, learnable, params))
 
   # Constraint.
   def constraint(self, C): return self.pack("constraint", f":- {C[0][1]}.")
 
   # Query elements.
-  def qelement(self, E): return self.pack("qelement", " ".join(getnths(E, 1)))
+  def qelement(self, E):
+    return self.pack("qelement", " ".join(getnths(E, 1)))
   # Interpretations.
-  def interp(self, I): return self.pack("interp", "", getnths(I, 1))
+  def interp(self, I):
+    return self.pack("interp", "", getnths(I, 1))
   # Queries.
   def query(self, Q):
     return self.pack("query", "", Query(Q[0][2], Q[1][2] if len(Q) > 1 else [], semantics = self.semantics))

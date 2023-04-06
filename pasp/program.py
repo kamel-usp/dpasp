@@ -127,7 +127,8 @@ class Neural:
     self.learnable = learnable
     self.rep = rep
     self.data = data
-    self.outcomes = 0 if outcomes is None else len(outcomes)
+    self.outcomes = 1 if outcomes is None else len(outcomes)
+    self.nvals = nvals
 
     # Update default opt_params with given params.
     _opt_params = {"lr": 0.01, "maximize": True}
@@ -138,11 +139,18 @@ class Neural:
     self.train = None if data[0].train is None else torch.cat(tuple(d.train for d in data), dim = 0)
     self.out = None
     # Derivatives of the logic program to be passed to backwards.
-    self.dw = torch.zeros((self.train.shape[0], nvals)) if learnable else None
+    self.dw = torch.zeros(self.out_shape()) if learnable else None
     self.net.train()
 
   def __str__(self): return self.rep
   def __repr__(self): return self.__str__()
+
+  def train(self): self.net.train()
+  def eval(self): self.net.eval()
+
+  def out_shape(self) -> tuple:
+    "The output tensor shape."
+    raise NotImplementedError("Neural components must override this method accordingly!")
 
   def pr(self):
     "Retrieves the probabilities of the neural rule from the test set."
@@ -183,6 +191,9 @@ class NeuralRule(Neural):
     assert p.ndim == 2, \
            "Networks embedded onto neural rules must output a single probability!"
 
+  def out_shape(self) -> tuple:
+    return (self.train.shape[0], self.outcomes)
+
 class NeuralAD(Neural):
   def __init__(self, heads: list, bodies: list, signs: list, name: str, vals: list, net, rep: str, \
                data: list, learnable: bool, params: dict, outcomes: list):
@@ -197,6 +208,9 @@ class NeuralAD(Neural):
     p = self.pr()
     assert p.ndim == 2, \
            "Networks embedded onto neural rules must output a 1D probability tensor!"
+
+  def out_shape(self):
+    return (self.train.shape[0]*self.outcomes, self.nvals)
 
 class Semantics(enum.IntEnum):
   STABLE = 0

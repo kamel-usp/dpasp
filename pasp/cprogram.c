@@ -678,13 +678,25 @@ bool from_python_neural_rule(PyObject *py_nr, neural_rule_t *nr) {
     goto cleanup;
   }
 
+  py_o = PyObject_GetAttrString(py_nr, "outcomes");
+  if (!py_o) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field outcomes of supposed NeuralRule object!");
+    goto cleanup;
+  }
+  o = PyLong_AsUnsignedLong(py_o);
+  if ((o == (size_t) -1) && !PyErr_Occurred()) {
+    PyErr_SetString(PyExc_TypeError, "field outcomes of NeuralRule must be an integer!");
+    goto cleanup;
+  }
+
   py_H = (PyArrayObject*) PyObject_GetAttrString(py_nr, "H");
   if (!py_H) {
     PyErr_SetString(PyExc_AttributeError, "could not access field H of supposed NeuralRule object!");
     goto cleanup;
   }
   H = (clingo_symbol_t*) PyArray_DATA(py_H);
-  n = PyArray_SIZE(py_H);
+  /* The number of groundings is the number of heads divided by the number of outcomes. */
+  n = PyArray_SIZE(py_H)/o;
 
   PyObject *_py_B = PyObject_GetAttrString(py_nr, "B");
   if (!_py_B) {
@@ -717,17 +729,6 @@ bool from_python_neural_rule(PyObject *py_nr, neural_rule_t *nr) {
     }
     dw = (float*) PyArray_DATA(py_dw);
   } else dw = NULL;
-
-  py_o = PyObject_GetAttrString(py_o, "outcomes");
-  if (!py_o) {
-    PyErr_SetString(PyExc_AttributeError, "could not access field outcomes of supposed NeuralRule object!");
-    goto cleanup;
-  }
-  o = PyLong_AsUnsignedLong(py_o);
-  if ((o == (size_t) -1) && !PyErr_Occurred()) {
-    PyErr_SetString(PyExc_TypeError, "field outcomes of NeuralRule must be an integer!");
-    goto cleanup;
-  }
 
   nr->n = n; nr->k = k;
   nr->P = NULL;
@@ -776,13 +777,25 @@ bool from_python_neural_ad(PyObject *py_nad, neural_annot_disj_t *nad) {
   v = PySequence_Fast_GET_SIZE(py_V_L);
   Py_DECREF(py_V_L);
 
+  py_o = PyObject_GetAttrString(py_nad, "outcomes");
+  if (!py_o) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field outcomes of supposed NeuralRule object!");
+    goto cleanup;
+  }
+  o = PyLong_AsUnsignedLong(py_o);
+  if ((o == (size_t) -1) && !PyErr_Occurred()) {
+    PyErr_SetString(PyExc_TypeError, "field outcomes of NeuralRule must be an integer!");
+    goto cleanup;
+  }
+
   py_H = (PyArrayObject*) PyObject_GetAttrString(py_nad, "H");
   if (!py_H) {
     PyErr_SetString(PyExc_AttributeError, "could not access field H of supposed NeuralRule object!");
     goto cleanup;
   }
   H = (clingo_symbol_t*) PyArray_DATA(py_H);
-  n = PyArray_SIZE(py_H)/v;
+  /* The number of groundings is the number of heads divided by the outcomes and values. */
+  n = PyArray_SIZE(py_H)/(v*o);
 
   PyObject *_py_B = PyObject_GetAttrString(py_nad, "B");
   if (!_py_B) {
@@ -815,16 +828,6 @@ bool from_python_neural_ad(PyObject *py_nad, neural_annot_disj_t *nad) {
     }
     dw = (float*) PyArray_DATA(py_dw);
   } else dw = NULL;
-  py_o = PyObject_GetAttrString(py_o, "outcomes");
-  if (!py_o) {
-    PyErr_SetString(PyExc_AttributeError, "could not access field outcomes of supposed NeuralRule object!");
-    goto cleanup;
-  }
-  o = PyLong_AsUnsignedLong(py_o);
-  if ((o == (size_t) -1) && !PyErr_Occurred()) {
-    PyErr_SetString(PyExc_TypeError, "field outcomes of NeuralRule must be an integer!");
-    goto cleanup;
-  }
 
   nad->n = n; nad->k = k; nad->v = v;
   nad->P = NULL;

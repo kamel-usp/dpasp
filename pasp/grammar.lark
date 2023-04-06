@@ -75,6 +75,7 @@ interval: (ID | WORD) ".." (ID | WORD)
 _ground: (_atom | grpred)
 _nground: (_atom | pred)
 grpred: WORD "(" (_ground | ID | interval) ("," (_ground | ID | interval))* ")"
+query_grpred: WORD "(" (_ground | ID | interval) ((";" | ",") (_ground | ID | interval))* ")"
 pred: WORD "(" (_nground | ID | interval | VAR) ("," (_nground | ID | interval | VAR))* ")"
 // Literal.
 lit: NEG* _nground
@@ -128,9 +129,9 @@ _param: WORD "=" (REAL | BOOL | NULL)
 // Sequence of parameters.
 params: _param ("," _param)*
 // Neural fact.
-nrule: (LEARN | CONST) "::" WORD "(" VAR ("|" set)? ")" "as" hub ("with" params)? ":-" lit ("," lit)* "."
+nrule: (LEARN | CONST) "::" WORD "(" VAR (";" set)? ")" "as" hub ("with" params)? ":-" lit ("," lit)* "."
 // Neural annotated disjunction.
-nad: (LEARN | CONST) "::" WORD "(" VAR "," set ("|" set)? ")" "as" hub ("with" params)? ":-" lit ("," lit)* "."
+nad: (LEARN | CONST) "::" WORD "(" VAR "," set (";" set)? ")" "as" hub ("with" params)? ":-" lit ("," lit)* "."
 _neural: nrule | nad
 
 // Constraint.
@@ -140,7 +141,7 @@ constraint: ":-" body "."
 bop: ((ID | VAR | bop) OP (ID | VAR | bop)) | (VAR EQQ interval)
 
 // Query.
-qelement: (NEG | UND)? (WORD | grpred)
+qelement: (NEG | UND)? (WORD | query_grpred)
 interp: qelement ("," qelement)*
 query: "#query(" interp ("|" interp)? ")" "."?
 

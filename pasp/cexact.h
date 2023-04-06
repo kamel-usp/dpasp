@@ -36,7 +36,7 @@ typedef struct {
   /* Probabilities for each learnable PR. */
   double (*R)[2];
   /* Probabilities for each learnable (grounded) NR. */
-  double (*NR)[2];
+  double **NR;
   /* Probabilities for each learnable (grounded) NA. */
   double **NA;
   /* Number of models consistent with observation. */
