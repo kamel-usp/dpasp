@@ -41,7 +41,7 @@ static PyObject* exact(PyObject *self, PyObject *args, PyObject *kwargs) {
   }
 
   lstable_sat = lstable_sat && (p.sem == LSTABLE_SEMANTICS);
-  if (!exact_enum(&p, &R, lstable_sat, psem, quiet)) goto badval;
+  if (!exact_enum(&p, &R, lstable_sat, psem, quiet)) goto cleanup;
 
   /* Return result as a numpy array. */
   bool has_neural = p.NR_n + p.NA_n > 0;
@@ -62,8 +62,6 @@ static PyObject* exact(PyObject *self, PyObject *args, PyObject *kwargs) {
 
   r = true;
   goto cleanup;
-badval:
-  PyErr_SetString(PyExc_Exception, "clingo or unknown error!");
 cleanup:
   free_program_contents(&p);
   return r ? py_R : NULL;

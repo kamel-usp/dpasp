@@ -185,6 +185,51 @@ bool learn_neurasp(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
   return learn(P, obs, obs_counts, atoms, niters, eta, lstable_sat, ALG_NEURASP);
 }
 
+void compute_fixpoint_batch(program_t *P, prob_storage_t *Q, observations_t *O, double eta) {
+  /* Reset probabilistic facts. */
+  for (size_t i_pf = 0; i_pf < Q->n; ++i_pf) P->PF[Q->I_F[i_pf]].p = 0;
+  /* Reset annotated disjunctions. */
+  for (size_t i_ad = 0; i_ad < Q->m; ++i_ad) {
+    annot_disj_t *AD = &P->AD[Q->I_A[i_ad]];
+    for (size_t j = 0; j < AD->n; ++j) AD->P[j] = 0;
+  }
+  /* Reset probabilistic rules. */
+  for (size_t i_pr = 0; i_pr < Q->pr; ++i_pr) P->PR[Q->I_PR[i_pr]].p = 0;
+
+  /* Update parameters. */
+  for (size_t i_o = 0; i_o < O->n; ++i_o) {
+    prob_obs_storage_t *W = &Q->P[i_o];
+    /* Update probabilistic facts. */
+    for (size_t i_pf = 0; i_pf < Q->n; ++i_pf) {
+      /* P(t = i, O) = W->F[i_pf][1] */
+      /* P(O)        = W->o          */
+      P->PF[Q->I_F[i_pf]].p += W->F[i_pf][1]/W->o;
+    }
+    /* Update annotated disjunctions. */
+    for (size_t i_ad = 0; i_ad < Q->m; ++i_ad) {
+      /* P(t = i, O) = W->A[i_ad][j] */
+      /* P(O)        = W->o          */
+      annot_disj_t *AD = &P->AD[Q->I_A[i_ad]];
+      for (size_t j = 0; j < AD->n; ++j)
+        AD->P[j] += W->A[i_ad][j]/W->o;
+    }
+    /* Update probabilistic rules. */
+    for (size_t i_pr = 0; i_pr < Q->pr; ++i_pr)
+      P->PR[Q->I_PR[i_pr]].p += W->R[i_pr][1]/W->o;
+  }
+
+  /* Divide probabilistic facts by the number of observations N. */
+  for (size_t i_pf = 0; i_pf < Q->n; ++i_pf) P->PF[Q->I_F[i_pf]].p /= O->n;
+  /* Divide annotated disjunctions by the number of observations N. */
+  for (size_t i_ad = 0; i_ad < Q->m; ++i_ad) {
+    annot_disj_t *AD = &P->AD[Q->I_A[i_ad]];
+    for (size_t j = 0; j < AD->n; ++j)
+      AD->P[j] /= O->n;
+  }
+  /* Divide probabilistic rules by the number of observations N and number of grounded rules. */
+  for (size_t i_pr = 0; i_pr < Q->pr; ++i_pr) P->PR[Q->I_PR[i_pr]].p /= O->n*Q->I_GR[i_pr].n;
+}
+
 void compute_lagrange_batch(program_t *P, prob_storage_t *Q, observations_t *O, double eta) {
   /* Update parameters. */
   for (size_t i_o = 0; i_o < O->n; ++i_o) {

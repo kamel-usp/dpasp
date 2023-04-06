@@ -139,7 +139,7 @@ static PyObject* learn_batch(PyObject *self, PyObject *args, PyObject *kwargs) {
   lstable_sat = lstable_sat && (P.sem == LSTABLE_SEMANTICS);
   switch(alg) {
     case ALG_FIXPOINT:
-      /*if (!learn_fixpoint_batch(&P, obs, niters, batch, lstable_sat)) goto cleanup;*/
+      if (!learn_fixpoint_batch(&P, obs, niters, batch, lstable_sat)) goto cleanup;
       break;
     case ALG_LAGRANGE:
       if (!learn_lagrange_batch(&P, obs, niters, eta, batch, lstable_sat)) goto cleanup;
