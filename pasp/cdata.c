@@ -1,5 +1,7 @@
 #include "cdata.h"
 
+#include "cutils.h"
+
 #define MAX_ATOM_SIZE 256
 #define POS_RULE ":- not %s."
 #define NEG_RULE ":- not not %s."
@@ -68,8 +70,7 @@ bool init_observations(observations_t *O, PyArrayObject *obs, PyArrayObject *ato
   return true;
 clingo_err:
   PyErr_SetString(PyExc_ValueError, "atoms given as observations are not in clingo syntax!");
-  if (clingo_error_code() != clingo_error_success)
-    wprintf(L"Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
+  if (clingo_error_code() != clingo_error_success) raise_clingo_error(NULL);
 cleanup:
   free(A);
   free(S);
@@ -96,19 +97,20 @@ bool init_dense_observations(observations_t *O, PyArrayObject *obs, size_t batch
   uint8_t **S = NULL;
 
   V = (clingo_symbol_t**) malloc(batch*sizeof(clingo_symbol_t*));
-  if (!V) goto cleanup;
+  if (!V) goto nomem;
   S = (uint8_t**) malloc(batch*sizeof(uint8_t*));
-  if (!S) goto cleanup;
+  if (!S) goto nomem;
   for (size_t i = 0; i < batch; ++i) {
     V[i] = (clingo_symbol_t*) calloc(m, sizeof(clingo_symbol_t));
     if (!V[i]) {
       for (size_t j = 0; j < i; ++j) { free(V[j]); free(S[j]); }
-      goto cleanup;
+      goto nomem;
     }
     S[i] = (uint8_t*) malloc(m*sizeof(uint8_t));
     if (!S[i]) {
       for (size_t j = 0; j < i; ++j) { free(V[j]); free(S[j]); }
-      goto cleanup;
+      free(V[i]);
+      goto nomem;
     }
   }
   char a[MAX_ATOM_SIZE] = {0};
@@ -128,12 +130,15 @@ bool init_dense_observations(observations_t *O, PyArrayObject *obs, size_t batch
   O->dense = true;
 
   return true;
+nomem:
+  free(V); free(S);
+  O->V = NULL; O->S = NULL;
+  O->batch = 0;
+  goto error;
 clingo_err:
   PyErr_SetString(PyExc_ValueError, "atoms given as observations are not in clingo syntax!");
-  if (clingo_error_code() != clingo_error_success)
-    wprintf(L"Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
-cleanup:
-  free(V); free(S);
+  if (clingo_error_code() != clingo_error_success) raise_clingo_error(NULL);
+error:
   return false;
 }
 
@@ -168,8 +173,7 @@ bool next_dense_observations(observations_t *O, PyArrayObject *obs) {
   return true;
 clingo_err:
   PyErr_SetString(PyExc_ValueError, "atoms given as observations are not in clingo syntax!");
-  if (clingo_error_code() != clingo_error_success)
-    wprintf(L"Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
+  if (clingo_error_code() != clingo_error_success) raise_clingo_error(NULL);
   return false;
 }
 

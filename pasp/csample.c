@@ -1,6 +1,7 @@
 #include "csample.h"
 
 #include "cinf.h"
+#include "cutils.h"
 
 typedef struct {
   /* Total choice. */
@@ -211,8 +212,7 @@ bool naive_sample(program_t *P, size_t n, PyArrayObject *atoms, bool lstable_sat
 
   ok = true;
 cleanup:
-  if (clingo_error_code() != clingo_error_success)
-    wprintf(L"Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
+  if (clingo_error_code() != clingo_error_success) raise_clingo_error(NULL);
   thpool_destroy(pool);
   for (size_t i = 0; i < num_procs; ++i) free_total_choice_contents(&S[i].theta);
   free(S[0].A);

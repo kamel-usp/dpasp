@@ -18,4 +18,6 @@ bool print_solution(const clingo_model_t *model);
 void print_bin(unsigned long long int x, size_t n);
 void undef_atom_ignore(clingo_warning_t code, const char *msg, void *data);
 
+void raise_clingo_error(const char *msg);
+
 #endif

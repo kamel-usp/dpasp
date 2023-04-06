@@ -1,3 +1,6 @@
+#define PY_SSIZE_T_CLEAN
+#include <Python.h>
+
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -157,4 +160,13 @@ void undef_atom_ignore(clingo_warning_t code, const char *msg, void *data) {
   if (code == clingo_warning_atom_undefined) return;
   printf("clingo | error code %d: %s\n", code, msg);
   (void) data;
+}
+
+void raise_clingo_error(const char *msg) {
+  char buffer[512];
+  if (msg) {
+    sprintf(buffer, "Clingo error %d: %s\n  Note: %s\n", clingo_error_code(),
+        clingo_error_message(), msg);
+  } else sprintf(buffer, "Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
+  PyErr_SetString(PyExc_Exception, buffer);
 }

@@ -226,11 +226,7 @@ bool ground_all(program_t *P, prob_storage_t *Q) {
 
   ok = true;
 error:
-  if (clingo_error_code() != clingo_error_success) {
-    char err_buff[200];
-    sprintf(err_buff, "Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
-    PyErr_SetString(PyExc_Exception, err_buff);
-  }
+  if (clingo_error_code() != clingo_error_success) raise_clingo_error(NULL);
   if (C) clingo_control_free(C);
   return ok;
 }
@@ -286,11 +282,7 @@ bool ground_per_total_choice(program_t *P, total_choice_t *theta, array_prob_fac
 
   ok = true;
 error:
-  if (clingo_error_code() != clingo_error_success) {
-    char err_buff[200];
-    sprintf(err_buff, "Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
-    PyErr_SetString(PyExc_Exception, err_buff);
-  }
+  if (clingo_error_code() != clingo_error_success) raise_clingo_error(NULL);
   if (C) clingo_control_free(C);
   return ok;
 }
@@ -324,11 +316,7 @@ bool ground(program_t *P) {
 
   ok = true;
 error:
-  if (clingo_error_code() != clingo_error_success) {
-    char err_buff[200];
-    sprintf(err_buff, "Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
-    PyErr_SetString(PyExc_Exception, err_buff);
-  }
+  if (clingo_error_code() != clingo_error_success) raise_clingo_error(NULL);
   array_char_free_contents(&gr_P);
   if (C) clingo_control_free(C);
   return ok;
