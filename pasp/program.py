@@ -131,7 +131,7 @@ class Neural:
     self.nvals = nvals
 
     # Update default opt_params with given params.
-    _opt_params = {"lr": 0.01, "maximize": True}
+    _opt_params = {"lr": 1., "maximize": True}
     _opt_params.update(opt_params)
     self.opt = torch.optim.SGD(net.parameters(), **_opt_params)
 
@@ -140,13 +140,12 @@ class Neural:
     self.out = None
     # Derivatives of the logic program to be passed to backwards.
     self.dw = torch.zeros(self.out_shape()) if learnable else None
-    self.net.train()
 
   def __str__(self): return self.rep
   def __repr__(self): return self.__str__()
 
-  def train(self): self.net.train()
-  def eval(self): self.net.eval()
+  def set_train(self): self.net.train()
+  def set_eval(self): self.net.eval()
 
   def out_shape(self) -> tuple:
     "The output tensor shape."
@@ -163,13 +162,13 @@ class Neural:
       self.out = self.net(self.train[start:end])
       return self.out.data.cpu().numpy()
     with torch.inference_mode():
-      return self.net(self.train[start:end]).cpu().numpy()
+      return self.net(self.train[start:end]).data.cpu().numpy()
 
-  def backward(self, start: int = 0, end: int = None):
+  def backward(self):
     """ Performs backpropagation and runs the optimizer step.
     Argument `dl` is the derivative of the program as a `numpy.ndarray`.
     """
-    self.out.backward(self.dw[start:start+len(self.out)])
+    self.out.backward(self.dw[:len(self.out)])
     self.opt.step()
     self.opt.zero_grad()
 
@@ -320,6 +319,20 @@ class Program:
 
     self.semantics = semantics
     self.stable = stable_p
+
+    self.directives = directives
+
+  def train(self):
+    for N in self.NR:
+      if N.learnable: N.set_train()
+    for N in self.NA:
+      if N.learnable: N.set_train()
+
+  def eval(self):
+    for N in self.NR:
+      if N.learnable: N.set_eval()
+    for N in self.NA:
+      if N.learnable: N.set_eval()
 
   @staticmethod
   def str_if_contains(s: str, L):
