@@ -167,13 +167,13 @@ void free_annot_disj(annot_disj_t *ad);
 
 bool update_pr_neural_rule(neural_rule_t *nr);
 bool update_forward_neural_rule(neural_rule_t *nr, size_t start, size_t end);
-bool backward_neural_rule(neural_rule_t *nr, size_t start, size_t end);
+bool backward_neural_rule(neural_rule_t *nr);
 void free_neural_rule_contents(neural_rule_t *nr);
 void free_neural_rule(neural_rule_t *nr);
 
 bool update_pr_neural_annot_disj(neural_annot_disj_t *na);
 bool update_forward_neural_annot_disj(neural_annot_disj_t *na, size_t start, size_t end);
-bool backward_neural_annot_disj(neural_annot_disj_t *na, size_t start, size_t end);
+bool backward_neural_annot_disj(neural_annot_disj_t *na);
 void free_neural_annot_disj_contents(neural_annot_disj_t *na);
 void free_neural_annot_disj_rule(neural_annot_disj_t *na);
 

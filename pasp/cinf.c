@@ -21,17 +21,16 @@ double prob_total_choice_neural(program_t *P, total_choice_t *theta, size_t offs
   size_t m = train*P->m_train + (!train)*P->m_test;
   for (size_t i = 0; i < P->NR_n; ++i) {
     float *prob = P->NR[i].P + offset*P->NR[i].o;
-    for (size_t j = 0; j < P->NR[i].n; ++j) {
+    for (size_t j = 0; j < P->NR[i].n; ++j)
       for (size_t o = 0; o < P->NR[i].o; ++o) {
         bool t = bitvec_GET(&theta->pf, r++);
-        double q = prob[j*m+o];
+        double q = prob[j*P->NR[i].o*m+o];
         p *= t*q + (!t)*(1.0-q);
       }
-    }
   }
   r = P->AD_n;
   for (size_t i = 0; i < P->NA_n; ++i) {
-    float *prob = P->NA[i].P + offset*P->NA[i].v*P->NR[i].o;
+    float *prob = P->NA[i].P + offset*P->NA[i].v*P->NA[i].o;
     for (size_t j = 0; j < P->NA[i].n; ++j)
       for (size_t o = 0; o < P->NA[i].o; ++o)
         p *= prob[j*m*P->NA[i].v*P->NA[i].o + o*P->NA[i].v + theta->theta_ad[r++]];

@@ -702,7 +702,8 @@ bool init_learnable_neural_storage(neural_rule_t *NR, neural_annot_disj_t *NA, p
     R = (double**) malloc(n_lnr*sizeof(double*));
     if (!R) goto fail;
     for (size_t i = 0; i < n_lnr; ++i) {
-      R[i] = (double*) calloc(2*NR[U->I_NR[i]].o, sizeof(double));
+      /* R[i] = [P(not f(x; 0)), P(f(x; 0)), P(not f(x; 1)), P(f(x; 1)), P(not f(y; 0)), ...] */
+      R[i] = (double*) calloc(2*NR[U->I_NR[i]].n*NR[U->I_NR[i]].o, sizeof(double));
       if (!R[i]) {
         for (size_t j = 0; j < i; ++j) free(R[j]);
         goto fail;
@@ -713,7 +714,8 @@ bool init_learnable_neural_storage(neural_rule_t *NR, neural_annot_disj_t *NA, p
     A = (double**) malloc(n_lna*sizeof(double*));
     if (!A) goto fail;
     for (size_t i = 0; i < n_lna; ++i) {
-      A[i] = (double*) calloc(NA[I_NA[i]].v*NA[I_NA[i]].o, sizeof(double));
+      /* A[i] = [P(f(x, 0; 0)), P(f(x, 1; 0)), P(f(x, 0; 1)), P(f(x, 1; 1)), P(f(y, 0; 0)), ...] */
+      A[i] = (double*) calloc(NA[I_NA[i]].v*NA[I_NA[i]].n*NA[I_NA[i]].o, sizeof(double));
       if (!A[i]) {
         for (size_t j = 0; j < i; ++j) free(A[j]);
         goto fail;
@@ -1033,19 +1035,36 @@ solve_cleanup:
       }
       for (size_t j = 0; j < prob->nr; ++j) {
         neural_rule_t *R = &P->NR[prob->I_NR[j]];
-        float *q = R->P + i*R->n;
-        for (size_t g = 0; g < R->n; ++g) {
-          bool u = bitvec_GET(&theta->pf, prob->O_NR[g]);
-          pr->NR[j][u] += p_o/(u*q[g] + (!u)*(1-q[g]));
-        }
+        float *q = R->P + i*R->o;
+        for (size_t g = 0; g < R->n; ++g)
+          for (size_t o = 0; o < R->o; ++o) {
+            bool u = bitvec_GET(&theta->pf, prob->O_NR[j] + g*R->o + o);
+            double q_p = q[g*R->o*P->m_train + o];
+            /* Values first, outcomes second, groundings third. Example:
+             *
+             * | 0.5  0.8 | -> outcome 1, grounding 1
+             * | 0.2  0.1 | -> outcome 2, grounding 1
+             * | 0.3  0.4 | -> outcome 1, grounding 2
+             * | 0.5  0.7 | -> outcome 2, grounding 2
+             */
+            pr->NR[j][g*2*R->o + o*2 + u] += p_o/(u*q_p + (!u)*(1-q_p));
+          }
       }
       for (size_t j = 0; j < prob->na; ++j) {
         neural_annot_disj_t *A = &P->NA[prob->I_NA[j]];
-        float *q = A->P + i*A->n*A->v;
-        for (size_t g = 0; g < A->n; ++g) {
-          uint8_t u = theta->theta_ad[prob->O_NA[j]];
-          pr->NA[j][u] += p_o/q[g*A->v+u];
-        }
+        float *q = A->P + i*A->v*A->o;
+        for (size_t g = 0; g < A->n; ++g)
+          for (size_t o = 0; o < A->o; ++o) {
+            uint8_t u = theta->theta_ad[prob->O_NA[j] + g*A->o + o];
+            /* Values first, outcomes second, groundings third. Example:
+             *
+             * | 0.6  0.3  0.5 | -> outcome 1, grounding 1
+             * | 0.2  0.1  0.0 | -> outcome 2, grounding 1
+             * | 0.1  0.5  0.3 | -> outcome 1, grounding 2
+             * | 0.5  0.7  0.3 | -> outcome 2, grounding 2
+             */
+            pr->NA[j][g*A->v*A->o + o*A->v + u] += p_o/q[o*A->v + u];
+          }
       }
     } else {
       for (size_t j = 0; j < prob->n; ++j)
@@ -1118,10 +1137,16 @@ bool prob_obs_reuse(program_t *P, observations_t *obs, bool lstable_sat, prob_st
     for (size_t j = 0; j < obs->n; ++j) {
       prob_obs_storage_t *pr = &Q[i].P[j];
       memset(pr->F, 0, Q[0].n*sizeof(double[2]));
-      for (size_t j = 0; j < Q[0].m; ++j) memset(pr->A[j], 0, STORAGE_AD_DIM(P, &Q[0], j)*sizeof(double));
+      for (size_t l = 0; l < Q[0].m; ++l) memset(pr->A[l], 0, STORAGE_AD_DIM(P, &Q[0], l)*sizeof(double));
       memset(pr->R, 0, Q[0].pr*sizeof(double[2]));
-      memset(pr->NR, 0, Q[0].nr*sizeof(double[2]));
-      for (size_t j = 0; j < Q[0].na; ++j) memset(pr->NA[j], 0, P->NA[Q[0].I_NA[j]].v*sizeof(double));
+      for (size_t l = 0; l < Q[0].nr; ++l) {
+        neural_rule_t *nr = &P->NR[Q[0].I_NR[l]];
+        memset(pr->NR[l], 0, 2*nr->n*nr->o*sizeof(double));
+      }
+      for (size_t l = 0; l < Q[0].na; ++l) {
+        neural_annot_disj_t *na = &P->NA[Q[0].I_NA[l]];
+        memset(pr->NA[l], 0, na->v*na->n*na->o*sizeof(double));
+      }
       pr->o = 0.0;
     }
   }
@@ -1156,13 +1181,22 @@ bool prob_obs_reuse(program_t *P, observations_t *obs, bool lstable_sat, prob_st
         qr->R[j][1] += pr->R[j][1];
       }
       for (size_t j = 0; j < Q[0].nr; ++j) {
-        qr->NR[j][0] += pr->NR[j][0];
-        qr->NR[j][1] += pr->NR[j][1];
+        neural_rule_t *R = &P->NR[Q[0].I_NR[j]];
+        for (size_t g = 0; g < R->n; ++g)
+          for (size_t o = 0; o < R->o; ++o) {
+            size_t u = g*2*R->o + o*2;
+            qr->NR[j][u] += pr->NR[j][u];
+            qr->NR[j][u+1] += pr->NR[j][u+1];
+          }
       }
       for (size_t j = 0; j < Q[0].na; ++j) {
-        size_t k = P->NA[Q[0].I_NA[j]].v;
-        for (size_t c = 0; c < k; ++c)
-          qr->NA[j][c] += pr->NA[j][c];
+        neural_annot_disj_t *A = &P->NA[Q[0].I_NA[j]];
+        for (size_t g = 0; g < A->n; ++g)
+          for (size_t o = 0; o < A->o; ++o)
+            for (size_t v = 0; v < A->v; ++v) {
+              size_t u = g*A->v*A->o + o*A->v + v;
+              qr->NA[j][u] += pr->NA[j][u];
+            }
       }
       qr->o += pr->o;
     }

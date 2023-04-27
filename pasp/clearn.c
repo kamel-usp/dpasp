@@ -18,11 +18,11 @@ static inline bool forward_neural(program_t *P, observations_t *O) {
   return true;
 }
 
-static inline bool backward_neural(program_t *P, prob_storage_t *Q, observations_t *O) {
+static inline bool backward_neural(program_t *P, prob_storage_t *Q) {
   for (size_t i_nr = 0; i_nr < Q->nr; ++i_nr)
-    if (!backward_neural_rule(&P->NR[Q->I_NR[i_nr]], 0, O->n)) return false;
+    if (!backward_neural_rule(&P->NR[Q->I_NR[i_nr]])) return false;
   for (size_t i_na = 0; i_na < Q->na; ++i_na)
-    if (!backward_neural_annot_disj(&P->NA[Q->I_NA[i_na]], 0, O->n)) return false;
+    if (!backward_neural_annot_disj(&P->NA[Q->I_NA[i_na]])) return false;
   return true;
 }
 
@@ -99,6 +99,27 @@ void compute_lagrange(program_t *P, prob_storage_t *Q, size_t N, double eta,
       for (size_t j = 0; j < AD->n; ++j) dP += W->A[i_ad][j];
       for (size_t j = 0; j < AD->n; ++j) AD->P[j] += eta*c*((W->A[i_ad][j] - dP/AD->n)/W->o);
     }
+    /* Accumulate neural rule derivatives. */
+    for (size_t i_nr = 0; i_nr < Q->nr; ++i_nr) {
+      neural_rule_t *R = &P->NR[i_nr];
+      for (size_t g = 0; g < R->n; ++g)
+        for (size_t o = 0; o < R->o; ++o) {
+          size_t u = g*2*R->o + o*2;
+          P->NR[Q->I_NR[i_nr]].dw[i_o*R->o + g*R->o*P->m_train + o] = eta*c*((W->NR[i_nr][u+1] - W->NR[i_nr][u])*0.5)/W->o;
+        }
+    }
+    /* Accumulate neural annotated disjunction derivatives. */
+    for (size_t i_na = 0; i_na < Q->na; ++i_na) {
+      neural_annot_disj_t *A = &P->NA[Q->I_NA[i_na]];
+      for (size_t g = 0; g < A->n; ++g)
+        for (size_t o = 0; o < A->o; ++o) {
+          double *derivs = W->NA[i_na] + g*A->v*A->o + o*A->v;
+          size_t offset = i_o*A->o*A->v + g*A->o*A->v*P->m_train + o*A->v;
+          double dP = 0.0;
+          for (size_t j = 0; j < A->v; ++j) dP += derivs[j];
+          for (size_t j = 0; j < A->v; ++j) A->dw[offset + j] = eta*c*(derivs[j] - dP/A->v)/W->o;
+        }
+    }
   }
 }
 
@@ -131,6 +152,7 @@ bool learn(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
   void (*alg[3])(program_t*, prob_storage_t*, size_t, double, PyArrayObject*, observations_t*) = {
     compute_fixpoint, compute_lagrange, compute_neurasp
   };
+  bool derive = which != ALG_FIXPOINT;
 
   if (!init_observations(&O, obs, atoms)) goto cleanup;
   if (!(num_procs = init_prob_storage_seq(Q, P, &O))) goto cleanup;
@@ -147,7 +169,7 @@ bool learn(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
     if (!forward_neural(P, &O)) goto cleanup;
 
     /* Compute probabilities. */
-    if (!prob_obs_reuse(P, &O, lstable_sat, NULL, Q, false)) goto cleanup;
+    if (!prob_obs_reuse(P, &O, lstable_sat, NULL, Q, derive)) goto cleanup;
 
     alg[which](P, &Q[0], N, eta, obs_counts, &O);
 
@@ -249,14 +271,25 @@ void compute_lagrange_batch(program_t *P, prob_storage_t *Q, observations_t *O, 
     for (size_t i_pr = 0; i_pr < Q->pr; ++i_pr)
       P->PR[Q->I_PR[i_pr]].p += eta*(((W->R[i_pr][1] - W->R[i_pr][0])*0.5)/W->o);
     /* Accumulate neural rule derivatives. */
-    for (size_t i_nr = 0; i_nr < Q->nr; ++i_nr)
-      P->NR[Q->I_NR[i_nr]].dw[i_o] = eta*((W->NR[i_nr][1] - W->NR[i_nr][0])*0.5)/W->o;
+    for (size_t i_nr = 0; i_nr < Q->nr; ++i_nr) {
+      neural_rule_t *R = &P->NR[i_nr];
+      for (size_t g = 0; g < R->n; ++g)
+        for (size_t o = 0; o < R->o; ++o) {
+          size_t u = g*2*R->o + o*2;
+          P->NR[Q->I_NR[i_nr]].dw[i_o*R->o + g*R->o*P->m_train + o] = eta*((W->NR[i_nr][u+1] - W->NR[i_nr][u])*0.5)/W->o;
+        }
+    }
     /* Accumulate neural annotated disjunction derivatives. */
     for (size_t i_na = 0; i_na < Q->na; ++i_na) {
       neural_annot_disj_t *A = &P->NA[Q->I_NA[i_na]];
-      float dP = 0.0;
-      for (size_t j = 0; j < A->v; ++j) dP += W->NA[i_na][j];
-      for (size_t j = 0; j < A->v; ++j) A->dw[i_o*A->v + j] = eta*(W->NA[i_na][j] - dP/A->v)/W->o;
+      for (size_t g = 0; g < A->n; ++g)
+        for (size_t o = 0; o < A->o; ++o) {
+          double *derivs = W->NA[i_na] + g*A->v*A->o + o*A->v;
+          size_t offset = i_o*A->o*A->v + g*A->o*A->v*P->m_train + o*A->v;
+          double dP = 0.0;
+          for (size_t j = 0; j < A->v; ++j) dP += derivs[j];
+          for (size_t j = 0; j < A->v; ++j) A->dw[offset + j] = eta*(derivs[j] - dP/A->v)/W->o;
+        }
     }
   }
 }
@@ -280,14 +313,25 @@ void compute_neurasp_batch(program_t *P, prob_storage_t *Q, observations_t *O, d
     for (size_t i_pr = 0; i_pr < Q->pr; ++i_pr)
       P->PR[Q->I_PR[i_pr]].p += eta*((W->R[i_pr][1] - W->R[i_pr][0])/W->o);
     /* Accumulate neural rule derivatives. */
-    for (size_t i_nr = 0; i_nr < Q->nr; ++i_nr)
-      P->NR[Q->I_NR[i_nr]].dw[i_o] = eta*(W->NR[i_nr][1] - W->NR[i_nr][0])/W->o;
+    for (size_t i_nr = 0; i_nr < Q->nr; ++i_nr) {
+      neural_rule_t *R = &P->NR[i_nr];
+      for (size_t g = 0; g < R->n; ++g)
+        for (size_t o = 0; o < R->o; ++o) {
+          size_t u = g*2*R->o + o*2;
+          P->NR[Q->I_NR[i_nr]].dw[i_o*R->o + g*R->o*P->m_train + o] = eta*(W->NR[i_nr][u+1] - W->NR[i_nr][u])/W->o;
+        }
+    }
     /* Accumulate neural annotated disjunction derivatives. */
     for (size_t i_na = 0; i_na < Q->na; ++i_na) {
       neural_annot_disj_t *A = &P->NA[Q->I_NA[i_na]];
-      float dP = 0.0;
-      for (size_t j = 0; j < A->v; ++j) dP += W->NA[i_na][j];
-      for (size_t j = 0; j < A->v; ++j) A->dw[i_o*A->v + j] = eta*(2*W->NA[i_na][j] - dP)/W->o;
+      for (size_t g = 0; g < A->n; ++g)
+        for (size_t o = 0; o < A->o; ++o) {
+          double *derivs = W->NA[i_na] + g*A->v*A->o + o*A->v;
+          size_t offset = i_o*A->o*A->v + g*A->o*A->v*P->m_train + o*A->v;
+          double dP = 0.0;
+          for (size_t j = 0; j < A->v; ++j) dP += derivs[j];
+          for (size_t j = 0; j < A->v; ++j) A->dw[offset + j] = eta*(2*derivs[j] - dP/A->v)/W->o;
+        }
     }
   }
 }
@@ -301,6 +345,7 @@ bool learn_batch(program_t *P, PyArrayObject *obs, size_t niters, double eta,
   void (*alg[3])(program_t*, prob_storage_t*, observations_t*, double eta) = {
     0, compute_lagrange_batch, compute_neurasp_batch
   };
+  bool derive = which != ALG_FIXPOINT;
 
   if (!init_dense_observations(&O, obs, batch)) goto cleanup;
   if (!(num_procs = init_prob_storage_seq(Q, P, &O))) goto cleanup;
@@ -311,7 +356,7 @@ bool learn_batch(program_t *P, PyArrayObject *obs, size_t niters, double eta,
     if (!forward_neural(P, &O)) goto cleanup;
 
     /* Compute probabilities. */
-    if (!prob_obs_reuse(P, &O, lstable_sat, NULL, Q, true)) goto cleanup;
+    if (!prob_obs_reuse(P, &O, lstable_sat, NULL, Q, derive)) goto cleanup;
 
     alg[which](P, &Q[0], &O, eta);
 
@@ -319,7 +364,7 @@ bool learn_batch(program_t *P, PyArrayObject *obs, size_t niters, double eta,
     update_ground_pr(P, &Q[0]);
 
     /* Backpropagate neural components. */
-    if (!backward_neural(P, &Q[0], &O)) goto cleanup;
+    if (!backward_neural(P, &Q[0])) goto cleanup;
 
     if (!next_dense_observations(&O, obs)) goto cleanup;
 

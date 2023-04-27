@@ -45,7 +45,9 @@ bool init_observations(observations_t *O, PyArrayObject *obs, PyArrayObject *ato
   if (!A) goto cleanup;
   for (size_t i = 0; i < m; ++i) {
     char a[MAX_ATOM_SIZE] = {0};
-    memcpy(a, (char*) PyArray_GETPTR1(atoms, i), len);
+    char *d = (char*) PyArray_GETPTR1(atoms, i);
+    /* Replace ';' with ','. */
+    for (size_t j = 0; d[j] && j < len; ++j) a[j] = (d[j] == ';')*',' + (d[j] != ';')*d[j];
     if (!clingo_parse_term(a, NULL, NULL, 20, &A[i])) goto clingo_err;
   }
 
@@ -119,7 +121,9 @@ bool init_dense_observations(observations_t *O, PyArrayObject *obs, size_t batch
       char *d = PyArray_GETPTR2(obs, i, j);
       if (!d[0]) break;
       bool o = d[0] == '~';
-      memcpy(a, d+o, len-o);
+      d += o; len -= o;
+      /* Replace ';' with ','. */
+      for (size_t l = 0; d[l] && l < len; ++l) a[l] = (d[l] == ';')*',' + (d[l] != ';')*d[l];
       if (!clingo_parse_term(a, NULL, NULL, 20, &V[i][j])) goto clingo_err;
       S[i][j] = !o;
     }
@@ -148,7 +152,7 @@ bool next_dense_observations(observations_t *O, PyArrayObject *obs) {
 
   O->i += O->n;
 
-  bool reset = (O->i + O->batch) >= n;
+  bool reset = O->i >= n;
   if (reset) O->i = 0;
   size_t next = O->batch + O->i;
   if (next > n) next = n;
@@ -163,7 +167,9 @@ bool next_dense_observations(observations_t *O, PyArrayObject *obs) {
         break;
       } else {
         bool o = d[0] == '~';
-        memcpy(a, d+o, len-o);
+        d += o; len -= o;
+        /* Replace ';' with ','. */
+        for (size_t l = 0; d[l] && l < len; ++l) a[l] = (d[l] == ';')*',' + (d[l] != ';')*d[l];
         if (!clingo_parse_term(a, NULL, NULL, 20, &O->V[i][j])) goto clingo_err;
         O->S[i][j] = !o;
       }
