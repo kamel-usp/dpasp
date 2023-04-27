@@ -349,3 +349,17 @@ class Program:
            self.str_if_contains("Neural Annotated Disjunctions", self.NA) + \
            f"\nQueries:\n{self.Q}>"
   def __repr__(self) -> str: return self.__str__()
+
+  def __call__(self):
+    if self.directives is not None:
+      if "learn" in self.directives:
+        f, A = self.directives["learn"]
+        D = f()
+        from .wlearn import learn
+        if isinstance(D, tuple): learn(*D, **A)
+        else: learn(D, **A)
+    if len(self.Q) > 0:
+      from exact import exact
+      A = {"quiet": False}
+      if "psemantics" in self.directives: A.update(self.directives["psemantics"])
+      exact(self, **A)

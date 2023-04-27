@@ -131,7 +131,9 @@ def parse_args() -> dict:
 def main():
   A, F = parse_args()
   if len(F) > 0:
-    pasp.exact(pasp.parse(*F, semantics = A["sem"]), psemantics = A["psem"])
+    P = pasp.parse(*F, semantics = A["sem"])
+    if "psemantics" not in P.directives: P.directives["psemantics"] = {"psemantics": A["psem"]}
+    P()
   else:
     print("pasp version", pasp.__version__)
     inp = ""
