@@ -1,8 +1,6 @@
-from .program import Program
-
 import numpy as np
 
-def learn(P: Program, D: np.ndarray, A: np.ndarray = None, niters: int = 30, alg: str = "fixpoint",
+def learn(P, D: np.ndarray, A: np.ndarray = None, niters: int = 30, alg: str = "fixpoint",
           lr: float = 0.001, batch: int = 100, lstable_sat: bool = True):
   # Check if data dimensions all match.
   def assert_dims(N, e: int):

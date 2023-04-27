@@ -7,7 +7,7 @@ from exact import exact, count
 from ground import ground
 from .program import Program
 from sample import sample
-from learn import learn
+from .wlearn import learn
 
 import numpy as np
 
