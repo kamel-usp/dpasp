@@ -1,6 +1,6 @@
 % This is the simplest case possible of neural rules in pasp.
 
-#torch
+#python
 def net():
   # Define the neural network as a single neuron with a sigmoid as activation function.
   N = torch.nn.Sequential(

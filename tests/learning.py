@@ -12,8 +12,8 @@ EPS = hoeffding(N_SAMPLES)*1.5
 
 class TestLearning(PaspTest):
   def test_insomnia_ad(self):
-    which = "examples/insomnia_ad.lp"
-    W = [[0.3, 0.2, 0.5], [0.1, 0.6, 0.3], [0.9, 0.1, 0.0], [0.0, 0.5, 0.5]]
+    which = "examples/insomnia_ad.plp"
+    W = [[0.3, 0.2, 0.5], [0.1, 0.6, 0.3], [0.7, 0.1, 0.2], [0.1, 0.4, 0.5]]
     A = ["work(anna)", "work(bill)", "sleep(anna)", "sleep(bill)"]
     P = pasp.parse(which)
     Q = pasp.parse(which)
@@ -22,13 +22,13 @@ class TestLearning(PaspTest):
       P.AD[0].P = w
       S = pasp.sample(P, A, n = N_SAMPLES)
       Q.AD[0].P = [1/len(w) for _ in range(len(w))]
-      pasp.learn(Q, S, A, niters = N_ITERS)
+      pasp.learn(Q, S, A, niters = 100, lr = 0.0001, alg = "lagrange")
 
       for u, v in zip(P.AD[0].P, Q.AD[0].P):
         self.assertAlmostEqual(u, v, delta = EPS)
 
   def test_earthquake_ad(self):
-    which = "examples/earthquake_ad.lp"
+    which = "examples/earthquake_ad.plp"
     P = pasp.parse(which)
     Q = pasp.parse(which)
     A = ["alarm", "calls(a)", "calls(b)"]

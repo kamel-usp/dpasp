@@ -13,7 +13,7 @@ some examples to show how to do inference with this package.
 ## Examples
 
 Let's first take a look at the popular `asia` Bayesian network, here encoded as the probabilistic
-logic program [`examples/asia.lp`](examples/asia.lp).
+logic program [`examples/asia.plp`](examples/asia.plp).
 
 ```pasp
 0.01::trip. 0.5::smoking.
@@ -58,7 +58,7 @@ grounded rule. For efficiency reasons, subgoals in first-order probabilistic rul
 grounded following the non-probabilistic part of the program; otherwise, at every total choice a
 new grounded program would have to be generated.
 
-Let's take a look at the remaining lines in [`examples/asia.lp`](examples/asia.lp). To query for
+Let's take a look at the remaining lines in [`examples/asia.plp`](examples/asia.plp). To query for
 probabilities, we use a similar syntax to [PASOCS](https://arxiv.org/abs/2105.10908).
 
 ```pasp
@@ -87,7 +87,7 @@ inspect our Probabilistic Logic Program (PLP).
 
 ```python
 >>> import pasp
->>> P = pasp.parse("examples/asia.lp")
+>>> P = pasp.parse("examples/asia.plp")
 >>> print(P)
 ```
 ```
@@ -112,7 +112,7 @@ Queries
 
 A PLP, here the Python object `P`, is a tuple $\langle L,PF,CF,PR,Q \rangle$, where $L$ is the
 logic program composed solely of logic facts and rules, $PF$ are the probabilistic facts, $CF$ are
-the credal facts (see [`examples/prisoners.lp`](examples/prisoners.lp)), $PR$ are probabilistic
+the credal facts (see [`examples/prisoners.plp`](examples/prisoners.plp)), $PR$ are probabilistic
 rules, $and $Q$ are the queries to be asked from the solver. We can see from the output above the
 generated rules and probabilistic facts produced by the unrolling of probabilistic rules as well as
 the queries to be asked.
@@ -138,9 +138,9 @@ this package.
 Function `pasp.exact` returns the results of the queries as a tuple of pairs of lower and upper
 probabilities in the order the queries are asked for in the PLP code.
 
-Since [`examples/asia.lp`](examples/asia.lp) comes from a Bayesian network and therefore is an
+Since [`examples/asia.plp`](examples/asia.plp) comes from a Bayesian network and therefore is an
 acyclic PLP, the probabilities returned are sharp. Let's take a look at another (very simple)
-example where this is not the case: [`examples/insomnia.lp`](examples/insomnia.lp).
+example where this is not the case: [`examples/insomnia.plp`](examples/insomnia.plp).
 
 ```pasp
 sleep :- not work, not insomnia. work :- not sleep.
@@ -158,7 +158,7 @@ essentially resulting in two possible stable models: one where only `work` is se
 other where only `sleep` is true, each having different sets of probabilities. Let's query!
 
 ```python
->>> pasp.exact(pasp.parse("examples/insomnia.lp"))
+>>> pasp.exact(pasp.parse("examples/insomnia.plp"))
 ```
 ```
 ℙ(insomnia) = [0.300000, 0.300000]
@@ -192,7 +192,7 @@ in `pasp`. As of now, the following semantics are implemented:
 
 ### Examples of logic semantics
 
-Let us first examine the Barber Paradox example (see [`examples/barber.lp`](examples/barber.lp)).
+Let us first examine the Barber Paradox example (see [`examples/barber.plp`](examples/barber.plp)).
 
 ```pasp
 shaves(X, Y) :- barber(X), villager(Y), not shaves(Y, Y).
@@ -221,7 +221,7 @@ any given total choice, the computed probabilities will be garbage (for now, ign
 keyword):
 
 ```python
->>> P = pasp.parse("examples/barber.lp")
+>>> P = pasp.parse("examples/barber.plp")
 >>> pasp.exact(P)
 ```
 ```
@@ -243,7 +243,7 @@ be set to undefined. Now, if we compute the credal probabilities again, this tim
 semantics, we get
 
 ```python
->>> P = pasp.parse("examples/barber.lp", semantics = "partial")
+>>> P = pasp.parse("examples/barber.plp", semantics = "partial")
 >>> pasp.exact(P)
 ```
 ```
@@ -258,7 +258,7 @@ that `shaves(b, b)` is either set to false or undefined with equal probability.
 
 Another interesting semantic is the *L-stable semantics*, which in practice agrees with the stable
 model semantics when there exist stable models and with the partial semantics otherwise. Let us
-take a look at the 3-coloring graph problem (see [`examples/3coloring.lp`](examples/3coloring.lp)).
+take a look at the 3-coloring graph problem (see [`examples/3coloring.plp`](examples/3coloring.plp)).
 
 ```pasp
 #const n = 5.
@@ -285,7 +285,7 @@ is valid, and thus, even if we do find a 3-colorable graph under a total choice,
 models with `undef` attributions would possibly appear as potential minimal models.
 
 ```python
->>> P = pasp.parse("examples/3coloring.lp", semantics = "partial")
+>>> P = pasp.parse("examples/3coloring.plp", semantics = "partial")
 >>> pasp.exact(P)
 ```
 ```
@@ -297,7 +297,7 @@ models with `undef` attributions would possibly appear as potential minimal mode
 Now, if we choose the L-stable semantics
 
 ```python
->>> P = pasp.parse("examples/3coloring.lp", semantics = "lstable")
+>>> P = pasp.parse("examples/3coloring.plp", semantics = "lstable")
 >>> pasp.exact(P)
 ```
 ```
@@ -311,7 +311,7 @@ minimal models with `undef` when stable models are found.
 
 ### Examples of probabilistic semantics
 
-Consider the game example shown in [`examples/game.lp`](examples/game.lp).
+Consider the game example shown in [`examples/game.plp`](examples/game.plp).
 
 ```pasp
 wins(X) :- move(X, Y), not wins(Y).
@@ -324,7 +324,7 @@ the total choice probabilities, it either appears with probability 1.0-0.3 or 1.
 credal result `[0.7, 1.0]` below.
 
 ```python
->>> P = pasp.parse("examples/game.lp")
+>>> P = pasp.parse("examples/game.plp")
 >>> pasp.exact(P)
 ```
 ```
@@ -337,7 +337,7 @@ total choice and evaluate the final credal probabilities accordingly. If we wish
 uniformly consider models, we might do so by using the MaxEnt semantics [[3]](#ref-3).
 
 ```python
->>> P = pasp.parse("examples/game.lp")
+>>> P = pasp.parse("examples/game.plp")
 >>> pasp.exact(P, psemantics = "maxent")
 ```
 ```
@@ -433,7 +433,7 @@ python setup.py install
 pasp --help
 
 % Runs the prisoners example with credal inference and stable semantics.
-pasp examples/prisoners.lp
+pasp examples/prisoners.plp
 
 ℙ(e1 | u) = [0.290426, 0.379192]
 ℙ(e1 | not b, u) = [0.450125, 0.549875]
@@ -443,14 +443,14 @@ pasp examples/prisoners.lp
 ℙ(e1 | ga, u) = [0.279971, 0.390743]
 
 % Runs the 3-coloring example with credal inference and L-stable semantics.
-pasp --sem=lstable examples/3coloring.lp
+pasp --sem=lstable examples/3coloring.plp
 
 ℙ(c(1,r)) = [0.000000, 1.000000]
 ℙ(e(1,2) | undef f) = [0.772727, 0.772727]
 ℙ(undef f) = [0.064453, 0.064453]
 
 % Runs the insomnia example with Max-Entropy inference and stable semantics.
-pasp --psem=maxent examples/insomnia.lp
+pasp --psem=maxent examples/insomnia.plp
 
 ℙ(insomnia) = [0.300000, 0.300000]
 ℙ(work) = [0.650000, 0.650000]

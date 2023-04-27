@@ -14,7 +14,7 @@ EPS = hoeffding(N_SAMPLES)
 class SamplingCases(PaspTest):
   def test_insomnia_ad(self):
     W = [[0.3, 0.2, 0.5], [0.1, 0.6, 0.3], [0.9, 0.1, 0.0], [0.0, 0.5, 0.5]]
-    P = pasp.parse("examples/insomnia_ad.lp")
+    P = pasp.parse("examples/insomnia_ad.plp")
     A = ["insomnia(anna)", "insomnia(bill)", "work(anna)", "work(bill)", "sleep(anna)",
          "sleep(bill)"]
     for w in W:
@@ -26,7 +26,7 @@ class SamplingCases(PaspTest):
       self.assertTrue(np.allclose(R, Q, atol = EPS))
 
   def test_earthquake(self):
-    P = pasp.parse("examples/earthquake.lp")
+    P = pasp.parse("examples/earthquake.plp")
     A = ["alarm", "burglary", "earthquake"]
     R = pasp.exact(P, quiet = True, psemantics = "maxent").flatten()
     S = pasp.sample(P, A, n = N_SAMPLES)
@@ -52,7 +52,7 @@ class SamplingCases(PaspTest):
     self.assertAlmostEqual(p/q, R[3], delta = EPS)
 
   def test_asia(self):
-    P = pasp.parse("examples/asia.lp")
+    P = pasp.parse("examples/asia.plp")
     A = ["trip", "smoking", "tuberculosis", "cancer", "or", "test"]
     R = pasp.exact(P, quiet = True, psemantics = "maxent").flatten()
     S = pasp.sample(P, A, n = N_SAMPLES)
@@ -68,7 +68,7 @@ class SamplingCases(PaspTest):
     self.assertAlmostEqual(np.sum(S[:,1])/N_SAMPLES, R[4], delta = EPS)
 
   def test_game(self):
-    P = pasp.parse("examples/game.lp")
+    P = pasp.parse("examples/game.plp")
     A = ["wins(b)", "wins(c)"]
     R = pasp.exact(P, quiet = True, psemantics = "maxent").flatten()
     S = pasp.sample(P, A, n = N_SAMPLES)
@@ -80,7 +80,7 @@ class SamplingCases(PaspTest):
     self.assertAlmostEqual(np.sum(S[:,1])/N_SAMPLES, R[1], delta = EPS)
 
   def test_insomnia(self):
-    P = pasp.parse("examples/insomnia.lp")
+    P = pasp.parse("examples/insomnia.plp")
     A = ["insomnia", "work", "sleep"]
     R = pasp.exact(P, quiet = True, psemantics = "maxent").flatten()
     S = pasp.sample(P, A, n = N_SAMPLES)
@@ -95,7 +95,7 @@ class SamplingCases(PaspTest):
     self.assertAlmostEqual(np.sum(S[:,2])/N_SAMPLES, R[2], delta = EPS)
 
   def test_multinsomnia(self):
-    P = pasp.parse("examples/multinsomnia.lp")
+    P = pasp.parse("examples/multinsomnia.plp")
     A = ["insomnia(anna)", "insomnia(bill)", "insomnia(charlie)",
          "work(anna)", "work(bill)", "work(charlie)",
          "sleep(anna)", "sleep(bill)", "sleep(charlie)",
@@ -107,7 +107,7 @@ class SamplingCases(PaspTest):
     self.assertTrue(np.allclose(S, R, atol = EPS))
 
   def test_smokers(self):
-    P = pasp.parse("examples/smokers.lp")
+    P = pasp.parse("examples/smokers.plp")
     A = ["smokes(a)", "smokes(b)"]
     R = pasp.exact(P, quiet = True, psemantics = "maxent").flatten()
     S = pasp.sample(P, A, n = N_SAMPLES)
@@ -117,7 +117,7 @@ class SamplingCases(PaspTest):
     self.assertTrue(np.allclose(Q, R, atol = EPS))
 
   def test_earthquake_ad(self):
-    P = pasp.parse("examples/earthquake_ad.lp")
+    P = pasp.parse("examples/earthquake_ad.plp")
     A = ["alarm", "burglary", "earthquake(mild)", "earthquake(none)"]
     R = pasp.exact(P, quiet = True, psemantics = "maxent").flatten()
     S = pasp.sample(P, A, n = N_SAMPLES)

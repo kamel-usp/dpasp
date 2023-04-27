@@ -11,7 +11,7 @@ class TestCounting(PaspTest):
 
   @staticmethod
   def init_example(eg: str, semantics = "stable"):
-    P = pasp.parse("examples/" + eg + ".lp", semantics = semantics)
+    P = pasp.parse("examples/" + eg + ".plp", semantics = semantics)
     TestCounting.all_learnable(P)
     return P, pasp.count(P)
 

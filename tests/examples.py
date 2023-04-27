@@ -5,7 +5,7 @@ import pasp
 
 class TestExamples(PaspTest):
   def test_asia(self):
-    P = pasp.parse("examples/asia.lp")
+    P = pasp.parse("examples/asia.plp")
     R = pasp.exact(P, quiet = True)
     # ℙ(trip)
     self.assertApproxEqual(R[0,:], [0.01, 0.01])
@@ -25,7 +25,7 @@ class TestExamples(PaspTest):
     self.assertApproxEqual(R[7,:], [0.05, 0.05])
 
   def test_earthquake(self):
-    P = pasp.parse("examples/earthquake.lp")
+    P = pasp.parse("examples/earthquake.plp")
     R = pasp.exact(P, quiet = True)
     # ℙ(alarm | burglary, earthquake)
     self.assertApproxEqual(R[0,:], [0.9,  0.9])
@@ -37,7 +37,7 @@ class TestExamples(PaspTest):
     self.assertApproxEqual(R[3,:], [0.0,  0.0])
 
   def test_game(self):
-    P = pasp.parse("examples/game.lp")
+    P = pasp.parse("examples/game.plp")
     R = pasp.exact(P, quiet = True)
     # ℙ(wins(b))
     self.assertApproxEqual(R[0,:], [0.7,  1.0])
@@ -45,7 +45,7 @@ class TestExamples(PaspTest):
     self.assertApproxEqual(R[1,:], [0.3,  0.3])
 
   def test_insomnia(self):
-    P = pasp.parse("examples/insomnia.lp")
+    P = pasp.parse("examples/insomnia.plp")
     R = pasp.exact(P, quiet = True)
     # ℙ(insomnia)
     self.assertApproxEqual(R[0,:], [0.3,  0.3])
@@ -59,7 +59,7 @@ class TestExamples(PaspTest):
     self.assertApproxEqual(R[4,:], [0.0,  0.7])
 
   def test_prisoners(self):
-    P = pasp.parse("examples/prisoners.lp")
+    P = pasp.parse("examples/prisoners.plp")
     R = pasp.exact(P, quiet = True)
     α = 19/40
     # ℙ(e1 | u)
@@ -77,7 +77,7 @@ class TestExamples(PaspTest):
     self.assertApproxEqual(R[5,:], [1.0/(1+(((1-α)/α)**2)/α), 1.0/(1+((α/(1-α))**2)/(1-α))])
 
   def test_simple(self):
-    P = pasp.parse("examples/simple.lp")
+    P = pasp.parse("examples/simple.plp")
     R = pasp.exact(P, quiet = True)
     # ℙ(s(a))
     self.assertApproxEqual(R[0,:], [0.20, 0.20])
@@ -87,7 +87,7 @@ class TestExamples(PaspTest):
     self.assertApproxEqual(R[2,:], [0.048, 0.048])
 
   def test_simpler(self):
-    P = pasp.parse("examples/simpler.lp")
+    P = pasp.parse("examples/simpler.plp")
     R = pasp.exact(P, quiet = True)
     # ℙ(r)
     self.assertApproxEqual(R[0,:], [0.5, 0.5])
@@ -95,7 +95,7 @@ class TestExamples(PaspTest):
     self.assertApproxEqual(R[1,:], [0.25, 0.25])
 
   def test_smokers(self):
-    P = pasp.parse("examples/smokers.lp")
+    P = pasp.parse("examples/smokers.plp")
     R = pasp.exact(P, quiet = True)
     # ℙ(smokes(a))
     self.assertApproxEqual(R[0,:], [0.06, 0.06])
@@ -103,7 +103,7 @@ class TestExamples(PaspTest):
     self.assertApproxEqual(R[1,:], [0.2, 0.2])
 
   def test_earthquake_ad(self):
-    P = pasp.parse("examples/earthquake_ad.lp")
+    P = pasp.parse("examples/earthquake_ad.plp")
     R = pasp.exact(P, quiet = True)
     # ℙ(alarm | burglary, earthquake(heavy))
     self.assertApproxEqual(R[0,:], [0.9, 0.9])
@@ -115,7 +115,7 @@ class TestExamples(PaspTest):
     self.assertApproxEqual(R[3,:], [0.0, 0.0])
 
   def test_multinsomnia(self):
-    P = pasp.parse("examples/multinsomnia.lp")
+    P = pasp.parse("examples/multinsomnia.plp")
     R = pasp.exact(P, quiet = True)
     O = [[0.300000, 0.300000], [0.500000, 0.500000], [0.700000, 0.700000], [0.300000, 1.000000],
          [0.500000, 1.000000], [0.700000, 1.000000], [0.000000, 0.700000], [0.000000, 0.500000],
@@ -125,7 +125,7 @@ class TestExamples(PaspTest):
       self.assertApproxEqual(R[i,:], o)
 
   def test_fault_tree(self):
-    P = pasp.parse("examples/fault_tree.lp")
+    P = pasp.parse("examples/fault_tree.plp")
     R = pasp.exact(P, quiet = True)
     # All marginal probabilities.
     T = np.array([[0.05     , 0.1       ], [0.05      , 0.1       ], [0.005    , 0.01      ],
@@ -136,13 +136,13 @@ class TestExamples(PaspTest):
 
   # This test might take a long time. Ignore for now.
   # def test_rain_util(self):
-    # P = pasp.parse("examples/rain_utility.lp")
+    # P = pasp.parse("examples/rain_utility.plp")
     # R = pasp.exact(P, quiet = True)
     # self.assertAlmostEqual(R[0,1], 0.5075)
 
 class TestLStable(PaspTest):
   def test_barber(self):
-    P = pasp.parse("examples/barber.lp", semantics = "lstable")
+    P = pasp.parse("examples/barber.plp", semantics = "lstable")
     R = pasp.exact(P, quiet = True)
     # ℙ(shaves(b, a))
     self.assertApproxEqual(R[0,:], [1.0, 1.0])
@@ -152,7 +152,7 @@ class TestLStable(PaspTest):
     self.assertApproxEqual(R[2,:], [0.5, 0.5])
 
   def test_3coloring(self):
-    P = pasp.parse("examples/3coloring.lp", semantics = "lstable")
+    P = pasp.parse("examples/3coloring.plp", semantics = "lstable")
     R = pasp.exact(P, quiet = True)
     # ℙ(c(1, r))
     self.assertApproxEqual(R[0,:], [0.0, 1.0])
@@ -163,7 +163,7 @@ class TestLStable(PaspTest):
 
 class TestPlog(PaspTest):
   def test_asia(self):
-    P = pasp.parse("examples/asia.lp")
+    P = pasp.parse("examples/asia.plp")
     R = pasp.exact(P, psemantics = "maxent", quiet = True).flatten()
     # ℙ(trip)
     self.assertAlmostEqual(R[0], 0.01)
@@ -183,7 +183,7 @@ class TestPlog(PaspTest):
     self.assertAlmostEqual(R[7], 0.05)
 
   def test_earthquake(self):
-    P = pasp.parse("examples/earthquake.lp")
+    P = pasp.parse("examples/earthquake.plp")
     R = pasp.exact(P, psemantics = "maxent", quiet = True).flatten()
     # ℙ(alarm | burglary, earthquake)
     self.assertAlmostEqual(R[0], 0.9)
@@ -195,7 +195,7 @@ class TestPlog(PaspTest):
     self.assertAlmostEqual(R[3], 0.0)
 
   def test_simple(self):
-    P = pasp.parse("examples/simple.lp")
+    P = pasp.parse("examples/simple.plp")
     R = pasp.exact(P, psemantics = "maxent", quiet = True).flatten()
     # ℙ(s(a))
     self.assertAlmostEqual(R[0], 0.20)
@@ -205,7 +205,7 @@ class TestPlog(PaspTest):
     self.assertAlmostEqual(R[2], 0.048)
 
   def test_simpler(self):
-    P = pasp.parse("examples/simpler.lp")
+    P = pasp.parse("examples/simpler.plp")
     R = pasp.exact(P, psemantics = "maxent", quiet = True).flatten()
     # ℙ(r)
     self.assertAlmostEqual(R[0], 0.5)
@@ -213,7 +213,7 @@ class TestPlog(PaspTest):
     self.assertAlmostEqual(R[1], 0.25)
 
   def test_smokers(self):
-    P = pasp.parse("examples/smokers.lp")
+    P = pasp.parse("examples/smokers.plp")
     R = pasp.exact(P, psemantics = "maxent", quiet = True).flatten()
     # ℙ(smokes(a))
     self.assertAlmostEqual(R[0], 0.06)
@@ -221,7 +221,7 @@ class TestPlog(PaspTest):
     self.assertAlmostEqual(R[1], 0.2)
 
   def test_game(self):
-    P = pasp.parse("examples/game.lp")
+    P = pasp.parse("examples/game.plp")
     R = pasp.exact(P, psemantics = "maxent", quiet = True).flatten()
     # ℙ(wins(b))
     self.assertAlmostEqual(R[0], 1.7/2)
@@ -229,7 +229,7 @@ class TestPlog(PaspTest):
     self.assertAlmostEqual(R[1], 0.3)
 
   def test_insomnia(self):
-    P = pasp.parse("examples/insomnia.lp")
+    P = pasp.parse("examples/insomnia.plp")
     R = pasp.exact(P, psemantics = "maxent", quiet = True).flatten()
     # ℙ(insomnia)
     self.assertAlmostEqual(R[0], 0.3)
@@ -243,7 +243,7 @@ class TestPlog(PaspTest):
     self.assertAlmostEqual(R[4], 0.7/2)
 
   def test_earthquake_ad(self):
-    P = pasp.parse("examples/earthquake_ad.lp")
+    P = pasp.parse("examples/earthquake_ad.plp")
     R = pasp.exact(P, psemantics = "maxent", quiet = True).flatten()
     # ℙ(alarm | burglary, earthquake(heavy))
     self.assertAlmostEqual(R[0], 0.9)

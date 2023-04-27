@@ -4,7 +4,7 @@ import pasp
 
 if __name__ == "__main__":
   f = "earthquake" if len(sys.argv) < 2 else sys.argv[1]
-  P = pasp.parse(f"examples/{f}.lp")
+  P = pasp.parse(f"examples/{f}.plp")
   print("=======\nProgram:\n=======")
   print(P)
   print("\n==============\nQuery results:\n==============")
