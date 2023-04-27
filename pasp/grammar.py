@@ -380,10 +380,10 @@ class StableTransformer(lark.Transformer):
     test, train = D[2][2], D[3][2] if len(D) > 3 else None
     return self.pack("data", f"{name}({arg}).", Data(name, arg, test, train))
 
-  # Torch block.
-  def torch(self, T):
+  # Python block.
+  def python(self, T):
     exec("import torch\n\n" + T[0].value, self.torch_scope)
-    return self.pack("torch", "")
+    return self.pack("python", "")
 
   # Local hubconf repo.
   def LOCAL_NET(self, L): return self.pack("LOCAL_NET", str(L))

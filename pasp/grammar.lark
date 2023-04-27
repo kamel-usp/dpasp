@@ -121,7 +121,7 @@ test: "test" "(" (path | ("@" PY_FUNC)) ")"
 train: "train" "(" (path | ("@" PY_FUNC)) ")"
 data: WORD "(" (WORD | ID) ")" "~" test ("," train)? "."
 // Torch block.
-torch: "#torch" /(?:.|\n)+?(?=\#end\.)/ "#end."
+python: "#python" /(?:.|\n)+?(?=\#end\.)/ "#end."
 // PyTorch hub.
 hub: "@" PY_FUNC ("on" (("\"" LOCAL_NET "\"" ("at" "\"local\"")?) | ("\"" GITHUB "\"" "at" "\"github\"")))?
 // Optimizer parameters.
