@@ -114,10 +114,18 @@ def push(L: list, X: iter):
 
 def lit2atom(x: str) -> str: return x[4:] if x[:4] == "not " else x
 
+class SemanticsTransformer(lark.Transformer):
+  "Verify which logic semantic should be used."
+  def __default__(self, _, __, ___): return lark.visitors.Discard
+  def SEMANTICS_OPT_LOGIC(self, O): return str(O)
+  def SEMANTICS_OPT_PROB(self, _): return lark.visitors.Discard
+  def semantics(self, S): return S[0]
+  def plp(self, S): return S[0] if len(S) > 0 else None
+
 class StableTransformer(lark.Transformer):
   def __init__(self, _):
     super().__init__()
-    self.semantics = Semantics.STABLE
+    self.sem = Semantics.STABLE
     self.torch_scope = {}
     self.n_prules = 0
 
@@ -204,6 +212,8 @@ class StableTransformer(lark.Transformer):
                               for b in body_no_data), dtype = numpy.uint64)
         S = contiguous(tuple(b[2][0] for i in range(len(t)) for b in body_no_data), dtype = bool)
       NA.append(NeuralAD(H, B, S, name, V, net, rep, t, learnable, params, O))
+
+  def __default__(self, _, __, ___): return lark.visitors.Discard
 
   # Components which are directly translated to clingo.
   def CMP_OP(self, o): return self.pack("CMP_OP", str(o))
@@ -482,10 +492,20 @@ class StableTransformer(lark.Transformer):
     return self.pack("interp", "", getnths(I, 1))
   # Queries.
   def query(self, Q):
-    return self.pack("query", "", Query(Q[0][2], Q[1][2] if len(Q) > 1 else [], semantics = self.semantics))
+    return self.pack("query", "", Query(Q[0][2], Q[1][2] if len(Q) > 1 else [], semantics = self.sem))
 
   # Constant definition.
   def constdef(self, C): return self.pack("constdef", f"#const {C[0][1]} = {C[1][1]}.")
+
+  # Learning directive.
+  def learn(self, L):
+    A = {str(L[i]): str(v) if isinstance(v := L[i+1], lark.Token) else v for i in range(1, len(L), 2)}
+    return self.pack("directive", "", ("learn", self.torch_scope[L[0][1]], A))
+
+  # Semantics directive and options.
+  def SEMANTICS_OPT_LOGIC(self, _): return lark.visitors.Discard
+  def SEMANTICS_OPT_PROB(self, O): return str(O)
+  def semantics(self, S): return self.pack("directive", "", ("psemantics", {"psemantics": S[0]}))
 
   # Probabilistic Logic Program.
   def plp(self, C) -> Program:
@@ -506,6 +526,8 @@ class StableTransformer(lark.Transformer):
     D = {}
     # Actual neural rules and neural ADs.
     NR, NA = [], []
+    # Directives.
+    directives = {}
     # Mapping.
     M = {"pfact": PF, "prule": PR, "query": Q, "cfact": CF, "ad": AD, "nrule": TNR, "nad": TNA}
     for t, L, O, _ in C:
@@ -514,24 +536,26 @@ class StableTransformer(lark.Transformer):
       if t == "data":
         if O.name in D: D[O.name].append(O)
         else: D[O.name] = [O]
+      if t == "directive": directives[O[0]] = tup if len(tup := O[1:]) > 1 else tup[0]
     # Deal with ungrounded probabilistic rules.
     for r in PR:
       if r.is_prop: PF.append(r.prop_pf)
     self.check_data(D)
     self.register_nrule(TNR, NR, D)
     self.register_nad(TNA, NA, D)
-    return Program("\n".join(P), PF, PR, Q, CF, AD, NR, NA, semantics = self.semantics)
+    return Program("\n".join(P), PF, PR, Q, CF, AD, NR, NA, semantics = self.sem, \
+                   directives = directives)
 
 class PartialTransformer(StableTransformer):
   def __init__(self, sem: str):
     super().__init__(sem)
     self.PT = set()
     if sem == "lstable":
-      self.semantics = Semantics.LSTABLE
+      self.sem = Semantics.LSTABLE
     elif sem == "smproblog":
-      self.semantics = Semantics.SMPROBLOG
+      self.sem = Semantics.SMPROBLOG
     else:
-      self.semantics = Semantics.PARTIAL
+      self.sem = Semantics.PARTIAL
     self.o_tree = None
 
   @staticmethod
@@ -606,6 +630,8 @@ class PartialTransformer(StableTransformer):
     AD = []
     # Neural rules and ADs.
     NR, NA = [], []
+    # Directives.
+    directives = {}
     # Mapping.
     M = {"pfact": PF, "prule": PR, "query": Q, "cfact": CF, "ad": AD}
     for t, L, O, _ in C:
@@ -613,13 +639,14 @@ class PartialTransformer(StableTransformer):
       if t in M: push(M[t], O)
       if t == "prule" and isinstance(O, collections.abc.Iterable) and O[0].is_prop:
         PF.append(O[0].prop_pf)
+      if t == "directive": directives[O[0]] = tup if len(tup := O[1:]) > 1 else tup[0]
     P.extend(f"_{x} :- {x}." for x in self.PT)
-    return Program("\n".join(P), PF, PR, Q, CF, AD, NR, NA, semantics = self.semantics, \
-                   stable_p = self.stable_p)
+    return Program("\n".join(P), PF, PR, Q, CF, AD, NR, NA, semantics = self.sem, \
+                   stable_p = self.stable_p, directives = directives)
 
   def transform(self, tree):
     self.o_tree = tree
-    self.stable_p = StableTransformer(self.semantics).transform(tree)
+    self.stable_p = StableTransformer(self.sem).transform(tree)
     return super().transform(tree)
 
 def parse(*files: str, G: lark.Lark = None, from_str: bool = False, semantics: str = "stable") -> Program:
@@ -627,7 +654,9 @@ def parse(*files: str, G: lark.Lark = None, from_str: bool = False, semantics: s
   interprets `streams` as filenames to be read and parsed into a `Program`."""
   if semantics not in parse.trans_map:
     raise ValueError("semantics not supported (must either be 'stable', 'partial' or 'lstable')!")
-  return parse.trans_map[semantics](semantics).transform(read(*files, G = G, from_str = from_str))
+  T = read(*files, G = G, from_str = from_str)
+  if (sem := SemanticsTransformer().transform(T)) is not None: semantics = sem
+  return parse.trans_map[semantics](semantics).transform(T)
 parse.trans_map = {}
 parse.trans_map["stable"] = StableTransformer
 parse.trans_map["lstable"] = PartialTransformer

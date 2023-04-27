@@ -291,7 +291,8 @@ class Program:
 
   def __init__(self, P: str, PF: list[ProbFact], PR: list[ProbRule], Q: list[Query], \
                CF: list[CredalFact], AD: list[AnnotatedDisjunction], NR: list[NeuralRule], \
-               NA: list[NeuralAD], semantics: Semantics = Semantics.STABLE, stable_p = None):
+               NA: list[NeuralAD], semantics: Semantics = Semantics.STABLE, stable_p = None, \
+               directives: list = None):
     """
     Constructs a PLP out of a logic program `P`, probabilistic facts `PF`, credal facts `CF` and
     queries `Q`.
