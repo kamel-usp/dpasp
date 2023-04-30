@@ -13,15 +13,18 @@ def read(*files: str, G: lark.Lark = None, from_str: bool = False, start = "plp"
     except Exception as ex:
       raise ex
   T = None
-  if from_str: T = G.parse("\n".join(files)); return T
+  if from_str:
+    try: return G.parse("\n".join(files))
+    except Exception as ex: raise ex
   for fname in files:
+    # For now, dump files entirely into memory (this isn't too much of a problem, since PLPs are
+    # usually small). In the future, consider streaming batches of text instead for large files.
     try:
-      # For now, dump files entirely into memory (this isn't too much of a problem, since PLPs are
-      # usually small). In the future, consider streaming batches of text instead for large files.
       with open(fname, "r") as f:
-        if T is None: T = G.parse(f.read())
+        text = f.read()
+        if T is None: T = G.parse(text)
         else:
-          U = G.parse(f.read())
+          U = G.parse(text)
           T.children.extend(u for u in U.children if u not in T.children)
     except Exception as ex:
       raise ex
@@ -41,20 +44,30 @@ def push(L: list, X: iter):
 
 def lit2atom(x: str) -> str: return x[4:] if x[:4] == "not " else x
 
-class SemanticsTransformer(lark.Transformer):
-  "Verify which logic semantic should be used."
+class PreparsingTransformer(lark.Transformer):
+  def __init__(self):
+    super().__init__()
+    self.consts = {}
   def __default__(self, _, __, ___): return lark.visitors.Discard
   def SEMANTICS_OPT_LOGIC(self, O): return str(O)
   def SEMANTICS_OPT_PROB(self, _): return lark.visitors.Discard
   def semantics(self, S): return S[0]
-  def plp(self, S): return S[0] if len(S) > 0 else None
+  def WORD(self, W): return str(W)
+  def ID(self, I): return int(I)
+  def constdef(self, C):
+    self.consts[C[0]] = C[1]
+    return lark.visitors.Discard
+  "Verify which logic semantic should be used and record constant definitions."
+  def plp(self, S):
+    return S[0] if len(S) > 0 else None, self.consts
 
 class StableTransformer(lark.Transformer):
-  def __init__(self, _):
+  def __init__(self, _, consts: dict = {}):
     super().__init__()
     self.sem = Semantics.STABLE
     self.torch_scope = {}
     self.n_prules = 0
+    self.consts = consts
 
   @staticmethod
   def pack(t: str, rep: str = None, val = None, scope: dict = {}) -> tuple[str, str, str, dict]:
@@ -171,12 +184,22 @@ class StableTransformer(lark.Transformer):
 
   # Set.
   def set(self, S):
-    M = dict((x[1], None) for x in S)
-    if len(M) != len(S): raise ValueError("set must contain only unique constants!")
+    if S[0][0] == "interval":
+      a, b = S[0][2]
+      if isinstance(a, str):
+        if a not in self.consts: raise KeyError(f"Constant {a} is undefined!")
+        a = self.consts[a]
+      if isinstance(b, str):
+        if b not in self.consts: raise KeyError(f"Constant {b} is undefined!")
+        b = self.consts[b]
+      M = dict((str(i), None) for i in range(a, b+1))
+    else:
+      M = dict((x[1], None) for x in S)
+      if len(M) != len(S): raise ValueError("set must contain only unique constants!")
     return self.pack("set", f"{{{','.join(x for x in M.keys())}}}", M)
 
   # Intervals.
-  def interval(self, I): return self.pack("interval", f"{I[0][2]}..{I[1][2]}")
+  def interval(self, I): return self.pack("interval", f"{I[0][2]}..{I[1][2]}", (I[0][2], I[1][2]))
 
   # Predicates.
   def pred(self, P, replace_semicolons = False):
@@ -474,8 +497,8 @@ class StableTransformer(lark.Transformer):
                    directives = directives)
 
 class PartialTransformer(StableTransformer):
-  def __init__(self, sem: str):
-    super().__init__(sem)
+  def __init__(self, sem: str, consts: dict = {}):
+    super().__init__(sem, consts)
     self.PT = set()
     if sem == "lstable":
       self.sem = Semantics.LSTABLE
@@ -582,8 +605,9 @@ def parse(*files: str, G: lark.Lark = None, from_str: bool = False, semantics: s
   if semantics not in parse.trans_map:
     raise ValueError("semantics not supported (must either be 'stable', 'partial' or 'lstable')!")
   T = read(*files, G = G, from_str = from_str)
-  if (sem := SemanticsTransformer().transform(T)) is not None: semantics = sem
-  return parse.trans_map[semantics](semantics).transform(T)
+  sem, consts = PreparsingTransformer().transform(T)
+  if sem is not None: semantics = sem
+  return parse.trans_map[semantics](semantics, consts).transform(T)
 parse.trans_map = {}
 parse.trans_map["stable"] = StableTransformer
 parse.trans_map["lstable"] = PartialTransformer

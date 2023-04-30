@@ -65,7 +65,7 @@ LEARN:  "?"
 CONST:  "!"
 
 // Set.
-set: "{" (ID | WORD) ("," (ID | WORD))+ "}"
+set: "{" (((ID | WORD) ("," (ID | WORD))+) | interval) "}"
 
 // Atom.
 _atom: WORD
