@@ -3,5 +3,6 @@ graft pasp/
 graft tests
 graft thpool
 graft bitvector
+graft progressbar
 
 prune */__pycache__
