@@ -4,6 +4,8 @@
 #include "cdata.h"
 #include "cground.h"
 
+#include "../progressbar/progressbar.h"
+
 static inline void update_ground_pr(program_t *P, prob_storage_t *Q) {
   for (size_t i = 0; i < Q->pr; ++i)
     for (size_t j = 0; j < Q->I_GR[i].n; ++j)
@@ -153,6 +155,9 @@ bool learn(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
     compute_fixpoint, compute_lagrange, compute_neurasp
   };
   bool derive = which != ALG_FIXPOINT;
+  progressbar *bar = progressbar_new("Learning", niters);
+
+  if (!bar) goto cleanup;
 
   if (!init_observations(&O, obs, atoms)) goto cleanup;
   if (!(num_procs = init_prob_storage_seq(Q, P, &O))) goto cleanup;
@@ -175,6 +180,10 @@ bool learn(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
 
     /* Update shared ground PFs from PRs. */
     update_ground_pr(P, &Q[0]);
+
+    /* Update progress bar. */
+    progressbar_inc(bar);
+
     /* Check for signals. */
     if (PyErr_CheckSignals()) goto cleanup;
   }
@@ -186,6 +195,7 @@ bool learn(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
 
   ok = true;
 cleanup:
+  progressbar_finish(bar);
   free_observations_contents(&O);
   for (size_t i = 1; i < num_procs; ++i) free_prob_storage_contents(&Q[i], false);
   free_prob_storage_contents(&Q[0], true);
@@ -346,6 +356,9 @@ bool learn_batch(program_t *P, PyArrayObject *obs, size_t niters, double eta,
     compute_fixpoint_batch, compute_lagrange_batch, compute_neurasp_batch
   };
   bool derive = which != ALG_FIXPOINT;
+  progressbar *bar = progressbar_new("Learning", niters);
+
+  if (!bar) goto cleanup;
 
   if (!init_dense_observations(&O, obs, batch)) goto cleanup;
   if (!(num_procs = init_prob_storage_seq(Q, P, &O))) goto cleanup;
@@ -353,23 +366,28 @@ bool learn_batch(program_t *P, PyArrayObject *obs, size_t niters, double eta,
   if (needs_ground(P)) if (!ground_all(P, Q)) goto cleanup;
 
   for (size_t i = 0; i < niters; ++i) {
-    if (!forward_neural(P, &O)) goto cleanup;
+    do {
+      if (!forward_neural(P, &O)) goto cleanup;
 
-    /* Compute probabilities. */
-    if (!prob_obs_reuse(P, &O, lstable_sat, NULL, Q, derive)) goto cleanup;
+      /* Compute probabilities. */
+      if (!prob_obs_reuse(P, &O, lstable_sat, NULL, Q, derive)) goto cleanup;
 
-    alg[which](P, &Q[0], &O, eta);
+      alg[which](P, &Q[0], &O, eta);
 
-    /* Update shared ground PFs from PRs. */
-    update_ground_pr(P, &Q[0]);
+      /* Update shared ground PFs from PRs. */
+      update_ground_pr(P, &Q[0]);
 
-    /* Backpropagate neural components. */
-    if (!backward_neural(P, &Q[0])) goto cleanup;
+      /* Backpropagate neural components. */
+      if (!backward_neural(P, &Q[0])) goto cleanup;
 
-    if (!next_dense_observations(&O, obs)) goto cleanup;
+      /* Update progress bar. */
+      progressbar_inc(bar);
 
-    /* Check for signals. */
-    if (PyErr_CheckSignals()) goto cleanup;
+      if (!next_dense_observations(&O, obs)) goto cleanup;
+
+      /* Check for signals. */
+      if (PyErr_CheckSignals()) goto cleanup;
+    } while (O.i);
   }
 
   if (!update_program_parameters(P, &Q[0])) {
@@ -379,6 +397,7 @@ bool learn_batch(program_t *P, PyArrayObject *obs, size_t niters, double eta,
 
   ok = true;
 cleanup:
+  progressbar_finish(bar);
   free_dense_observations_contents(&O);
   for (size_t i = 1; i < num_procs; ++i) free_prob_storage_contents(&Q[i], false);
   free_prob_storage_contents(&Q[0], true);
