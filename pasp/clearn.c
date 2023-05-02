@@ -343,7 +343,7 @@ bool learn_batch(program_t *P, PyArrayObject *obs, size_t niters, double eta,
   size_t num_procs = 0;
   bool ok = false;
   void (*alg[3])(program_t*, prob_storage_t*, observations_t*, double eta) = {
-    0, compute_lagrange_batch, compute_neurasp_batch
+    compute_fixpoint_batch, compute_lagrange_batch, compute_neurasp_batch
   };
   bool derive = which != ALG_FIXPOINT;
 
