@@ -21,9 +21,9 @@ static PyObject* learn(PyObject *self, PyObject *args, PyObject *kwargs) {
   bool lstable_sat = true;
   size_t niters = 30;
   const char *alg_s = ALG_FIXPOINT_S;
-  uint8_t alg = ALG_FIXPOINT;
+  uint8_t alg = ALG_LAGRANGE;
   double eta = 0.1;
-  static char *kwlist[] = { "", "", "", "", "niters", "alg", "eta", "lstable_sat", NULL };
+  static char *kwlist[] = { "", "", "", "", "niters", "alg", "lr", "lstable_sat", NULL };
 
   if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOO|nsdb", kwlist, &py_P, &py_obs,
         &py_obs_counts, &py_atoms, &niters, &alg_s, &eta, &lstable_sat))
@@ -102,7 +102,7 @@ static PyObject* learn_batch(PyObject *self, PyObject *args, PyObject *kwargs) {
   const char *alg_s = ALG_FIXPOINT_S;
   uint8_t alg = ALG_FIXPOINT;
   double eta = 0.1;
-  static char *kwlist[] = { "", "", "niters", "alg", "eta", "batch", "lstable_sat", NULL };
+  static char *kwlist[] = { "", "", "niters", "alg", "lr", "batch", "lstable_sat", NULL };
 
   if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OO|nsdnb", kwlist, &py_P, &py_obs, &niters,
         &alg_s, &eta, &batch, &lstable_sat))

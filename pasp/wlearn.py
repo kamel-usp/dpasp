@@ -20,7 +20,7 @@ def learn(P, D: np.ndarray, A: np.ndarray = None, niters: int = 30, alg: str = "
     else: data = D
     from learn import learn_batch as clearn_batch
     P.train()
-    clearn_batch(P, data, niters = niters, alg = alg, eta = lr, batch = batch, lstable_sat = lstable_sat)
+    clearn_batch(P, data, niters = niters, alg = alg, lr = lr, batch = batch, lstable_sat = lstable_sat)
     P.eval()
     return
 
@@ -33,5 +33,5 @@ def learn(P, D: np.ndarray, A: np.ndarray = None, niters: int = 30, alg: str = "
   obs, obs_counts = np.unique(data, axis = 0, return_counts = True)
   from learn import learn as clearn
   P.train()
-  clearn(P, obs, obs_counts, atoms, niters = niters, alg = alg, eta = lr, lstable_sat = lstable_sat)
+  clearn(P, obs, obs_counts, atoms, niters = niters, alg = alg, lr = lr, lstable_sat = lstable_sat)
   P.eval()
