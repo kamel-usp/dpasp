@@ -10,6 +10,10 @@ def learn(P, D: np.ndarray, A: np.ndarray = None, niters: int = 30, alg: str = "
   for N in P.NR: assert_dims(N, n)
   for N in P.NA: assert_dims(N, n)
 
+  # Check if D is an np.ndarray or list.
+  if not (issubclass(t := type(D), list) or issubclass(t, np.ndarray)):
+    raise TypeError(f"Expected dataset of type list or numpy.ndarray, got {t}!")
+
   # Batch mode.
   if A is None:
     if type(D) is np.ndarray: data = D if np.issubdtype(D.dtype, bytes) else D.astype(bytes)

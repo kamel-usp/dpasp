@@ -356,8 +356,8 @@ class Program:
         f, A = self.directives["learn"]
         D = f()
         from .wlearn import learn
-        if isinstance(D, tuple): learn(*D, **A)
-        else: learn(D, **A)
+        if isinstance(D, tuple): learn(self, *D, **A)
+        else: learn(self, D, **A)
     if len(self.Q) > 0:
       from exact import exact
       A = {"quiet": False}

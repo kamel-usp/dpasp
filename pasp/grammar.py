@@ -51,7 +51,7 @@ class PreparsingTransformer(lark.Transformer):
   def __default__(self, _, __, ___): return lark.visitors.Discard
   def SEMANTICS_OPT_LOGIC(self, O): return str(O)
   def SEMANTICS_OPT_PROB(self, _): return lark.visitors.Discard
-  def semantics(self, S): return S[0]
+  def semantics(self, S): return S[0] if len(S) > 0 else lark.visitors.Discard
   def WORD(self, W): return str(W)
   def ID(self, I): return int(I)
   def constdef(self, C):
@@ -76,7 +76,7 @@ class StableTransformer(lark.Transformer):
       def __new__(cls, tp: str, r: str = None, v = None, sc: dict = {}):
         return super(Pack, cls).__new__(cls, (tp, str(v) if r is None else r, r if v is None else v, sc))
       def __str__(self): return self[1]
-      def __repr__(self): return self.__str__()
+      def __repr__(self): return f"<{self[0]}: {self.__str__()}>"
     return Pack(t, rep, val, scope)
 
   @staticmethod
@@ -449,7 +449,7 @@ class StableTransformer(lark.Transformer):
 
   # Learning directive.
   def learn(self, L):
-    A = {str(L[i]): str(v) if isinstance(v := L[i+1], lark.Token) else v for i in range(1, len(L), 2)}
+    A = {str(L[i]): str(v) if isinstance(v := L[i+1], lark.Token) else v[2] for i in range(1, len(L), 2)}
     return self.pack("directive", "", ("learn", self.torch_scope[L[0][1]], A))
 
   # Semantics directive and options.
