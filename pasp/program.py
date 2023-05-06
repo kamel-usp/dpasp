@@ -350,7 +350,7 @@ class Program:
            f"\nQueries:\n{self.Q}>"
   def __repr__(self) -> str: return self.__str__()
 
-  def __call__(self):
+  def __call__(self, **kwargs):
     if self.directives is not None:
       if "learn" in self.directives:
         f, A = self.directives["learn"]
@@ -361,5 +361,6 @@ class Program:
     if len(self.Q) > 0:
       from exact import exact
       A = {"quiet": False}
+      A.update(kwargs)
       if "psemantics" in self.directives: A.update(self.directives["psemantics"])
-      exact(self, **A)
+      return exact(self, **A)
