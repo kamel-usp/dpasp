@@ -40,5 +40,30 @@ class TestLearning(PaspTest):
 
     self.assertAlmostEqual(P.PF[0].p, Q.PF[0].p, delta = EPS)
 
+  def test_neural_minimal(self):
+    R = pasp.parse("examples/neural_minimal.plp")(quiet = True)
+    self.assertTrue(np.allclose(R.flatten(), [0.8, 0.1]))
+
+  def test_neural_ad_minimal(self):
+    R = pasp.parse("examples/neural_ad_minimal.plp")(quiet = True)
+    E = [2/8, 5/8, 1/8, 1/4, 2/4, 1/4, 1/5, 2/5, 2/5, 1/3, 1/3, 1/3]
+    self.assertTrue(np.allclose(R.flatten(), E, atol = 0.01))
+
+  def test_neural_mult_minimal(self):
+    R = pasp.parse("examples/neural_mult_minimal.plp")(quiet = True)
+    self.assertTrue(np.allclose(R.flatten(), [0.25, 0.7, 0.1, 0.9, 0.5, 0.75], atol = 0.0001))
+
+  def test_neural_mult_ad_minimal(self):
+    R = pasp.parse("examples/neural_mult_ad_minimal.plp")(quiet = True)
+    E = [0.200, 0.400, 0.400,
+         0.050, 0.150, 0.800,
+         0.500, 0.300, 0.200,
+         0.200, 0.600, 0.200,
+         0.200, 0.275, 0.525,
+         0.700, 0.150, 0.150,
+         0.350, 0.250, 0.400,
+         0.800, 0.200, 0.000,]
+    self.assertTrue(np.allclose(R.flatten(), E, atol = 0.1))
+
 if __name__ == "__main__":
   unittest.main()
