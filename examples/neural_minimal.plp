@@ -1,57 +1,41 @@
-% This is the simplest case possible of neural rules in pasp.
+% This is the simplest case possible for neural rules in pasp.
 
 #python
 def net():
   # Define the neural network as a single neuron with a sigmoid as activation function.
   N = torch.nn.Sequential(
+    # w*x + b
     torch.nn.Linear(1, 1, bias = True),
     # Make sure the output is always in [0, 1].
+    # f(x) = sig(w*x + b)
     torch.nn.Sigmoid()
   )
-  # Initialize parameters to uniform distribution.
-  N.load_state_dict({"0.weight": torch.tensor([[0.0]]), "0.bias": torch.tensor([0.0])})
   return N
 
 def train():
-  # Input of the neural network during training.
+  # Input of the neural network during training: a 20x1 matrix with 10 0's and 10 1's.
   return [*[[0.]]*10, *[[1.]]*10]
 
 def test():
-  # Network inputs for evaluation.
+  # Network inputs for evaluation: a 2x1 matrix.
   return [[0.], [1.]]
+
+def dataset():
+  # The dataset where the first 8 elements are f(x), followed by 2 negations of f(x). The second
+  # half of the dataset consists of one f(x) followed by 9 negations of f(x). This essentially
+  # means that the first 10 elements define ℙ(f(0)) = 0.8, and the rest ℙ(f(1)) = 0.1.
+  return [*[["f(x)"]]*8, *[["~f(x)"]]*2, *[["f(x)"]]*1, *[["~f(x)"]]*9]
 #end.
 
 % Predicate g(x) is a special data predicate for declaring test and train datasets.
 g(x) ~ test(@test), train(@train).
 % Neural rule f(X) is defined by the function net, with optimizer parameters given after the with
 % keyword. Neural components must always come accompanied of a data predicate (in this case, g(X)).
-?::f(X) as @net with lr = 0.1, momentum = 0.1 :- g(X).
+?::f(X) as @net with momentum = 0.1 :- g(X).
 
 % For this case, f(X) is grounded to a single neural fact f(x). Let's evaluate its probability.
 #query(f(x)).
-
-% The program above, when run with the Python script below
-%
-%   P = pasp.parse("examples/neural_minimal.lp")
-%   # Produces a dataset equivalent to P(f(x)) = 0.8 when the neural network input is 0.0,
-%   # and P(f(x)) = 0.1 when the network's input is 1.0.
-%   D = [*[["f(x)"]]*8, *[["~f(x)"]]*2, *[["f(x)"]]*1, *[["~f(x)"]]*9]
-%   print("Initial probability values:")
-%   pasp.exact(P, psemantics = "maxent")
-%   # The fix-point learning algorithm does not support neural components.
-%   pasp.learn(P, D, niters = 500, alg = "lagrange", eta = 1.)
-%   print("Post-learning probabilities:")
-%   pasp.exact(P, psemantics = "maxent")
-%
-% produces the following output.
-%
-%   Initial probability values:
-%   ℙ(f(x)) = 0.500000
-%   ---
-%   ℙ(f(x)) = 0.500000
-%   ---
-%   Post-learning probabilities:
-%   ℙ(f(x)) = 0.800000
-%   ---
-%   ℙ(f(x)) = 0.100000
-%   ---
+% We define the maxent semantics to be used. The stable model semantics is set by default.
+#semantics(maxent).
+% We inject the return value of the dataset function to #learn and pass learning parameters.
+#learn(@dataset, lr = 0.1, niters = 500, alg = "lagrange").

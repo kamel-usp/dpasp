@@ -1,0 +1,75 @@
+% This is a minimal example of neural ADs in pasp.
+
+#python
+class Net(torch.nn.Module):
+  def __init__(self):
+    super().__init__()
+    self.f1 = torch.nn.Linear(2, 2)
+    self.f2 = torch.nn.Linear(2, 4)
+    self.f3 = torch.nn.Linear(4, 8)
+    self.sig = torch.nn.Sigmoid()
+    self.g = torch.nn.Linear(8, 6)
+    self.s = torch.nn.Softmax(dim = 1)
+  def forward(self, x):
+    return self.s(self.g(self.sig(self.f3(self.sig(self.f2(self.sig(self.f1(x))))))).view(-1, 3))
+
+def net():
+  return Net()
+
+def train():
+  # Input of the neural network during training.
+  return [*[[0., 0.]]*80, *[[0., 1.]]*80, *[[1., 0.]]*80, *[[1., 1.]]*80]
+
+def test():
+  # Network inputs for evaluation.
+  return [[0., 0.], [0., 1.], [1., 0.], [1., 1.]]
+
+def dataset():
+  def val(p: list, t: list, i: int, n: int, cp: float):
+    return t[0] if i < round(n*cp) else val(p[1:], t[1:], i, n, cp + p[1])
+  def gendata(p: list, t: list, n: int, outcome: int):
+    return [f"f(x, {val(p, t, i, n, p[0])}; {outcome})" for i in range(n)]
+
+  # Target probabilities:
+  #   ℙ(f(x, Y; 0) | Z = [0, 0]) = [0.200, 0.400, 0.400],
+  #   ℙ(f(x, Y; 1) | Z = [0, 0]) = [0.050, 0.150, 0.800],
+  #   ℙ(f(x, Y; 0) | Z = [0, 1]) = [0.500, 0.300, 0.200],
+  #   ℙ(f(x, Y; 1) | Z = [0, 1]) = [0.200, 0.600, 0.200],
+  #   ℙ(f(x, Y; 0) | Z = [1, 0]) = [0.200, 0.275, 0.525],
+  #   ℙ(f(x, Y; 1) | Z = [1, 0]) = [0.700, 0.150, 0.150],
+  #   ℙ(f(x, Y; 0) | Z = [1, 1]) = [0.350, 0.250, 0.400],
+  #   ℙ(f(x, Y; 1) | Z = [1, 1]) = [0.800, 0.200, 0.000],
+  # n is the number of examples for each row in the table above.
+  n = 40; T = ['a', 'b', 'c']
+  P = [([0.200, 0.400, 0.400], 0),
+       ([0.050, 0.150, 0.800], 1),
+       ([0.500, 0.300, 0.200], 0),
+       ([0.200, 0.600, 0.200], 1),
+       ([0.200, 0.275, 0.525], 0),
+       ([0.700, 0.150, 0.150], 1),
+       ([0.350, 0.250, 0.400], 0),
+       ([0.800, 0.200, 0.000], 1),
+      ]
+  D = []
+  for p, o in P: D.extend(gendata(p, T, n, o))
+  import numpy
+  return numpy.array(D).reshape(-1, 1)
+#end.
+
+% Just like in neural rules, predicate g(x) defines the data (train and test datasets) to be used
+% in the network.
+g(x) ~ test(@test), train(@train).
+
+% The neural network is defined in function test_ad_mlp in hub/hubconf.py as a PyTorch Hub model.
+?::f(X, {a, b, c}; {0, 1}) as @net :- g(X).
+
+% We want to evaluate the outputs of the network f (here characterized by possible values a, b, c).
+#query(f(x, a; 0)).
+#query(f(x, b; 0)).
+#query(f(x, c; 0)).
+#query(f(x, a; 1)).
+#query(f(x, b; 1)).
+#query(f(x, c; 1)).
+
+#semantics(maxent).
+#learn(@dataset, lr = 0.01, niters = 2000, alg = "lagrange").
