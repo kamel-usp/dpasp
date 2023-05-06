@@ -1,7 +1,9 @@
 import numpy as np
 
 def learn(P, D: np.ndarray, A: np.ndarray = None, niters: int = 30, alg: str = "fixpoint",
-          lr: float = 0.001, batch: int = 100, lstable_sat: bool = True):
+          lr: float = 0.001, batch: int = None, lstable_sat: bool = True):
+  # If batch is not given, set batch to the size of the dataset.
+  if batch is None: batch = len(D)
   # Check if data dimensions all match.
   def assert_dims(N, e: int):
     if N.learnable and ((o := len(N.train)) != e):
