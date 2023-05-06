@@ -1,4 +1,9 @@
 % This is the simplest case possible for neural rules in pasp.
+%
+% In this example, we will declare a neural predicate f(X) pointing to a neural network defined by
+% function @net, and will learn its parameters so that the distribution of f(X) follows
+%   ℙ(f(0)) = 0.8 and ℙ(f(1)) = 0.1.
+%
 
 #python
 def net():

@@ -1,4 +1,20 @@
-% This is a minimal example of neural ADs in pasp.
+% This is a minimal example of neural ADs in pasp with multiple outcomes.
+%
+% A neural annotated disjunction has k outcomes when its neural network outputs k probability
+% distributions.
+%
+% In this example, we will declare a neural annotated disjunction f(X, {a, b, c}) pointing to a
+% neural network defined by function @net, and will learn its parameters so that the distribution
+% of f(X, {a, b, c}) follows
+%   ℙ(f([0, 0], {a, b, c}; 0) | Z = [0, 0]) = [0.200, 0.400, 0.400],
+%   ℙ(f([0, 0], {a, b, c}; 1) | Z = [0, 0]) = [0.050, 0.150, 0.800],
+%   ℙ(f([0, 1], {a, b, c}; 0) | Z = [0, 1]) = [0.500, 0.300, 0.200],
+%   ℙ(f([0, 1], {a, b, c}; 1) | Z = [0, 1]) = [0.200, 0.600, 0.200],
+%   ℙ(f([1, 0], {a, b, c}; 0) | Z = [1, 0]) = [0.200, 0.275, 0.525],
+%   ℙ(f([1, 0], {a, b, c}; 1) | Z = [1, 0]) = [0.700, 0.150, 0.150],
+%   ℙ(f([1, 1], {a, b, c}; 0) | Z = [1, 1]) = [0.350, 0.250, 0.400],
+%   ℙ(f([1, 1], {a, b, c}; 1) | Z = [1, 1]) = [0.800, 0.200, 0.000].
+%
 
 #python
 class Net(torch.nn.Module):

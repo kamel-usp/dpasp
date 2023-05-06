@@ -1,4 +1,13 @@
 % This is a minimal example of neural ADs in pasp.
+%
+% In this example, we will declare a neural annotated disjunction f(X, {a, b, c}) pointing to a
+% neural network defined by function @net, and will learn its parameters so that the distribution
+% of f(X, {a, b, c}) follows
+%   ℙ(f([0, 0], {a, b, c})) = [2/8, 5/8, 1/8],
+%   ℙ(f([0, 1], {a, b, c})) = [1/4, 2/4, 1/4],
+%   ℙ(f([1, 0], {a, b, c})) = [1/5, 2/5, 2/5],
+%   ℙ(f([1, 1], {a, b, c})) = [1/3, 1/3, 1/3].
+%
 
 #python
 def train():

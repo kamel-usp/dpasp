@@ -1,4 +1,12 @@
 % This is the simplest scenario possible for neural rules with multiple outcomes in pasp.
+%
+% A neural predicate has k outcomes when its neural network outputs k probability distributions.
+%
+% In this example, we will declare a neural predicate f(X, Y) pointing to a neural network defined
+% by function @net with 3 outcomes, and will learn its parameters so that the distributions of
+% f(X, Y) follow
+%   ℙ(f(0, a)) = 0.25, ℙ(f(0, b)) = 0.70,  ℙ(f(0, c)) = 0.10,
+%   ℙ(f(1, a)) = 0.90, ℙ(f(1, b)) = 0.50,  ℙ(f(1, c)) = 0.75.
 
 #python
 def net():
