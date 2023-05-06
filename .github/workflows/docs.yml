@@ -38,6 +38,9 @@ jobs:
           pdoc --math --logo "https://raw.githubusercontent.com/RenatoGeh/pasp/master/logo/logo.svg" --logo-link "https://renatogeh.github.io/pasp" -t docs/user pasp -o _site/
           doxygen
           cp -r examples/ _site/
+      - name: Generate syntax highlighted examples
+        run: |
+          bash docs/generate_examples.sh
       - name: Upload to GitHub Pages
         uses: actions/upload-pages-artifact@v1
         with:
