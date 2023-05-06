@@ -15,7 +15,7 @@ class TestCommand(Command):
   def run(self):
     assert os.getcwd() == self.cwd, f"Must be in package root: {self.cwd}"
     os.system("python setup.py build_ext --inplace && " \
-              "python -m unittest tests/examples.py tests/counting.py tests/sampling.py -b")
+              "python -m unittest tests/examples.py tests/counting.py tests/sampling.py tests/learning.py -b")
 
 # Debug concurrency problems by forcing sequential running.
 # STD_MACROS = [("NUM_PROCS", str(1)), ("_GNU_SOURCE", None)]
