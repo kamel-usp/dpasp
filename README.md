@@ -13,7 +13,7 @@ some examples to show how to do inference with this package.
 ## Examples
 
 Let's first take a look at the popular `asia` Bayesian network, here encoded as the probabilistic
-logic program [`examples/asia.plp`](examples/asia.plp).
+logic program [`examples/asia.plp`](examples/asia.html).
 
 ```pasp
 0.01::trip. 0.5::smoking.
@@ -58,7 +58,7 @@ grounded rule. For efficiency reasons, subgoals in first-order probabilistic rul
 grounded following the non-probabilistic part of the program; otherwise, at every total choice a
 new grounded program would have to be generated.
 
-Let's take a look at the remaining lines in [`examples/asia.plp`](examples/asia.plp). To query for
+Let's take a look at the remaining lines in [`examples/asia.plp`](examples/asia.html). To query for
 probabilities, we use a similar syntax to [PASOCS](https://arxiv.org/abs/2105.10908).
 
 ```pasp
@@ -112,7 +112,7 @@ Queries
 
 A PLP, here the Python object `P`, is a tuple $\langle L,PF,CF,PR,Q \rangle$, where $L$ is the
 logic program composed solely of logic facts and rules, $PF$ are the probabilistic facts, $CF$ are
-the credal facts (see [`examples/prisoners.plp`](examples/prisoners.plp)), $PR$ are probabilistic
+the credal facts (see [`examples/prisoners.plp`](examples/prisoners.html)), $PR$ are probabilistic
 rules, $and $Q$ are the queries to be asked from the solver. We can see from the output above the
 generated rules and probabilistic facts produced by the unrolling of probabilistic rules as well as
 the queries to be asked.
@@ -138,9 +138,9 @@ this package.
 Function `pasp.exact` returns the results of the queries as a tuple of pairs of lower and upper
 probabilities in the order the queries are asked for in the PLP code.
 
-Since [`examples/asia.plp`](examples/asia.plp) comes from a Bayesian network and therefore is an
+Since [`examples/asia.plp`](examples/asia.html) comes from a Bayesian network and therefore is an
 acyclic PLP, the probabilities returned are sharp. Let's take a look at another (very simple)
-example where this is not the case: [`examples/insomnia.plp`](examples/insomnia.plp).
+example where this is not the case: [`examples/insomnia.plp`](examples/insomnia.html).
 
 ```pasp
 sleep :- not work, not insomnia. work :- not sleep.
@@ -192,7 +192,7 @@ in `pasp`. As of now, the following semantics are implemented:
 
 ### Examples of logic semantics
 
-Let us first examine the Barber Paradox example (see [`examples/barber.plp`](examples/barber.plp)).
+Let us first examine the Barber Paradox example (see [`examples/barber.plp`](examples/barber.html)).
 
 ```pasp
 shaves(X, Y) :- barber(X), villager(Y), not shaves(Y, Y).
@@ -258,7 +258,7 @@ that `shaves(b, b)` is either set to false or undefined with equal probability.
 
 Another interesting semantic is the *L-stable semantics*, which in practice agrees with the stable
 model semantics when there exist stable models and with the partial semantics otherwise. Let us
-take a look at the 3-coloring graph problem (see [`examples/3coloring.plp`](examples/3coloring.plp)).
+take a look at the 3-coloring graph problem (see [`examples/3coloring.plp`](examples/3coloring.html)).
 
 ```pasp
 #const n = 5.
@@ -311,7 +311,7 @@ minimal models with `undef` when stable models are found.
 
 ### Examples of probabilistic semantics
 
-Consider the game example shown in [`examples/game.plp`](examples/game.plp).
+Consider the game example shown in [`examples/game.plp`](examples/game.html).
 
 ```pasp
 wins(X) :- move(X, Y), not wins(Y).
