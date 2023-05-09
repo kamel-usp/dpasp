@@ -22,10 +22,10 @@ def dataset():
   # The dataset defines the distribution:
   #   [2/8, 5/8, 1/8], [1/4, 2/4, 1/4], [1/5, 2/5, 2/5], [1/3, 1/3, 1/3]
   # for each of the 4 possible network inputs [0., 0.], [0., 1.], [1., 0.], [1., 1.].
-  return [["f(x, a)"], ["f(x, a)"], ["f(x, b)"], ["f(x, b)"], ["f(x, b)"], ["f(x, b)"],
-          ["f(x, b)"], ["f(x, c)"], ["f(x, a)"], ["f(x, b)"], ["f(x, b)"], ["f(x, c)"],
-          ["f(x, a)"], ["f(x, b)"], ["f(x, b)"], ["f(x, c)"], ["f(x, c)"], ["f(x, a)"],
-          ["f(x, b)"], ["f(x, c)"]]
+  return [["label(a)"], ["label(a)"], ["label(b)"], ["label(b)"], ["label(b)"], ["label(b)"],
+          ["label(b)"], ["label(c)"], ["label(a)"], ["label(b)"], ["label(b)"], ["label(c)"],
+          ["label(a)"], ["label(b)"], ["label(b)"], ["label(c)"], ["label(c)"], ["label(a)"],
+          ["label(b)"], ["label(c)"]]
 #end.
 
 % Just like in neural rules, predicate g(x) defines the data (train and test datasets) to be used
@@ -34,11 +34,14 @@ g(x) ~ test(@test), train(@train).
 
 % The neural network is defined in function test_ad_mlp in hub/hubconf.py as a PyTorch Hub model.
 ?::f(X, {a, b, c}) as @test_ad_mlp on "hub" :- g(X).
+label(Y) :- f(x, Y).
 
 % We want to evaluate the outputs of the network f (here characterized by possible values a, b, c).
-#query(f(x, a)).
-#query(f(x, b)).
-#query(f(x, c)).
+% The presence of parentheses surrounding queries is optional.
+#query label(a).
+#query label(b).
+#query label(c).
 
-#semantics(maxent).
-#learn(@dataset, lr = 0.1, niters = 2000, alg = "lagrange").
+% Parentheses are optional.
+#semantics maxent.
+#learn @dataset, lr = 0.1, niters = 2000, alg = "lagrange".

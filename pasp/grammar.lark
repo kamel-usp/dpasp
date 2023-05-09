@@ -140,12 +140,14 @@ _learn_opt_alg: /alg/ "=" "\"" (/lagrange/ | /neurasp/ | /fixpoint/) "\""
 _learn_opt_batch: /batch/ "=" ID
 _learn_opt_niters: /niters/ "=" ID
 _learn_opt: (_learn_opt_lr | _learn_opt_alg | _learn_opt_batch | _learn_opt_niters)
-learn: "#learn" "(" "@" PY_FUNC ("," _learn_opt)* ")" "."
+_learn_exp: "@" PY_FUNC ("," _learn_opt)*
+learn: "#learn" (("(" _learn_exp ")") | (_learn_exp)) "."
 
 // Semantics options and directive.
 SEMANTICS_OPT_LOGIC: "stable" | "lstable" | "partial" | "smproblog"
 SEMANTICS_OPT_PROB:  "maxent" | "credal"
-semantics: "#semantics" "(" ((SEMANTICS_OPT_LOGIC ("," SEMANTICS_OPT_PROB)?) | (SEMANTICS_OPT_PROB ("," SEMANTICS_OPT_LOGIC)?)) ")" "."
+_semantics_exp: ((SEMANTICS_OPT_LOGIC ("," SEMANTICS_OPT_PROB)?) | (SEMANTICS_OPT_PROB ("," SEMANTICS_OPT_LOGIC)?))
+semantics: "#semantics" (("(" _semantics_exp ")") | (_semantics_exp)) "."
 
 // Constraint.
 constraint: ":-" body "."
@@ -156,7 +158,8 @@ bop: ((ID | VAR | bop) OP (ID | VAR | bop)) | (VAR EQQ interval)
 // Query.
 qelement: (NEG | UND)? (WORD | query_grpred)
 interp: qelement ("," qelement)*
-query: "#query" "(" interp ("|" interp)? ")" "."?
+_interp_exp: interp ("|" interp)?
+query: "#query" (("(" _interp_exp ")") | (_interp_exp)) "."?
 
 // Constant definition.
 constdef: "#const" WORD "=" ID "."
