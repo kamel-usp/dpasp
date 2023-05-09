@@ -47,7 +47,9 @@ bool init_observations(observations_t *O, PyArrayObject *obs, PyArrayObject *ato
     char a[MAX_ATOM_SIZE] = {0};
     char *d = (char*) PyArray_GETPTR1(atoms, i);
     /* Replace ';' with ','. */
-    for (size_t j = 0; d[j] && j < len; ++j) a[j] = (d[j] == ';')*',' + (d[j] != ';')*d[j];
+    size_t j;
+    for (j = 0; d[j] && j < len; ++j) a[j] = (d[j] == ';')*',' + (d[j] != ';')*d[j];
+    a[j] = '\0';
     if (!clingo_parse_term(a, NULL, NULL, 20, &A[i])) goto clingo_err;
   }
 
@@ -121,10 +123,11 @@ bool init_dense_observations(observations_t *O, PyArrayObject *obs, size_t batch
       char *d = PyArray_GETPTR2(obs, i, j);
       if (!d[0]) break;
       bool o = d[0] == '~';
-      size_t slen = len-o;
+      size_t slen = len-o, l;
       d += o;
       /* Replace ';' with ','. */
-      for (size_t l = 0; d[l] && l < slen; ++l) a[l] = (d[l] == ';')*',' + (d[l] != ';')*d[l];
+      for (l = 0; d[l] && l < slen; ++l) a[l] = (d[l] == ';')*',' + (d[l] != ';')*d[l];
+      a[l] = '\0';
       if (!clingo_parse_term(a, NULL, NULL, 20, &V[i][j])) goto clingo_err;
       S[i][j] = !o;
     }
@@ -168,10 +171,11 @@ bool next_dense_observations(observations_t *O, PyArrayObject *obs) {
         break;
       } else {
         bool o = d[0] == '~';
-        size_t slen = len-o;
+        size_t slen = len-o, l;
         d += o;
         /* Replace ';' with ','. */
-        for (size_t l = 0; d[l] && l < slen; ++l) a[l] = (d[l] == ';')*',' + (d[l] != ';')*d[l];
+        for (l = 0; d[l] && l < slen; ++l) a[l] = (d[l] == ';')*',' + (d[l] != ';')*d[l];
+        a[l] = '\0';
         if (!clingo_parse_term(a, NULL, NULL, 20, &O->V[i][j])) goto clingo_err;
         O->S[i][j] = !o;
       }
