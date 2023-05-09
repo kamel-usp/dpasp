@@ -1,24 +1,24 @@
 % This is a minimal example of neural ADs in pasp.
 %
-% In this example, we will declare a neural annotated disjunction f(X, {a, b, c}) pointing to a
-% neural network defined by function @net, and will learn its parameters so that the distribution
-% of f(X, {a, b, c}) follows
-%   ℙ(f([0, 0], {a, b, c})) = [2/8, 5/8, 1/8],
-%   ℙ(f([0, 1], {a, b, c})) = [1/4, 2/4, 1/4],
-%   ℙ(f([1, 0], {a, b, c})) = [1/5, 2/5, 2/5],
-%   ℙ(f([1, 1], {a, b, c})) = [1/3, 1/3, 1/3].
+% In this example, we will declare a neural annotated disjunction model(X, {a, b, c}) pointing to a
+% neural network defined by function @test_ad_mlp, and will learn its parameters so that the
+% distribution of model(X, {a, b, c}) follows
+%   ℙ(model([0, 0], {a, b, c})) = [2/8, 5/8, 1/8],
+%   ℙ(model([0, 1], {a, b, c})) = [1/4, 2/4, 1/4],
+%   ℙ(model([1, 0], {a, b, c})) = [1/5, 2/5, 2/5],
+%   ℙ(model([1, 1], {a, b, c})) = [1/3, 1/3, 1/3].
 %
 
 #python
-def train():
+def input_train():
   # Input of the neural network during training.
   return [*[[0., 0.]]*8, *[[0., 1.]]*4, *[[1., 0.]]*5, *[[1., 1.]]*3]
 
-def test():
+def input_test():
   # Network inputs for evaluation.
   return [[0., 0.], [0., 1.], [1., 0.], [1., 1.]]
 
-def dataset():
+def output_train():
   # The dataset defines the distribution:
   #   [2/8, 5/8, 1/8], [1/4, 2/4, 1/4], [1/5, 2/5, 2/5], [1/3, 1/3, 1/3]
   # for each of the 4 possible network inputs [0., 0.], [0., 1.], [1., 0.], [1., 1.].
@@ -28,15 +28,17 @@ def dataset():
           ["label(b)"], ["label(c)"]]
 #end.
 
-% Just like in neural rules, predicate g(x) defines the data (train and test datasets) to be used
-% in the network.
-g(x) ~ test(@test), train(@train).
+% Just like in neural rules, predicate input(x) defines the data (train and test datasets) to be
+% used in the network.
+input(x) ~ test(@input_test), train(@input_train).
 
 % The neural network is defined in function test_ad_mlp in hub/hubconf.py as a PyTorch Hub model.
-?::f(X, {a, b, c}) as @test_ad_mlp on "hub" :- g(X).
-label(Y) :- f(x, Y).
+% This is an alternative to writing out your own network in the #python block; instead, you may
+% simply pull from the PyTorch Hub.
+?::model(X, {a, b, c}) as @test_ad_mlp on "hub" :- input(X).
+label(Y) :- model(x, Y).
 
-% We want to evaluate the outputs of the network f (here characterized by possible values a, b, c).
+% We want to evaluate the outputs of network model (here characterized by possible values a, b, c).
 % The presence of parentheses surrounding queries is optional.
 #query label(a).
 #query label(b).
@@ -44,4 +46,4 @@ label(Y) :- f(x, Y).
 
 % Parentheses are optional.
 #semantics maxent.
-#learn @dataset, lr = 0.1, niters = 2000, alg = "lagrange".
+#learn @output_train, lr = 0.1, niters = 2000, alg = "lagrange".
