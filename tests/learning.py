@@ -65,5 +65,9 @@ class TestLearning(PaspTest):
          0.800, 0.200, 0.000,]
     self.assertTrue(np.allclose(R.flatten(), E, atol = 0.1))
 
+  def test_neural_xor(self):
+    R = pasp.parse("examples/neural_xor.plp")(quiet = True)
+    self.assertTrue(np.allclose(R.flatten(), [.0, .3, .6, .0], atol = 0.01))
+
 if __name__ == "__main__":
   unittest.main()
