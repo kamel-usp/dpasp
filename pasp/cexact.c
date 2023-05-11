@@ -1230,3 +1230,8 @@ cleanup:
   return ok;
 }
 
+double ll_prob_storage(prob_storage_t *P, size_t n) {
+  double ll = 0.0;
+  for (size_t i = 0; i < n; ++i) ll += log(P->P[i].o);
+  return ll;
+}
