@@ -146,7 +146,8 @@ void compute_neurasp(program_t *P, prob_storage_t *Q, size_t N, double eta,
 }
 
 bool learn(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
-    PyArrayObject *atoms, size_t niters, double eta, bool lstable_sat, size_t which) {
+    PyArrayObject *atoms, size_t niters, double eta, bool lstable_sat, size_t which,
+    uint8_t display) {
   observations_t O = {0}; /* Observations as a C type. */
   prob_storage_t Q[NUM_PROCS] = {{0}}; /* Storage for observation probabilities. */
   size_t num_procs = 0, N = 0;
@@ -155,9 +156,13 @@ bool learn(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
     compute_fixpoint, compute_lagrange, compute_neurasp
   };
   bool derive = which != ALG_FIXPOINT;
-  progressbar *bar = progressbar_new("Learning", niters);
+  double ll = -INFINITY;
+  progressbar *bar = display ? progressbar_new("Learning", niters,
+                                               display == DISPLAY_LOGLIKELIHOOD) : NULL;
 
-  if (!bar) goto cleanup;
+  if (display && !bar) goto cleanup;
+  /* Reuse display for figuring if LL should be displayed. */
+  display = (display == DISPLAY_LOGLIKELIHOOD);
 
   if (!init_observations(&O, obs, atoms)) goto cleanup;
   if (!(num_procs = init_prob_storage_seq(Q, P, &O))) goto cleanup;
@@ -182,7 +187,7 @@ bool learn(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
     update_ground_pr(P, &Q[0]);
 
     /* Update progress bar. */
-    progressbar_inc(bar);
+    if (bar) progressbar_inc(bar, display ? (ll = ll_prob_storage(&Q[0], O.n)) : 0.);
 
     /* Check for signals. */
     if (PyErr_CheckSignals()) goto cleanup;
@@ -195,7 +200,7 @@ bool learn(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
 
   ok = true;
 cleanup:
-  progressbar_finish(bar);
+  if (bar) progressbar_finish(bar, ll);
   free_observations_contents(&O);
   for (size_t i = 1; i < num_procs; ++i) free_prob_storage_contents(&Q[i], false);
   free_prob_storage_contents(&Q[0], true);
@@ -203,18 +208,18 @@ cleanup:
 }
 
 bool learn_fixpoint(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
-    PyArrayObject *atoms, size_t niters, bool lstable_sat) {
-  return learn(P, obs, obs_counts, atoms, niters, 0., lstable_sat, ALG_FIXPOINT);
+    PyArrayObject *atoms, size_t niters, bool lstable_sat, uint8_t display) {
+  return learn(P, obs, obs_counts, atoms, niters, 0., lstable_sat, ALG_FIXPOINT, display);
 }
 
 bool learn_lagrange(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
-    PyArrayObject *atoms, size_t niters, double eta, bool lstable_sat) {
-  return learn(P, obs, obs_counts, atoms, niters, eta, lstable_sat, ALG_LAGRANGE);
+    PyArrayObject *atoms, size_t niters, double eta, bool lstable_sat, uint8_t display) {
+  return learn(P, obs, obs_counts, atoms, niters, eta, lstable_sat, ALG_LAGRANGE, display);
 }
 
 bool learn_neurasp(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
-    PyArrayObject *atoms, size_t niters, double eta, bool lstable_sat) {
-  return learn(P, obs, obs_counts, atoms, niters, eta, lstable_sat, ALG_NEURASP);
+    PyArrayObject *atoms, size_t niters, double eta, bool lstable_sat, uint8_t display) {
+  return learn(P, obs, obs_counts, atoms, niters, eta, lstable_sat, ALG_NEURASP, display);
 }
 
 void compute_fixpoint_batch(program_t *P, prob_storage_t *Q, observations_t *O, double eta) {
@@ -347,7 +352,7 @@ void compute_neurasp_batch(program_t *P, prob_storage_t *Q, observations_t *O, d
 }
 
 bool learn_batch(program_t *P, PyArrayObject *obs, size_t niters, double eta,
-    size_t batch, bool lstable_sat, size_t which) {
+    size_t batch, bool lstable_sat, size_t which, uint8_t display) {
   observations_t O = {0}; /* Dense representation of observations. */
   prob_storage_t Q[NUM_PROCS] = {{0}}; /* Storage for observation probabilities. */
   size_t num_procs = 0;
@@ -356,9 +361,14 @@ bool learn_batch(program_t *P, PyArrayObject *obs, size_t niters, double eta,
     compute_fixpoint_batch, compute_lagrange_batch, compute_neurasp_batch
   };
   bool derive = which != ALG_FIXPOINT;
-  progressbar *bar = progressbar_new("Learning", niters);
+  size_t num_obs = PyArray_DIM(obs, 0);
+  progressbar *bar = display ? progressbar_new("Learning", niters*(num_obs/batch),
+                                               display == DISPLAY_LOGLIKELIHOOD) : NULL;
+  double ll = -INFINITY;
 
-  if (!bar) goto cleanup;
+  if (display && !bar) goto cleanup;
+  /* Reuse display for figuring if LL should be displayed. */
+  display = (display == DISPLAY_LOGLIKELIHOOD);
 
   if (!init_dense_observations(&O, obs, batch)) goto cleanup;
   if (!(num_procs = init_prob_storage_seq(Q, P, &O))) goto cleanup;
@@ -381,7 +391,7 @@ bool learn_batch(program_t *P, PyArrayObject *obs, size_t niters, double eta,
       if (!backward_neural(P, &Q[0])) goto cleanup;
 
       /* Update progress bar. */
-      progressbar_inc(bar);
+      if (bar) progressbar_inc(bar, display ? (ll = ll_prob_storage(&Q[0], O.n)/O.n) : 0.);
 
       if (!next_dense_observations(&O, obs)) goto cleanup;
 
@@ -397,7 +407,7 @@ bool learn_batch(program_t *P, PyArrayObject *obs, size_t niters, double eta,
 
   ok = true;
 cleanup:
-  progressbar_finish(bar);
+  if (bar) progressbar_finish(bar, ll);
   free_dense_observations_contents(&O);
   for (size_t i = 1; i < num_procs; ++i) free_prob_storage_contents(&Q[i], false);
   free_prob_storage_contents(&Q[0], true);
@@ -405,18 +415,18 @@ cleanup:
 }
 
 bool learn_fixpoint_batch(program_t *P, PyArrayObject *obs, size_t niters, size_t batch,
-    bool lstable_sat) {
-  return learn_batch(P, obs, niters, 0., batch, lstable_sat, ALG_FIXPOINT);
+    bool lstable_sat, uint8_t display) {
+  return learn_batch(P, obs, niters, 0., batch, lstable_sat, ALG_FIXPOINT, display);
 }
 
 bool learn_lagrange_batch(program_t *P, PyArrayObject *obs, size_t niters, double eta, size_t batch,
-    bool lstable_sat) {
-  return learn_batch(P, obs, niters, eta, batch, lstable_sat, ALG_LAGRANGE);
+    bool lstable_sat, uint8_t display) {
+  return learn_batch(P, obs, niters, eta, batch, lstable_sat, ALG_LAGRANGE, display);
 }
 
 bool learn_neurasp_batch(program_t *P, PyArrayObject *obs, size_t niters, double eta, size_t batch,
-    bool lstable_sat) {
-  return learn_batch(P, obs, niters, eta, batch, lstable_sat, ALG_NEURASP);
+    bool lstable_sat, uint8_t display) {
+  return learn_batch(P, obs, niters, eta, batch, lstable_sat, ALG_NEURASP, display);
 }
 
 bool update_program_parameters(program_t *P, prob_storage_t *Q) {

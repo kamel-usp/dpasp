@@ -21,8 +21,9 @@ enum { DEFAULT_SCREEN_WIDTH = 80 };
 enum { MINIMUM_BAR_WIDTH = 10 };
 /// The format in which the estimated remaining time will be reported
 static const char *const ETA_FORMAT = "ETA:%2dh%02dm%02ds";
+static const char *const ETA_LL_FORMAT = "ETA:%2dh%02dm%02ds | LL=%-10.5f";
 /// The maximum number of characters that the ETA_FORMAT can ever yield
-enum { ETA_FORMAT_LENGTH  = 13 };
+enum { ETA_FORMAT_LENGTH  = 13, ETA_LL_FORMAT_LENGTH = 29 };
 /// Amount of screen width taken up by whitespace (i.e. whitespace between label/bar/ETA components)
 enum { WHITESPACE_LENGTH = 2 };
 /// The amount of width taken up by the border of the bar component.
@@ -36,14 +37,14 @@ typedef struct {
   int seconds;
 } progressbar_time_components;
 
-static void progressbar_draw(const progressbar *bar);
+static void progressbar_draw(const progressbar *bar, double ll);
 
 /**
 * Create a new progress bar with the specified label, max number of steps, and format string.
 * Note that `format` must be exactly three characters long, e.g. "<->" to render a progress
 * bar like "<---------->". Returns NULL if there isn't enough memory to allocate a progressbar
 */
-progressbar *progressbar_new_with_format(const char *label, unsigned long max, const char *format)
+progressbar *progressbar_new_with_format(const char *label, unsigned long max, const char *format, bool has_ll)
 {
   progressbar *new = malloc(sizeof(progressbar));
   if(new == NULL) {
@@ -57,9 +58,11 @@ progressbar *progressbar_new_with_format(const char *label, unsigned long max, c
   new->format.begin = format[0];
   new->format.fill = format[1];
   new->format.end = format[2];
+  new->format.len = has_ll*ETA_LL_FORMAT_LENGTH + (!has_ll)*ETA_FORMAT_LENGTH;
+  new->ll = has_ll;
 
   progressbar_update_label(new, label);
-  progressbar_draw(new);
+  progressbar_draw(new, 0.);
 
   return new;
 }
@@ -67,9 +70,9 @@ progressbar *progressbar_new_with_format(const char *label, unsigned long max, c
 /**
 * Create a new progress bar with the specified label and max number of steps.
 */
-progressbar *progressbar_new(const char *label, unsigned long max)
+progressbar *progressbar_new(const char *label, unsigned long max, bool has_ll)
 {
-  return progressbar_new_with_format(label, max, "[=]");
+  return progressbar_new_with_format(label, max, "[=]", has_ll);
 }
 
 void progressbar_update_label(progressbar *bar, const char *label)
@@ -88,18 +91,18 @@ void progressbar_free(progressbar *bar)
 /**
 * Increment an existing progressbar by `value` steps.
 */
-void progressbar_update(progressbar *bar, unsigned long value)
+void progressbar_update(progressbar *bar, unsigned long value, double ll)
 {
   bar->value = value;
-  progressbar_draw(bar);
+  progressbar_draw(bar, ll);
 }
 
 /**
 * Increment an existing progressbar by a single step.
 */
-void progressbar_inc(progressbar *bar)
+void progressbar_inc(progressbar *bar, double ll)
 {
-  progressbar_update(bar, bar->value+1);
+  progressbar_update(bar, bar->value+1, ll);
 }
 
 static void progressbar_write_char(FILE *file, const int ch, const size_t times) {
@@ -122,15 +125,15 @@ static unsigned int get_screen_width(void) {
   }
 }
 
-static int progressbar_bar_width(int screen_width, int label_length) {
-  return progressbar_max(MINIMUM_BAR_WIDTH, screen_width - label_length - ETA_FORMAT_LENGTH - WHITESPACE_LENGTH);
+static int progressbar_bar_width(int screen_width, int label_length, unsigned long format_len) {
+  return progressbar_max(MINIMUM_BAR_WIDTH, screen_width - label_length - format_len - WHITESPACE_LENGTH);
 }
 
-static int progressbar_label_width(int screen_width, int label_length, int bar_width) {
-  int eta_width = ETA_FORMAT_LENGTH;
+static int progressbar_label_width(int screen_width, int label_length, int bar_width, unsigned format_len) {
+  int eta_width = format_len;
 
   // If the progressbar is too wide to fit on the screen, we must sacrifice the label.
-  if (label_length + 1 + bar_width + 1 + ETA_FORMAT_LENGTH > screen_width) {
+  if (label_length + 1 + bar_width + 1 + eta_width > screen_width) {
     return progressbar_max(0, screen_width - bar_width - eta_width - WHITESPACE_LENGTH);
   } else {
     return label_length;
@@ -156,12 +159,12 @@ static progressbar_time_components progressbar_calc_time_components(int seconds)
   return components;
 }
 
-static void progressbar_draw(const progressbar *bar)
+static void progressbar_draw(const progressbar *bar, double ll)
 {
   int screen_width = get_screen_width();
   int label_length = strlen(bar->label);
-  int bar_width = progressbar_bar_width(screen_width, label_length);
-  int label_width = progressbar_label_width(screen_width, label_length, bar_width);
+  int bar_width = progressbar_bar_width(screen_width, label_length, bar->format.len);
+  int label_width = progressbar_label_width(screen_width, label_length, bar_width, bar->format.len);
 
   int progressbar_completed = (bar->value >= bar->max);
   int bar_piece_count = bar_width - BAR_BORDER_WIDTH;
@@ -191,17 +194,18 @@ static void progressbar_draw(const progressbar *bar)
 
   // Draw the ETA
   fputc(' ', stderr);
-  fprintf(stderr, ETA_FORMAT, eta.hours, eta.minutes, eta.seconds);
+  if (bar->ll) fprintf(stderr, ETA_LL_FORMAT, eta.hours, eta.minutes, eta.seconds, ll);
+  else fprintf(stderr, ETA_FORMAT, eta.hours, eta.minutes, eta.seconds);
   fputc('\r', stderr);
 }
 
 /**
 * Finish a progressbar, indicating 100% completion, and free it.
 */
-void progressbar_finish(progressbar *bar)
+void progressbar_finish(progressbar *bar, double ll)
 {
   // Make sure we fill the progressbar so things look complete.
-  progressbar_draw(bar);
+  progressbar_draw(bar, ll);
 
   // Print a newline, so that future outputs to stderr look prettier
   fprintf(stderr, "\n");

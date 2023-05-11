@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,7 +45,11 @@ typedef struct _progressbar_t
     char begin;
     char fill;
     char end;
+    unsigned long len;
   } format;
+
+  /// Contains log-likelihood?
+  bool ll;
 } progressbar;
 
 /// Create a new progressbar with the specified label and number of steps.
@@ -55,7 +60,7 @@ typedef struct _progressbar_t
 ///
 /// @return A progressbar configured with the provided arguments. Note that the user is responsible for disposing
 ///         of the progressbar via progressbar_finish when finished with the object.
-progressbar *progressbar_new(const char *label, unsigned long max);
+progressbar *progressbar_new(const char *label, unsigned long max, bool has_ll);
 
 /// Create a new progressbar with the specified label, number of steps, and format string.
 ///
@@ -69,16 +74,16 @@ progressbar *progressbar_new(const char *label, unsigned long max);
 ///
 /// @return A progressbar configured with the provided arguments. Note that the user is responsible for disposing
 ///         of the progressbar via progressbar_finish when finished with the object.
-progressbar *progressbar_new_with_format(const char *label, unsigned long max, const char *format);
+progressbar *progressbar_new_with_format(const char *label, unsigned long max, const char *format, bool has_ll);
 
 /// Free an existing progress bar. Don't call this directly; call *progressbar_finish* instead.
 void progressbar_free(progressbar *bar);
 
 /// Increment the given progressbar. Don't increment past the initialized # of steps, though.
-void progressbar_inc(progressbar *bar);
+void progressbar_inc(progressbar *bar, double ll);
 
 /// Set the current status on the given progressbar.
-void progressbar_update(progressbar *bar, unsigned long value);
+void progressbar_update(progressbar *bar, unsigned long value, double ll);
 
 /// Set the label of the progressbar. Note that no rendering is done. The label is simply set so that the next
 /// rendering will use the new label. To immediately see the new label, call progressbar_draw.
@@ -87,7 +92,7 @@ void progressbar_update_label(progressbar *bar, const char *label);
 
 /// Finalize (and free!) a progressbar. Call this when you're done, or if you break out
 /// partway through.
-void progressbar_finish(progressbar *bar);
+void progressbar_finish(progressbar *bar, double ll);
 
 #ifdef __cplusplus
 }

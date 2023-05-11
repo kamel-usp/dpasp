@@ -13,6 +13,10 @@
 #define ALG_LAGRANGE_S "lagrange"
 #define ALG_NEURASP_S  "neurasp"
 
+#define DISPLAY_NONE_S          "none"
+#define DISPLAY_PROGRESS_S      "progress"
+#define DISPLAY_LOGLIKELIHOOD_S "loglikelihood"
+
 static PyObject* learn(PyObject *self, PyObject *args, PyObject *kwargs) {
   program_t P = {0};
   PyObject *py_P, *py_obs, *py_obs_counts, *py_atoms;
@@ -20,13 +24,13 @@ static PyObject* learn(PyObject *self, PyObject *args, PyObject *kwargs) {
   bool ok = false;
   bool lstable_sat = true;
   size_t niters = 30;
-  const char *alg_s = ALG_FIXPOINT_S;
-  uint8_t alg = ALG_LAGRANGE;
+  const char *alg_s = ALG_FIXPOINT_S, *display_s = DISPLAY_LOGLIKELIHOOD_S;
+  uint8_t alg = ALG_LAGRANGE, display = DISPLAY_LOGLIKELIHOOD;
   double eta = 0.1;
-  static char *kwlist[] = { "", "", "", "", "niters", "alg", "lr", "lstable_sat", NULL };
+  static char *kwlist[] = { "", "", "", "", "niters", "alg", "lr", "lstable_sat", "display", NULL };
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOO|nsdb", kwlist, &py_P, &py_obs,
-        &py_obs_counts, &py_atoms, &niters, &alg_s, &eta, &lstable_sat))
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOOO|nsdbs", kwlist, &py_P, &py_obs,
+        &py_obs_counts, &py_atoms, &niters, &alg_s, &eta, &lstable_sat, &display_s))
     return NULL;
 
   if (!PyArray_Check(py_obs) || !PyArray_Check(py_obs_counts) || !PyArray_Check(py_atoms)) {
@@ -71,18 +75,26 @@ static PyObject* learn(PyObject *self, PyObject *args, PyObject *kwargs) {
     return NULL;
   }
 
+  if (!strcmp(display_s, DISPLAY_NONE_S)) display = DISPLAY_NONE;
+  else if (!strcmp(display_s, DISPLAY_PROGRESS_S)) display = DISPLAY_PROGRESS;
+  else if (!strcmp(display_s, DISPLAY_LOGLIKELIHOOD_S)) display = DISPLAY_LOGLIKELIHOOD;
+  else {
+    PyErr_SetString(PyExc_ValueError, "display must either be \"none\", \"progress\" or \"loglikelihood\"!");
+    return NULL;
+  }
+
   if (!from_python_program(py_P, &P)) return NULL;
 
   lstable_sat = lstable_sat && (P.sem == LSTABLE_SEMANTICS);
   switch(alg) {
     case ALG_FIXPOINT:
-      if (!learn_fixpoint(&P, obs, obs_counts, atoms, niters, lstable_sat)) goto cleanup;
+      if (!learn_fixpoint(&P, obs, obs_counts, atoms, niters, lstable_sat, display)) goto cleanup;
       break;
     case ALG_LAGRANGE:
-      if (!learn_lagrange(&P, obs, obs_counts, atoms, niters, eta, lstable_sat)) goto cleanup;
+      if (!learn_lagrange(&P, obs, obs_counts, atoms, niters, eta, lstable_sat, display)) goto cleanup;
       break;
     case ALG_NEURASP:
-      if (!learn_neurasp(&P, obs, obs_counts, atoms, niters, eta, lstable_sat)) goto cleanup;
+      if (!learn_neurasp(&P, obs, obs_counts, atoms, niters, eta, lstable_sat, display)) goto cleanup;
       break;
   }
 
@@ -99,13 +111,13 @@ static PyObject* learn_batch(PyObject *self, PyObject *args, PyObject *kwargs) {
   bool ok = false, free_obs = false;
   bool lstable_sat = true;
   size_t niters = 30, batch = 100;
-  const char *alg_s = ALG_FIXPOINT_S;
-  uint8_t alg = ALG_FIXPOINT;
+  const char *alg_s = ALG_FIXPOINT_S, *display_s = DISPLAY_LOGLIKELIHOOD_S;
+  uint8_t alg = ALG_FIXPOINT, display = DISPLAY_LOGLIKELIHOOD;
   double eta = 0.1;
-  static char *kwlist[] = { "", "", "niters", "alg", "lr", "batch", "lstable_sat", NULL };
+  static char *kwlist[] = { "", "", "niters", "alg", "lr", "batch", "lstable_sat", "display", NULL };
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OO|nsdnb", kwlist, &py_P, &py_obs, &niters,
-        &alg_s, &eta, &batch, &lstable_sat))
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OO|nsdnbs", kwlist, &py_P, &py_obs, &niters,
+        &alg_s, &eta, &batch, &lstable_sat, &display_s))
     return NULL;
 
   if (!PyArray_Check(py_obs)) {
@@ -134,18 +146,26 @@ static PyObject* learn_batch(PyObject *self, PyObject *args, PyObject *kwargs) {
     return NULL;
   }
 
+  if (!strcmp(display_s, DISPLAY_NONE_S)) display = DISPLAY_NONE;
+  else if (!strcmp(display_s, DISPLAY_PROGRESS_S)) display = DISPLAY_PROGRESS;
+  else if (!strcmp(display_s, DISPLAY_LOGLIKELIHOOD_S)) display = DISPLAY_LOGLIKELIHOOD;
+  else {
+    PyErr_SetString(PyExc_ValueError, "display must either be \"none\", \"progress\" or \"loglikelihood\"!");
+    return NULL;
+  }
+
   if (!from_python_program(py_P, &P)) return NULL;
 
   lstable_sat = lstable_sat && (P.sem == LSTABLE_SEMANTICS);
   switch(alg) {
     case ALG_FIXPOINT:
-      if (!learn_fixpoint_batch(&P, obs, niters, batch, lstable_sat)) goto cleanup;
+      if (!learn_fixpoint_batch(&P, obs, niters, batch, lstable_sat, display)) goto cleanup;
       break;
     case ALG_LAGRANGE:
-      if (!learn_lagrange_batch(&P, obs, niters, eta, batch, lstable_sat)) goto cleanup;
+      if (!learn_lagrange_batch(&P, obs, niters, eta, batch, lstable_sat, display)) goto cleanup;
       break;
     case ALG_NEURASP:
-      if (!learn_neurasp_batch(&P, obs, niters, eta, batch, lstable_sat)) goto cleanup;
+      if (!learn_neurasp_batch(&P, obs, niters, eta, batch, lstable_sat, display)) goto cleanup;
       break;
   }
 
