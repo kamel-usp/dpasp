@@ -116,9 +116,14 @@ ad: (ad_head{_ground} | lad_head{_ground}) "."
 adr: (ad_head{_nground} | lad_head{_nground}) ":-" body "."
 _ad: ad | adr
 
+// Python function call with arguments.
+py_func_args: WORD | REAL | ID
+py_func_kwargs: WORD "=" (WORD | REAL | ID)
+py_func_call: PY_FUNC ("(" (py_func_args | py_func_kwargs) ("," (py_func_args | py_func_kwargs))* ")")?
+
 // Data special rule.
-test: "test" "(" (path | ("@" PY_FUNC)) ")"
-train: "train" "(" (path | ("@" PY_FUNC)) ")"
+test: "test" "(" (path | ("@" py_func_call)) ")"
+train: "train" "(" (path | ("@" py_func_call)) ")"
 data: WORD "(" (WORD | ID) ")" "~" test ("," train)? "."
 // Torch block.
 python: "#python" /(?:.|\n)+?(?=\#end\.)/ "#end."

@@ -311,23 +311,30 @@ class StableTransformer(lark.Transformer):
   def adr(self, AD):
     raise NotImplementedError
 
+  def py_func_args(self, A): return "args", A[0][2]
+  def py_func_kwargs(self, A): return "kwargs", (A[0][2], A[1][2])
+  def py_func_call(self, A):
+    args = [a for k, a in A[1:] if k == "args"]
+    kwargs = dict([a for k, a in A[1:] if k == "kwargs"])
+    f = A[0][2]
+    if f not in self.torch_scope:
+      raise ValueError(f"No data definition {f} found! Either define it in a Python "
+                       "block or specify a file or URL to read from.")
+    return self.pack("py_func_call", "", self.torch_scope[f](*args, **kwargs))
+
   def _data2tensor(self, D):
-    tp, path_or_func = D[0][0], D[0][2]
+    tp, path_or_data = D[0][0], D[0][2]
     import pandas, numpy
     # Is an external file or URL.
-    if tp != "PY_FUNC": data = pandas.read_csv(path_or_func, dtype = numpy.float32)
-    else: # is a function.
-      if path_or_func not in self.torch_scope:
-        raise ValueError(f"No data definition {path_or_func} found! Either define it in a PyTorch "
-                         "block or specify a file or URL to read from.")
-      data = self.torch_scope[path_or_func]()
+    if tp != "py_func_call": data = pandas.read_csv(path_or_data, dtype = numpy.float32)
+    else: # is data.
       try:
         import torch
       except ModuleNotFoundError:
         raise ModuleNotFoundError("PyTorch not found! PyTorch must be installed for neural rules "
                                   "and neural ADs.")
-      if not issubclass(type(data), torch.Tensor): data = torch.tensor(data)
-    return data
+      if not issubclass(type(path_or_data), torch.Tensor): path_or_data = torch.tensor(path_or_data)
+    return path_or_data
 
   # Test set special predicate.
   def test(self, T): return self.pack("test", "", self._data2tensor(T))
@@ -359,7 +366,7 @@ class StableTransformer(lark.Transformer):
     # Network is coming from a Torch block.
     if len(H) == 1:
       if func not in self.torch_scope:
-        raise ValueError(f"No network definition {func} found! Either define it in a PyTorch "
+        raise ValueError(f"No network definition {func} found! Either define it in a Python"
                          "block or specify a PyTorch Hub model (local or from GitHub).")
       N = self.torch_scope[func]()
       rep = f"@{func}"
