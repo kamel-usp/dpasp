@@ -1,19 +1,24 @@
-% A neural XOR example.
+% A neural noisy XOR example.
 %
-% In this example, we will declare a neural predicate xor(X) that should encode a probability
-% distribution over the xor function; that is, the following probability table:
+% In this example, we will declare a neural predicate xor(X) that encodes some uncertainty on the
+% measurement of the XOR of two bits X and Y, be it due to noisy data or some measurement error.
+% In practical terms, the network should encode a probability distribution over the xor function;
+% that is, the following probability table:
 %
 %    +---+---+-------+----------+
 %    | X | Y | X ⊻ Y | ℙ(X ⊻ Y) |
 %    +---+---+-------+----------+
 %    | 0 | 0 |   0   |    .0    |
-%    | 0 | 1 |   1   |    .3    |
+%    | 0 | 1 |   1   |    .7    |
 %    | 1 | 0 |   1   |    .6    |
 %    | 1 | 1 |   0   |    .0    |
 %    +---+---+-------+----------+
 %
 
 #python
+# Set manual seed for reproducibility.
+torch.manual_seed(0)
+
 def xor_net():
   # Define the neural network as a two layer network with sigmoids as activation functions.
   N = torch.nn.Sequential(
@@ -36,10 +41,10 @@ def input_test():
 
 def output_train():
   # The training dataset containing the observed atoms.
-  return [*[["false"]]*10,               # ℙ(0 ⊻ 0) = 0
-          *[["true"]]*3, *[["false"]]*7, # ℙ(0 ⊻ 1) = 3/(3+7) = 0.3
-          *[["true"]]*6, *[["false"]]*4, # ℙ(1 ⊻ 0) = 6/(6+4) = 0.6
-          *[["false"]]*10,               # ℙ(1 ⊻ 1) = 0
+  return [*[["zero"]]*10,               # ℙ(0 ⊻ 0) = 0
+          *[["one"]]*7, *[["zero"]]*3,  # ℙ(0 ⊻ 1) = 7/(7+3) = 0.7
+          *[["one"]]*6, *[["zero"]]*4,  # ℙ(1 ⊻ 0) = 6/(6+4) = 0.6
+          *[["zero"]]*10,               # ℙ(1 ⊻ 1) = 0
          ]
 #end.
 
@@ -47,21 +52,21 @@ def output_train():
 % annotated disjunctions. You can name the data predicate anything you want as long as it is also a
 % valid predicate name (starts with lower-case and only contains letters), but must have an arity
 % of one.
-data(x) ~ test(@input_test), train(@input_train).
+data(input) ~ test(@input_test), train(@input_train).
 % Neural rule xor(X) is defined by a function (here xor_net), with optimizer parameters given after
 % the with keyword. Neural components must always come accompanied of a data predicate (in this
 % case, data(X)).
-?::xor(X) as @xor_net :- data(X).
+?::xor(Input) as @xor_net with momentum = 0.1 :- data(Input).
 
-% Here we are aliasing the output of xor(X). When xor(X) is true, atom true is true; otherwise,
-% false is true.
-true  :- xor(x).
-false :- not xor(x).
+% Here we are aliasing the output of xor(X). When xor(X) is true, then atom one holds; otherwise,
+% zero holds.
+one  :- xor(input).
+zero :- not xor(input).
 
 % We want to evaluate the probability of true (being true) for each of the input configurations in
 % the Python function input_test.
-#query(true).
+#query(one).
 % We define the maxent semantics to be used. The stable model semantics is set by default.
 #semantics(maxent).
 % We inject the return value of the output_train function to #learn and pass learning parameters.
-#learn(@output_train, lr = 0.1, niters = 10000, alg = "lagrange").
+#learn(@output_train, lr = 0.01, niters = 10000, alg = "lagrange").
