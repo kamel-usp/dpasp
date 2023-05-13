@@ -35,9 +35,9 @@ jobs:
           python setup.py build_ext --inplace
       - name: Generate docs
         run: |
-          pdoc --math --logo "https://raw.githubusercontent.com/RenatoGeh/pasp/master/logo/logo.svg" --logo-link "https://renatogeh.github.io/pasp" -t docs/user pasp -o _site/
+          pdoc --math --logo "https://raw.githubusercontent.com/RenatoGeh/pasp/master/logo/logo.svg" --logo-link "https://renatogeh.github.io/pasp" -t docs/user pasp -o _site/docs/
           doxygen
-          cp -r examples/ _site/
+          cp -r examples/ _site/docs/
       - name: Generate syntax highlighted examples
         run: |
           bash docs/generate_examples.sh
