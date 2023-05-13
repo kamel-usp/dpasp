@@ -35,9 +35,9 @@ jobs:
           python setup.py build_ext --inplace
       - name: Generate docs
         run: |
-          pdoc --math --logo "https://raw.githubusercontent.com/kamel-usp/dpasp/master/logo/logo.svg" -t docs/user pasp -o _site/docs/
+          pdoc --math --logo "https://raw.githubusercontent.com/kamel-usp/dpasp/master/logo/logo.svg" -t docs/user pasp -o _site/
           doxygen
-          cp -r examples/ _site/docs/
+          cp -r examples/ _site/
       - name: Generate syntax highlighted examples
         run: |
           bash docs/generate_examples.sh
