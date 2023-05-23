@@ -1039,7 +1039,7 @@ solve_cleanup:
         for (size_t g = 0; g < R->n; ++g)
           for (size_t o = 0; o < R->o; ++o) {
             bool u = bitvec_GET(&theta->pf, prob->O_NR[j] + g*R->o + o);
-            double q_p = q[g*R->o*P->m_train + o];
+            double q_p = q[g*R->o*P->batch + o];
             /* Values first, outcomes second, groundings third. Example:
              *
              * | 0.5  0.8 | -> outcome 1, grounding 1
@@ -1063,7 +1063,7 @@ solve_cleanup:
              * | 0.1  0.5  0.3 | -> outcome 1, grounding 2
              * | 0.5  0.7  0.3 | -> outcome 2, grounding 2
              */
-            pr->NA[j][g*A->v*A->o + o*A->v + u] += p_o/q[o*A->v + u];
+            pr->NA[j][g*A->v*A->o + o*A->v + u] += p_o/q[g*P->batch*A->v*A->o+ o*A->v + u];
           }
       }
     } else {

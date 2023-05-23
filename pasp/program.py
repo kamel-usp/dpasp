@@ -136,10 +136,10 @@ class Neural:
     self.opt = torch.optim.SGD(net.parameters(), **_opt_params)
 
     self.test = torch.cat(tuple(d.test for d in data), dim = 0)
-    self.train = None if data[0].train is None else torch.cat(tuple(d.train for d in data), dim = 0)
     self.out = None
+    self.view = None
     # Derivatives of the logic program to be passed to backwards.
-    self.dw = torch.zeros(self.out_shape()) if learnable else None
+    self.dw = None
 
   def __str__(self): return self.rep
   def __repr__(self): return self.__str__()
@@ -147,7 +147,19 @@ class Neural:
   def set_train(self): self.net.train()
   def set_eval(self): self.net.eval()
 
-  def out_shape(self) -> tuple:
+  def prepare_train(self, batch: int):
+    "Prepares the output tensor. Should be called *before* learning."
+    dims = self.data[0].train.shape[1:]
+    if self.view is None:
+      self.view = torch.empty(batch*len(self.data), *dims)
+      if self.learnable: self.dw = torch.zeros(self.out_shape(batch))
+    else:
+      T = self.view
+      if (s := T.untyped_storage().size()//(T.element_size()*dims.numel())) < batch:
+        self.view.resize(batch*len(self.data), *dims)
+        if self.learnable: self.dw.resize(self.out_shape(batch))
+
+  def out_shape(self, batch: int) -> tuple:
     "The output tensor shape."
     raise NotImplementedError("Neural components must override this method accordingly!")
 
@@ -158,11 +170,12 @@ class Neural:
 
   def forward(self, start: int = 0, end: int = None):
     "Retrieves the probabilities of the neural rule from the train set."
+    torch.cat(tuple(data.train[start:end] for data in self.data), out=self.view)
     if self.learnable:
-      self.out = self.net(self.train[start:end])
+      self.out = self.net(self.view)
       return self.out.data.cpu().numpy()
     with torch.inference_mode():
-      return self.net(self.train[start:end]).data.cpu().numpy()
+      return self.net(self.view).data.cpu().numpy()
 
   def backward(self):
     """ Performs backpropagation and runs the optimizer step.
@@ -190,8 +203,8 @@ class NeuralRule(Neural):
     assert p.ndim == 2, \
            "Networks embedded onto neural rules must output a single probability!"
 
-  def out_shape(self) -> tuple:
-    return (self.train.shape[0], self.outcomes)
+  def out_shape(self, batch: int) -> tuple:
+    return (batch*len(self.data), self.outcomes)
 
 class NeuralAD(Neural):
   def __init__(self, heads: list, bodies: list, signs: list, name: str, vals: list, net, rep: str, \
@@ -208,8 +221,8 @@ class NeuralAD(Neural):
     assert p.ndim == 2, \
            "Networks embedded onto neural rules must output a 1D probability tensor!"
 
-  def out_shape(self):
-    return (self.train.shape[0]*self.outcomes, self.nvals)
+  def out_shape(self, batch: int):
+    return (batch*len(self.data)*self.outcomes, self.nvals)
 
 class Semantics(enum.IntEnum):
   STABLE = 0

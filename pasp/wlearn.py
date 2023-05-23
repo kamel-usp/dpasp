@@ -4,9 +4,12 @@ def learn(P, D: np.ndarray, A: np.ndarray = None, niters: int = 30, alg: str = "
           lr: float = 0.001, batch: int = None, lstable_sat: bool = True, display: str = "loglikelihood"):
   # If batch is not given, set batch to the size of the dataset.
   if batch is None: batch = len(D)
+  # Prepare training tensors.
+  for N in P.NR: N.prepare_train(batch)
+  for N in P.NA: N.prepare_train(batch)
   # Check if data dimensions all match.
   def assert_dims(N, e: int):
-    if N.learnable and ((o := len(N.train)) != e):
+    if N.learnable and ((o := len(N.data[0].train)) != e):
       raise ValueError(f"Training data dimensions do not match!\n  Expected {n}, got {o}.")
   n = len(D)
   for N in P.NR: assert_dims(N, n)

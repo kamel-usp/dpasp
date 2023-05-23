@@ -107,7 +107,7 @@ void compute_lagrange(program_t *P, prob_storage_t *Q, size_t N, double eta,
       for (size_t g = 0; g < R->n; ++g)
         for (size_t o = 0; o < R->o; ++o) {
           size_t u = g*2*R->o + o*2;
-          P->NR[Q->I_NR[i_nr]].dw[i_o*R->o + g*R->o*P->m_train + o] = eta*c*((W->NR[i_nr][u+1] - W->NR[i_nr][u])*0.5)/W->o;
+          P->NR[Q->I_NR[i_nr]].dw[i_o*R->o + g*R->o*P->batch + o] = eta*c*((W->NR[i_nr][u+1] - W->NR[i_nr][u])*0.5)/W->o;
         }
     }
     /* Accumulate neural annotated disjunction derivatives. */
@@ -116,7 +116,7 @@ void compute_lagrange(program_t *P, prob_storage_t *Q, size_t N, double eta,
       for (size_t g = 0; g < A->n; ++g)
         for (size_t o = 0; o < A->o; ++o) {
           double *derivs = W->NA[i_na] + g*A->v*A->o + o*A->v;
-          size_t offset = i_o*A->o*A->v + g*A->o*A->v*P->m_train + o*A->v;
+          size_t offset = i_o*A->o*A->v + g*A->o*A->v*P->batch + o*A->v;
           double dP = 0.0;
           for (size_t j = 0; j < A->v; ++j) dP += derivs[j];
           for (size_t j = 0; j < A->v; ++j) A->dw[offset + j] = eta*c*(derivs[j] - dP/A->v)/W->o;
@@ -176,6 +176,7 @@ bool learn(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
   }
 
   for (size_t i = 0; i < niters; ++i) {
+    P->batch = O.n;
     if (!forward_neural(P, &O)) goto cleanup;
 
     /* Compute probabilities. */
@@ -291,7 +292,7 @@ void compute_lagrange_batch(program_t *P, prob_storage_t *Q, observations_t *O, 
       for (size_t g = 0; g < R->n; ++g)
         for (size_t o = 0; o < R->o; ++o) {
           size_t u = g*2*R->o + o*2;
-          P->NR[Q->I_NR[i_nr]].dw[i_o*R->o + g*R->o*P->m_train + o] = eta*((W->NR[i_nr][u+1] - W->NR[i_nr][u])*0.5)/W->o;
+          P->NR[Q->I_NR[i_nr]].dw[i_o*R->o + g*R->o*P->batch + o] = eta*((W->NR[i_nr][u+1] - W->NR[i_nr][u])*0.5)/W->o;
         }
     }
     /* Accumulate neural annotated disjunction derivatives. */
@@ -300,7 +301,7 @@ void compute_lagrange_batch(program_t *P, prob_storage_t *Q, observations_t *O, 
       for (size_t g = 0; g < A->n; ++g)
         for (size_t o = 0; o < A->o; ++o) {
           double *derivs = W->NA[i_na] + g*A->v*A->o + o*A->v;
-          size_t offset = i_o*A->o*A->v + g*A->o*A->v*P->m_train + o*A->v;
+          size_t offset = i_o*A->o*A->v + g*A->o*A->v*P->batch + o*A->v;
           double dP = 0.0;
           for (size_t j = 0; j < A->v; ++j) dP += derivs[j];
           for (size_t j = 0; j < A->v; ++j) A->dw[offset + j] = eta*(derivs[j] - dP/A->v)/W->o;
@@ -333,7 +334,7 @@ void compute_neurasp_batch(program_t *P, prob_storage_t *Q, observations_t *O, d
       for (size_t g = 0; g < R->n; ++g)
         for (size_t o = 0; o < R->o; ++o) {
           size_t u = g*2*R->o + o*2;
-          P->NR[Q->I_NR[i_nr]].dw[i_o*R->o + g*R->o*P->m_train + o] = eta*(W->NR[i_nr][u+1] - W->NR[i_nr][u])/W->o;
+          P->NR[Q->I_NR[i_nr]].dw[i_o*R->o + g*R->o*P->batch + o] = eta*(W->NR[i_nr][u+1] - W->NR[i_nr][u])/W->o;
         }
     }
     /* Accumulate neural annotated disjunction derivatives. */
@@ -342,7 +343,7 @@ void compute_neurasp_batch(program_t *P, prob_storage_t *Q, observations_t *O, d
       for (size_t g = 0; g < A->n; ++g)
         for (size_t o = 0; o < A->o; ++o) {
           double *derivs = W->NA[i_na] + g*A->v*A->o + o*A->v;
-          size_t offset = i_o*A->o*A->v + g*A->o*A->v*P->m_train + o*A->v;
+          size_t offset = i_o*A->o*A->v + g*A->o*A->v*P->batch + o*A->v;
           double dP = 0.0;
           for (size_t j = 0; j < A->v; ++j) dP += derivs[j];
           for (size_t j = 0; j < A->v; ++j) A->dw[offset + j] = eta*(2*derivs[j] - dP/A->v)/W->o;
@@ -377,6 +378,7 @@ bool learn_batch(program_t *P, PyArrayObject *obs, size_t niters, double eta,
 
   for (size_t i = 0; i < niters; ++i) {
     do {
+      P->batch = O.n;
       if (!forward_neural(P, &O)) goto cleanup;
 
       /* Compute probabilities. */

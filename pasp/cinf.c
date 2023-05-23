@@ -18,7 +18,7 @@ double prob_total_choice_prob(program_t *P, total_choice_t *theta) {
 double prob_total_choice_neural(program_t *P, total_choice_t *theta, size_t offset, bool train) {
   double p = 1.0;
   size_t r = P->CF_n + P->PF_n;
-  size_t m = train*P->m_train + (!train)*P->m_test;
+  size_t m = train*P->batch + (!train)*P->m_test;
   for (size_t i = 0; i < P->NR_n; ++i) {
     float *prob = P->NR[i].P + offset*P->NR[i].o;
     for (size_t j = 0; j < P->NR[i].n; ++j)

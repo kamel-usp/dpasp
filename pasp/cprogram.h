@@ -143,6 +143,8 @@ typedef struct program {
   size_t m_test;
   /* Number of instances in train data. */
   size_t m_train;
+  /* Batch size. */
+  size_t batch;
 
   semantics_t sem;
   struct program *stable;

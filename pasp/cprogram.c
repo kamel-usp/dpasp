@@ -53,7 +53,7 @@ bool update_pr_neural_rule(neural_rule_t *nr) {
 }
 bool update_forward_neural_rule(neural_rule_t *nr, size_t start, size_t end) {
   PyArrayObject *py_P = (PyArrayObject*) PyObject_CallMethod(nr->self, "forward", "kk",
-      start*nr->n, end*nr->n);
+      start, end);
   if (!py_P) return false;
   nr->P = PyArray_DATA(py_P);
   return true;
@@ -73,7 +73,7 @@ bool update_pr_neural_annot_disj(neural_annot_disj_t *na) {
 }
 bool update_forward_neural_annot_disj(neural_annot_disj_t *na, size_t start, size_t end) {
   PyArrayObject *py_P = (PyArrayObject*) PyObject_CallMethod(na->self, "forward", "kk",
-      start*na->n, end*na->n);
+      start, end);
   if (!py_P) return false;
   na->P = PyArray_DATA(py_P);
   return true;
