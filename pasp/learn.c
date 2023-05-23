@@ -113,11 +113,11 @@ static PyObject* learn_batch(PyObject *self, PyObject *args, PyObject *kwargs) {
   size_t niters = 30, batch = 100;
   const char *alg_s = ALG_FIXPOINT_S, *display_s = DISPLAY_LOGLIKELIHOOD_S;
   uint8_t alg = ALG_FIXPOINT, display = DISPLAY_LOGLIKELIHOOD;
-  double eta = 0.1;
-  static char *kwlist[] = { "", "", "niters", "alg", "lr", "batch", "lstable_sat", "display", NULL };
+  double eta = 0.1, smooth = 1e-4;
+  static char *kwlist[] = { "", "", "niters", "alg", "lr", "batch", "smoothing", "lstable_sat", "display", NULL };
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OO|nsdnbs", kwlist, &py_P, &py_obs, &niters,
-        &alg_s, &eta, &batch, &lstable_sat, &display_s))
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OO|nsdndbs", kwlist, &py_P, &py_obs, &niters,
+        &alg_s, &eta, &batch, &smooth, &lstable_sat, &display_s))
     return NULL;
 
   if (!PyArray_Check(py_obs)) {
@@ -159,13 +159,13 @@ static PyObject* learn_batch(PyObject *self, PyObject *args, PyObject *kwargs) {
   lstable_sat = lstable_sat && (P.sem == LSTABLE_SEMANTICS);
   switch(alg) {
     case ALG_FIXPOINT:
-      if (!learn_fixpoint_batch(&P, obs, niters, batch, lstable_sat, display)) goto cleanup;
+      if (!learn_fixpoint_batch(&P, obs, niters, batch, smooth, lstable_sat, display)) goto cleanup;
       break;
     case ALG_LAGRANGE:
-      if (!learn_lagrange_batch(&P, obs, niters, eta, batch, lstable_sat, display)) goto cleanup;
+      if (!learn_lagrange_batch(&P, obs, niters, eta, batch, smooth, lstable_sat, display)) goto cleanup;
       break;
     case ALG_NEURASP:
-      if (!learn_neurasp_batch(&P, obs, niters, eta, batch, lstable_sat, display)) goto cleanup;
+      if (!learn_neurasp_batch(&P, obs, niters, eta, batch, smooth, lstable_sat, display)) goto cleanup;
       break;
   }
 
