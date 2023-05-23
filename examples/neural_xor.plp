@@ -69,4 +69,4 @@ zero :- not xor(input).
 % We define the maxent semantics to be used. The stable model semantics is set by default.
 #semantics(maxent).
 % We inject the return value of the output_train function to #learn and pass learning parameters.
-#learn(@output_train, lr = 0.01, niters = 10000, alg = "lagrange").
+#learn(@output_train, lr = 0.1, niters = 2000, alg = "lagrange").

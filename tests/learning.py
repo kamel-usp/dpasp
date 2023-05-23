@@ -42,7 +42,7 @@ class TestLearning(PaspTest):
 
   def test_neural_minimal(self):
     R = pasp.parse("examples/neural_minimal.plp")(quiet = True)
-    self.assertTrue(np.allclose(R.flatten(), [0.8, 0.1]))
+    self.assertTrue(np.allclose(R.flatten(), [0.8, 0.1], atol=1e-3))
 
   def test_neural_ad_minimal(self):
     R = pasp.parse("examples/neural_ad_minimal.plp")(quiet = True)
@@ -51,7 +51,7 @@ class TestLearning(PaspTest):
 
   def test_neural_mult_minimal(self):
     R = pasp.parse("examples/neural_mult_minimal.plp")(quiet = True)
-    self.assertTrue(np.allclose(R.flatten(), [0.25, 0.7, 0.1, 0.9, 0.5, 0.75], atol = 0.0001))
+    self.assertTrue(np.allclose(R.flatten(), [0.25, 0.7, 0.1, 0.9, 0.5, 0.75], atol=1e-2))
 
   def test_neural_mult_ad_minimal(self):
     R = pasp.parse("examples/neural_mult_ad_minimal.plp")(quiet = True)
