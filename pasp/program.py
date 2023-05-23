@@ -133,7 +133,8 @@ class Neural:
     # Update default opt_params with given params.
     _opt_params = {"lr": 1., "maximize": True}
     _opt_params.update(opt_params)
-    self.opt = torch.optim.SGD(net.parameters(), **_opt_params)
+    optimizer = _opt_params.pop("optim", "SGD")
+    self.opt = getattr(torch.optim, optimizer)(net.parameters(), **_opt_params)
 
     self.test = torch.cat(tuple(d.test for d in data), dim = 0)
     self.out = None

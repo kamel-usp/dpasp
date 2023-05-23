@@ -130,7 +130,7 @@ python: "#python" /(?:.|\n)+?(?=\#end\.)/ "#end."
 // PyTorch hub.
 hub: "@" PY_FUNC ("on" (("\"" LOCAL_NET "\"" ("at" "\"local\"")?) | ("\"" GITHUB "\"" "at" "\"github\"")))?
 // Optimizer parameters.
-_param: WORD "=" (REAL | BOOL | NULL)
+_param: WORD "=" (REAL | BOOL | NULL | ("\"" /\w+/ "\""))
 // Sequence of parameters.
 params: _param ("," _param)*
 // Neural fact.

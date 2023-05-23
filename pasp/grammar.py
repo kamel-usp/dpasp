@@ -62,6 +62,14 @@ class PreparsingTransformer(lark.Transformer):
     return S[0] if len(S) > 0 else None, self.consts
 
 class StableTransformer(lark.Transformer):
+  class Pack(tuple):
+    @staticmethod
+    def __new__(cls, tp: str, r: str = None, v = None, sc: dict = {}):
+      return super(StableTransformer.Pack, cls).__new__(cls, (tp, str(v) if r is None else r, \
+                                                              r if v is None else v, sc))
+    def __str__(self): return self[1]
+    def __repr__(self): return f"<{self[0]}: {self.__str__()}>"
+
   def __init__(self, _, consts: dict = {}):
     super().__init__()
     self.sem = Semantics.STABLE
@@ -71,13 +79,7 @@ class StableTransformer(lark.Transformer):
 
   @staticmethod
   def pack(t: str, rep: str = None, val = None, scope: dict = {}) -> tuple[str, str, str, dict]:
-    class Pack(tuple):
-      @staticmethod
-      def __new__(cls, tp: str, r: str = None, v = None, sc: dict = {}):
-        return super(Pack, cls).__new__(cls, (tp, str(v) if r is None else r, r if v is None else v, sc))
-      def __str__(self): return self[1]
-      def __repr__(self): return f"<{self[0]}: {self.__str__()}>"
-    return Pack(t, rep, val, scope)
+    return StableTransformer.Pack(t, rep, val, scope)
 
   @staticmethod
   def join_scope(A: list) -> dict: return dict((y, None) for S in A for y in S[3])
@@ -384,7 +386,7 @@ class StableTransformer(lark.Transformer):
 
   # Optimizer parameters.
   def params(self, P):
-    return self.pack("params", "", {P[i][1]: P[i+1][2] for i in range(0, len(P), 2)})
+    return self.pack("params", "", {P[i][1]: v[2] if isinstance((v := P[i+1]), self.Pack) else str(v) for i in range(0, len(P), 2)})
 
   # Neural rule.
   def nrule(self, A):
