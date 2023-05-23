@@ -1,0 +1,56 @@
+% MNIST digits.
+
+#python
+import torch
+import torchvision
+
+class Net(torch.nn.Module):
+  def __init__(self):
+    super().__init__()
+    self.encoder = torch.nn.Sequential(
+      torch.nn.Conv2d(1, 6, 5),
+      torch.nn.MaxPool2d(2, 2),
+      torch.nn.ReLU(True),
+      torch.nn.Conv2d(6, 16, 5),
+      torch.nn.MaxPool2d(2, 2),
+      torch.nn.ReLU(True)
+    )
+    self.classifier = torch.nn.Sequential(
+      torch.nn.Linear(16 * 4 * 4, 120),
+      torch.nn.ReLU(),
+      torch.nn.Linear(120, 84),
+      torch.nn.ReLU(),
+      torch.nn.Linear(84, 10),
+      torch.nn.Softmax(1)
+    )
+
+  def forward(self, x):
+    x = self.encoder(x)
+    x = x.view(-1, 16 * 4 * 4)
+    x = self.classifier(x)
+    return x
+
+def digit_net(): return Net()
+
+def mnist_data():
+  train = torchvision.datasets.MNIST(root = "/tmp", train = True, download = True)
+  test  = torchvision.datasets.MNIST(root = "/tmp", train = False, download = True)
+  return train.data.float().reshape(len(train), 1, 28, 28)/255., train.targets, \
+         test.data.float().reshape(len(test), 1, 28, 28)/255., test.targets
+
+def normalize(X_R, Y_R, X_T, Y_T, mu, sigma):
+  return (X_R-mu)/sigma, Y_R, (X_T-mu)/sigma, Y_T
+
+train_X, train_Y, test_X, test_Y = normalize(*mnist_data(), 0.1307, 0.3081)
+def mnist_images_train(): return train_X
+def mnist_images_test(): return test_X
+def mnist_labels_train(): return [[f"digit({x.item()})"] for x in train_Y]
+#end.
+
+input(x) ~ test(@mnist_images_test), train(@mnist_images_train).
+
+?::digit(X, {0..9}) as @digit_net with optim = "Adam", lr = 0.001 :- input(X).
+digit(Y) :- digit(x, Y).
+
+#semantics maxent.
+#learn @mnist_labels_train, lr = 1., niters = 1, alg = "lagrange", batch = 1000.
