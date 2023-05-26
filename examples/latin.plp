@@ -1,0 +1,66 @@
+% Latin square with MNIST digits.
+#python
+import torch
+import pickle
+
+class Net(torch.nn.Module):
+  def __init__(self):
+    super().__init__()
+    self.encoder = torch.nn.Sequential(
+      torch.nn.Conv2d(1, 6, 5),
+      torch.nn.MaxPool2d(2, 2),
+      torch.nn.ReLU(True),
+      torch.nn.Conv2d(6, 16, 5),
+      torch.nn.MaxPool2d(2, 2),
+      torch.nn.ReLU(True)
+    )
+    self.classifier = torch.nn.Sequential(
+      torch.nn.Linear(16 * 18 * 18, 120),
+      torch.nn.ReLU(),
+      torch.nn.Linear(120, 84),
+      torch.nn.ReLU(),
+      torch.nn.Linear(84, 4*9),
+    )
+    self.softmax = torch.nn.Softmax(1)
+
+  def forward(self, x):
+    x = self.encoder(x)
+    x = x.view(-1, 16 * 18 * 18)
+    x = self.classifier(x).view(-1, 4)
+    x = self.softmax(x)
+    return x
+
+def square_net(): return Net()
+
+def latin(n, mis):
+  path = f"../pasp-exp/latin/latin_{n}_{mis}_"
+  X_R = torch.load(path + "train.pt")
+  X_T = torch.load(path + "test.pt")
+  with open(path + "train.pk", "rb") as f: Y_R = pickle.load(f)
+  with open(path + "test.pk", "rb") as f: Y_T = pickle.load(f)
+  return X_R, Y_R, X_T, Y_T
+
+X_R, Y_R, X_T, Y_T = latin(3, 7)
+
+def test(): return X_T
+def train(): return X_R
+def labels(): return [[f"slot({d}, {i % 3}, {i // 3})" for i, d in enumerate(L)] for L in Y_R]
+#end.
+
+% Network data.
+input(x) ~ test(@test), train(@train).
+% A zero digit signals an empty slot.
+?::digit(X, {0..3}; {0..8}) as @square_net with optim = "Adam", lr = 0.001 :- input(X).
+
+% The n of an n x n latin square.
+#const n = 3.
+% Alias for each latin square slot. If digit is zero, it's a free slot.
+slot(D, X, Y) :- digit(x, D, P), X = P / n, Y = P \ n, D != 0.
+% Try other digits in free slots.
+{slot(1..3, X, Y)} :- digit(x, D, P), X = P / n, Y = P \ n, D == 0.
+% Columns cannot have repeated digits.
+:- slot(U, X, Y), slot(V, A, B), U == V, X == A, Y != B.
+% Rows cannot have repeated digits.
+:- slot(U, X, Y), slot(V, A, B), U == V, X != A, Y == B.
+
+#learn @labels, lr = 1., niters = 1, alg = "lagrange", batch = 500.
