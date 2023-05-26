@@ -83,7 +83,7 @@ grlit: NEG* _ground
 
 // Aggregate constraints.
 !aggr: (/[0-9]+/ CMP_OP)? ("#" ("sum" | "count" | "sum+" | "min" | "max"))? "{" /[^\}]+/ "}" (CMP_OP /[0-9]+/)?
-!raggr: (_ground | _nground)? ":-" (_ground | _nground | aggr) ("," (_ground | _nground | aggr))* "."
+!raggr: (aggr | _ground | _nground)? ":-" (_ground | _nground | aggr) ("," (_ground | _nground | aggr))* "."
 !caggr: aggr "."
 _aggr: aggr | raggr | caggr
 
@@ -161,7 +161,7 @@ semantics: "#semantics" (("(" _semantics_exp ")") | (_semantics_exp)) "."
 constraint: ":-" body "."
 
 // Binary operation.
-bop: ((ID | VAR | bop) OP (ID | VAR | bop)) | (VAR EQQ interval)
+bop: ((ID | VAR | bop | WORD) OP (ID | VAR | bop | WORD)) | (VAR EQQ interval)
 
 // Query.
 qelement: (NEG | UND)? (WORD | query_grpred)
