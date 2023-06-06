@@ -1,6 +1,6 @@
 // Operator terminals.
 UND: "undef"
-NEG: "not"
+NEG.10: "not"
 ADD: "+"
 SUB: "-"
 DIV: "/"
@@ -167,7 +167,7 @@ bop: ((ID | VAR | bop | WORD) OP (ID | VAR | bop | WORD)) | (VAR EQQ interval)
 qelement: (NEG | UND)? (WORD | query_grpred)
 interp: qelement ("," qelement)*
 _interp_exp: interp ("|" interp)?
-query: "#query" (("(" _interp_exp ")") | (_interp_exp)) "."?
+query: "#query" (("(" _interp_exp ")") | ( _interp_exp )) "."?
 
 // Constant definition.
 constdef: "#const" WORD "=" ID "."
