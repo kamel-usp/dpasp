@@ -1,36 +1,16 @@
-% Addition of MNIST digits.
-
 #python
 import torch
 import torchvision
 
-class Net(torch.nn.Module):
-  def __init__(self):
-    super().__init__()
-    self.encoder = torch.nn.Sequential(
-      torch.nn.Conv2d(1, 6, 5),
-      torch.nn.MaxPool2d(2, 2),
-      torch.nn.ReLU(True),
-      torch.nn.Conv2d(6, 16, 5),
-      torch.nn.MaxPool2d(2, 2),
-      torch.nn.ReLU(True)
-    )
-    self.classifier = torch.nn.Sequential(
-      torch.nn.Linear(16 * 4 * 4, 120),
-      torch.nn.ReLU(),
-      torch.nn.Linear(120, 84),
-      torch.nn.ReLU(),
-      torch.nn.Linear(84, 10),
-      torch.nn.Softmax(1)
-    )
-
-  def forward(self, x):
-    x = self.encoder(x)
-    x = x.view(-1, 16 * 4 * 4)
-    x = self.classifier(x)
-    return x
-
-def digit_net(): return Net()
+def even_net(): return torch.nn.Sequential(
+    torch.nn.Flatten(),
+    torch.nn.Linear(28*28, 128),
+    torch.nn.ReLU(True),
+    torch.nn.Linear(128, 32),
+    torch.nn.ReLU(True),
+    torch.nn.Linear(32, 1),
+    torch.nn.Sigmoid(),
+  )
 
 def mnist_data():
   train = torchvision.datasets.MNIST(root = "/tmp", train = True, download = True)
@@ -50,14 +30,17 @@ def mnist_images_test(which): return test_X[pick_slice(test_X, which)]
 def mnist_labels_train():
   labels = torch.concatenate((train_Y[:(h := len(train_Y)//2)].reshape(-1, 1),
                               train_Y[h:].reshape(-1, 1)), axis=1)
-  return [[f"sum({x.item() + y.item()})"] for x, y in labels]
+  return [["even" if x % 2 == 0 or y % 2 == 0 else "odd"] for x, y in labels]
 #end.
 
 input(0) ~ test(@mnist_images_test(0)), train(@mnist_images_train(0)).
 input(1) ~ test(@mnist_images_test(1)), train(@mnist_images_train(1)).
 
-?::digit(X, {0..9}) as @digit_net with optim = "Adam", lr = 0.001 :- input(X).
-sum(Z) :- digit(0, X), digit(1, Y), Z = X+Y.
+?::is_even(X) as @even_net :- input(X).
+even :- is_even(0).
+even :- is_even(1).
+odd  :- not even.
 
 #semantics maxent.
-#learn @mnist_labels_train, lr = 1., niters = 10, alg = "lagrange", batch = 1000.
+#query even.
+#learn @mnist_labels_train, lr = 0.0001, niters = 10, alg = "lagrange", batch = 1000.
