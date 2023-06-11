@@ -374,7 +374,7 @@ class Program:
         else: learn(self, D, **A)
     if len(self.Q) > 0:
       from exact import exact
-      A = {"quiet": False}
+      A = {"quiet": False, "status": True}
       A.update(kwargs)
       if "psemantics" in self.directives: A.update(self.directives["psemantics"])
       return exact(self, **A)

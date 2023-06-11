@@ -13,13 +13,13 @@ static PyObject* exact(PyObject *self, PyObject *args, PyObject *kwargs) {
   program_t p = {0};
   PyObject *py_P, *py_R = NULL;
   double *R = NULL;
-  bool r = false, parallel = true, lstable_sat = true, quiet = false;
+  bool r = false, parallel = true, lstable_sat = true, quiet = false, status = true;
   const char *psem_arg = "credal";
-  static char *kwlist[] = { "", "parallel", "lstable_sat", "psemantics", "quiet", NULL };
+  static char *kwlist[] = { "", "parallel", "lstable_sat", "psemantics", "quiet", "status", NULL };
   psemantics_t psem = CREDAL_SEMANTICS;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|bbsb", kwlist, &py_P, &parallel, &lstable_sat,
-        &psem_arg, &quiet))
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|bbsbb", kwlist, &py_P, &parallel, &lstable_sat,
+        &psem_arg, &quiet, &status))
     return NULL;
 
   if (!strcmp(psem_arg, "maxent")) { psem = MAXENT_SEMANTICS; }
@@ -41,7 +41,7 @@ static PyObject* exact(PyObject *self, PyObject *args, PyObject *kwargs) {
   }
 
   lstable_sat = lstable_sat && (p.sem == LSTABLE_SEMANTICS);
-  if (!exact_enum(&p, &R, lstable_sat, psem, quiet)) goto cleanup;
+  if (!exact_enum(&p, &R, lstable_sat, psem, quiet, status)) goto cleanup;
 
   /* Return result as a numpy array. */
   bool has_neural = p.NR_n + p.NA_n > 0;

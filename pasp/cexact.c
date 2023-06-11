@@ -7,6 +7,7 @@
 #include "coptimize.h"
 #include "cutils.h"
 #include "cground.h"
+#include "../progressbar/statusbar.h"
 
 bool setup_polynomial(array_bool_t (**Pn)[4], array_double_t (**K)[4], program_t *P) {
   size_t i;
@@ -383,7 +384,7 @@ cleanup:
   pthread_mutex_unlock(st->wakeup);
 }
 
-bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, bool quiet) {
+bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, bool quiet, bool status) {
   bool has_credal = P->CF_n > 0, has_neural = P->NR_n + P->NA_n > 0;
   double *a, *b, *c, *d = c = b = a = NULL;
   size_t Q_n = P->Q_n, i;
@@ -399,6 +400,7 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
   pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER, wakeup = PTHREAD_MUTEX_INITIALIZER;
   pthread_cond_t avail = PTHREAD_COND_INITIALIZER;
   void (*compute_func)(void*) = psem ? compute_total_choice_maxent : compute_total_choice;
+  statusbar *bar = status ? statusbar_new("Querying") : NULL;
 
   if (!init_total_choice(&theta, total_choice_n, P)) goto cleanup;
 
@@ -432,6 +434,7 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
       do {
         if (!dispatch_job(&theta, &wakeup, busy_procs, S, num_procs, pool, &avail, compute_func))
           goto cleanup;
+        if (bar) statusbar_inc(bar);
       } while (incr_total_choice_ad(&theta, P));
     } while (incr_total_choice(&theta));
     thpool_wait(pool);
@@ -494,6 +497,7 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
         }
       }
       if (!quiet) {
+        if (!(i || ds) && bar) putwchar('\n');
         print_query(P->Q+i);
         if (psem == MAXENT_SEMANTICS) wprintf(L" = %f\n", I[i_l]);
         else wprintf(L" = [%f, %f]\n", I[i_l], I[i_u]);
@@ -539,6 +543,7 @@ cleanup:
       } free(K);
     }
   }
+  if (bar) statusbar_finish(bar);
   return exact_num_ok;
 }
 
