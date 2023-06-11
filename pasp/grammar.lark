@@ -1,5 +1,5 @@
 // Operator terminals.
-UND: "undef"
+UND.10: "undef"
 NEG.10: "not"
 ADD: "+"
 SUB: "-"
@@ -58,7 +58,7 @@ LOCAL_NET: /(?:[\w\d.\-_\/]+|(?:\\ ))+/
 // Github repo network path.
 GITHUB: /[A-Za-z\d](?:[A-Za-z\d]|-(?=[A-Za-z\d])){0,38}\/[a-zA-Z0-9\-_.]{1,100}/
 // Path.
-path: "\"" (LOCAL_DATA | URL) "\""
+path.10: "\"" (LOCAL_DATA | URL) "\""
 
 EXPAND: "+"
 LEARN:  "?"

@@ -464,7 +464,9 @@ class StableTransformer(lark.Transformer):
   # Semantics directive and options.
   def SEMANTICS_OPT_LOGIC(self, _): return lark.visitors.Discard
   def SEMANTICS_OPT_PROB(self, O): return str(O)
-  def semantics(self, S): return self.pack("directive", "", ("psemantics", {"psemantics": S[0]}))
+  def semantics(self, S):
+    return self.pack("directive", "", ("psemantics", {"psemantics": S[0]})) if len(S) > 0 else \
+      lark.visitors.Discard
 
   # Probabilistic Logic Program.
   def plp(self, C) -> Program:
