@@ -456,10 +456,17 @@ class StableTransformer(lark.Transformer):
   # Constant definition.
   def constdef(self, C): return self.pack("constdef", f"#const {C[0][1]} = {C[1][1]}.")
 
+  @staticmethod
+  def path2obs(path: str):
+    import pandas, numpy
+    data = pandas.read_csv(path, dtype = bool)
+    return lambda: (data.values, data.columns.values.tolist())
+
   # Learning directive.
   def learn(self, L):
     A = {str(L[i]): str(v) if isinstance(v := L[i+1], lark.Token) else v[2] for i in range(1, len(L), 2)}
-    return self.pack("directive", "", ("learn", self.torch_scope[L[0][1]], A))
+    data = self.torch_scope[L[0][1]] if L[0][0] == "PY_FUNC" else StableTransformer.path2obs(L[0][1])
+    return self.pack("directive", "", ("learn", data, A))
 
   # Semantics directive and options.
   def SEMANTICS_OPT_LOGIC(self, _): return lark.visitors.Discard

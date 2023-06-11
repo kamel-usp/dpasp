@@ -48,7 +48,7 @@ BOOL: (/true/i | /false/i)
 NULL: (/null/i | /none/i)
 
 // URL.
-URL: /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/
+URL: /(?:https?:\/\/)?(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&\/=]*)/
 // Local data path.
 LOCAL_DATA: /(?:\/?[a-zA-Z\d\.\-_]+|(?:\\ ))+/
 // Python function identifier.
@@ -148,7 +148,7 @@ _learn_opt_smoothing: /smoothing/ "=" REAL
 _learn_opt_display: /display/ "=" "\"" (/none/ | /progress/ | /loglikelihood/) "\""
 _learn_opt: (_learn_opt_lr | _learn_opt_alg | _learn_opt_batch | _learn_opt_niters
            | _learn_opt_display | _learn_opt_smoothing)
-_learn_exp: "@" PY_FUNC ("," _learn_opt)*
+_learn_exp: (("@" PY_FUNC) | path) ("," _learn_opt)*
 learn: "#learn" (("(" _learn_exp ")") | (_learn_exp)) "."
 
 // Semantics options and directive.
