@@ -249,10 +249,10 @@ class StableTransformer(lark.Transformer):
     e = "EXPAND" in getnths(R, 0)
     h, b = R[-2], R[-1]
     o = f"{h[1]} :- {b[1]}"
-    p = R[0][2]
+    p = R[0][2] if R[0][0] == "prob" else 0.5
     S = self.join_scope(R)
     if len(S) == 0:
-      pr = ProbRule(p, o, is_prop = True)
+      pr = ProbRule(p, o, is_prop = True, learnable = l)
       self.n_prules += 1
       return self.pack("prule", pr.prop_f, pr)
     # Invariant: len(b) > 0, otherwise the rule is unsafe.
@@ -556,7 +556,7 @@ class PartialTransformer(StableTransformer):
   def prule(self, R):
     l = "LEARN" in getnths(R, 0)
     e = "EXPAND" in getnths(R, 0)
-    p = R[0][2]
+    p = R[0][2] if R[0][0] == "prob" else 0.5
     h, b = R[-2], R[-1]
     tr_negs = lambda x: x[1] if x[2][0] else f"not _{x[1][4:]}"
     tr_pos  = lambda x: f"_{x[1]}" if x[2][0] or PartialTransformer.has_binop(x) else x[1]

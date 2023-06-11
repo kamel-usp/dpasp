@@ -48,16 +48,18 @@ class ProbRule:
     self.p = p
     self.f = f
     self.is_prop = is_prop
-    self.learnable = learnable
+    self.learnable = learnable and (not is_prop)
     self.unify = unify
     self.sharing = sharing # sharing parameter i.e. parameter tying.
     self.prop_pf = ProbFact(p, unique_fact() if ufact is None else ufact,
-                            learnable = learnable and sharing)
+                            learnable = learnable and (sharing or is_prop))
     self.prop_f = f"{f}, {self.prop_pf.f}."
     self.pf_ids = None
 
   def __str__(self) -> str:
-    return f"{self.p}{('' if (self.sharing or self.is_prop) else '+') + ('?' if self.learnable else '')}::{self.f}"
+    return f"{self.prop_pf.p if self.is_prop else self.p}" \
+           f"{('' if (self.sharing or self.is_prop) else '+') + ('?' if self.learnable else '')}" \
+           f"::{self.f}"
   def __repr__(self) -> str: return self.__str__()
 
 class CredalFact:

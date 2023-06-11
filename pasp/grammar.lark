@@ -104,7 +104,7 @@ body: (lit | bop) ("," (lit | bop))*
 // Rule.
 rule: head ":-" body "."
 // Probabilistic rule.
-prule: prob (EXPAND? LEARN? | LEARN? EXPAND?) "::" ohead ":-" body "."
+prule: prob? (EXPAND? LEARN? | LEARN? EXPAND?) "::" ohead ":-" body "."
 _rule: prule | rule
 
 // Annotated disjunction head.
