@@ -27,7 +27,7 @@ statusbar *statusbar_new_with_format(const char *label, const char *format)
     return NULL;
   }
 
-  strncpy(new->format, format, new->format_length);
+  strcpy(new->format, format);
   new->format_index = 0;
   new->last_printed = 0;
 
