@@ -429,6 +429,8 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
   }
   *R = R_data;
   double *I = R_data;
+  bool skip_print;
+  quiet = quiet || (data_stride > 10);
   for (size_t ds = 0; ds < data_stride; ++ds) {
     do {
       do {
@@ -454,6 +456,8 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
       }
     }
 
+#define SKIP_THRESHOLD 1
+    skip_print = quiet || ((ds > SKIP_THRESHOLD) && (ds < data_stride-SKIP_THRESHOLD-1));
     for (i = 0; i < Q_n; ++i) {
       size_t i_l = i*sem_stride;
       size_t i_u = i_l+1;
@@ -496,14 +500,17 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
           }
         }
       }
-      if (!quiet) {
-        if (!(i || ds) && bar) putwchar('\n');
+      if (!skip_print) {
+        if (!i && bar) putwchar('\n');
         print_query(P->Q+i);
         if (psem == MAXENT_SEMANTICS) wprintf(L" = %f\n", I[i_l]);
         else wprintf(L" = [%f, %f]\n", I[i_l], I[i_u]);
       }
     }
-    if (!quiet) fputws(L"---\n", stdout);
+    if (!skip_print) {
+      fputws(L"---\n", stdout);
+      if (ds == SKIP_THRESHOLD) fputws(L" ⋮\n", stdout);
+    }
 
     /* Move memory for next batch. */
     I += Q_n*sem_stride;
