@@ -75,7 +75,7 @@ interval: (ID | WORD) ".." (ID | WORD)
 _ground: (_atom | grpred)
 _nground: (_atom | pred)
 grpred: WORD "(" (_ground | ID | interval) ("," (_ground | ID | interval))* ")"
-query_grpred: WORD "(" (_ground | ID | interval) ((";" | ",") (_ground | ID | interval))* ")"
+query_pred: WORD "(" (VAR | _nground | ID | interval) ((";" | ",") (VAR | _nground | ID | interval))* ")"
 pred: WORD "(" (_nground | ID | interval | VAR) ("," (_nground | ID | interval | VAR))* ")"
 // Literal.
 lit: NEG* _nground
@@ -164,7 +164,7 @@ constraint: ":-" body "."
 bop: ((ID | VAR | bop | WORD) OP (ID | VAR | bop | WORD)) | (VAR EQQ interval)
 
 // Query.
-qelement: (NEG | UND)? (WORD | query_grpred)
+qelement: (NEG | UND)? (WORD | query_pred)
 interp: qelement ("," qelement)*
 _interp_exp: interp ("|" interp)?
 query: "#query" (("(" _interp_exp ")") | ( _interp_exp )) "."?

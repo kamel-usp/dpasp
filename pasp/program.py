@@ -260,11 +260,11 @@ class Query:
   TERM_POS = 1
   TERM_UND = 2
 
-  def __init__(self, Q: iter, E: iter = [], semantics: Semantics = Semantics.STABLE):
+  def __init__(self, Q: iter = [], E: iter = [], semantics: Semantics = Semantics.STABLE):
     """
     Constructs a query from query (`Q`) and evidence (`E`) assignments.
 
-    We use the notation `iter` as a type hinting to mean `Q` and `E` are iterables.
+    We use the notation `iter` as a type hint to mean `Q` and `E` are iterables.
     """
     self.Q = [Query.parse_term(q, semantics) for q in Q]
     self.E = [Query.parse_term(e, semantics) for e in E]
@@ -276,9 +276,46 @@ class Query:
     else: t, n = u, Query.TERM_POS
     return clingo.parse_term(t), n, None if s == Semantics.STABLE else clingo.parse_term(f"_{t}")
 
+  @staticmethod
+  def parse_rep(u: int, s: bool, sem: Semantics):
+    t = clingo.Symbol(u)
+    return t, s, None if sem == Semantics.STABLE else clingo.parse_term(f"_{str(t)}")
+
   def __str__(self) -> str:
     qs = f"ℙ({', '.join(_str_query_assignment(q, t) for q, t, _ in self.Q)}"
     if len(self.E) != 0: return qs + f" | {', '.join(_str_query_assignment(e, t) for e, t, _ in self.E)})"
+    return qs + ")"
+  def __repr__(self) -> str: return self.__str__()
+
+class VarQuery:
+  def __init__(self, ground_id: int, Q: iter, E: iter = [], semantics: Semantics = Semantics.STABLE):
+    self.Q, self.E = [None for _ in range(len(Q))], [None for _ in range(len(E))]
+    self.Q_s, self.E_s = [None for _ in range(len(Q))], [None for _ in range(len(E))]
+    for i in range(len(Q)): self.Q[i], self.Q_s[i] = VarQuery.parse_term(Q[i])
+    for i in range(len(E)): self.E[i], self.E_s[i] = VarQuery.parse_term(E[i])
+    self.sem = semantics
+    qr, ev = ', '.join(self.Q), (', ' + ', '.join(self.E)) if len(self.E) else ''
+    self.gr_rule = f"__gquery(@grquery({ground_id}, {qr}{ev})) :- {qr}{ev}."
+    self.ground_queries = None
+
+  def parse_term(u: iter) -> list:
+    if u.startswith("not "): return u[4:], Query.TERM_NEG
+    elif u.startswith("undef "): return u[6:], Query.TERM_UND
+    return u, Query.TERM_POS
+
+  def to_ground(self, reps: tuple, P):
+    n, m = len(self.Q), len(self.E)
+    k = len(reps)//(n+m)
+    queries = [Query() for _ in range(k)]
+    for i in range(k):
+      u = i*(n+m)
+      queries[i].Q = [Query.parse_rep(reps[u+j], self.Q_s[j], self.sem) for j in range(n)]
+      queries[i].E = [Query.parse_rep(reps[u+n+j], self.E_s[j], self.sem) for j in range(m)]
+    P.Q.extend(queries)
+
+  def __str__(self) -> str:
+    qs = f"ℙ({', '.join(q for q in self.Q)}"
+    if len(self.E) != 0: return qs + f" | {', '.join(e for e in self.E)})"
     return qs + ")"
   def __repr__(self) -> str: return self.__str__()
 
@@ -306,9 +343,9 @@ class Program:
   """
 
   def __init__(self, P: str, PF: list[ProbFact], PR: list[ProbRule], Q: list[Query], \
-               CF: list[CredalFact], AD: list[AnnotatedDisjunction], NR: list[NeuralRule], \
-               NA: list[NeuralAD], semantics: Semantics = Semantics.STABLE, stable_p = None, \
-               directives: list = None):
+               VQ: list[VarQuery], CF: list[CredalFact], AD: list[AnnotatedDisjunction], \
+               NR: list[NeuralRule], NA: list[NeuralAD], semantics: Semantics = Semantics.STABLE, \
+               stable_p = None, directives: list = None):
     """
     Constructs a PLP out of a logic program `P`, probabilistic facts `PF`, credal facts `CF` and
     queries `Q`.
@@ -317,6 +354,7 @@ class Program:
     self.PF = PF
     self.PR = PR
     self.Q = Q
+    self.VQ = VQ
     self.CF = CF
     self.AD = AD
     self.NR = NR
@@ -333,6 +371,7 @@ class Program:
           break
 
     self.gr_P = ""
+    self.is_ground = False
 
     self.semantics = semantics
     self.stable = stable_p
@@ -363,6 +402,7 @@ class Program:
            self.str_if_contains("Probabilistic Rules", self.PR) + \
            self.str_if_contains("Neural Rules", self.NR) + \
            self.str_if_contains("Neural Annotated Disjunctions", self.NA) + \
+           self.str_if_contains("Variable Queries", self.VQ) + \
            f"\nQueries:\n{self.Q}>"
   def __repr__(self) -> str: return self.__str__()
 

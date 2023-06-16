@@ -21,7 +21,7 @@ size_t unique_ground_pfact_id() {
 #define GROUND_MAX_PROBRULE_LINE_LEN 400
 #define GROUND_MAX_SYM_LEN 50
 
-bool unify_callback(const clingo_location_t *loc, const char *name, const clingo_symbol_t *args,
+bool ground_callback(const clingo_location_t *loc, const char *name, const clingo_symbol_t *args,
     size_t argc, void* data, clingo_symbol_callback_t sym_callback, void *sym_data) {
   int b, h, i, j, id;
   size_t s_n, cursor, _cursor = 0;
@@ -31,11 +31,36 @@ bool unify_callback(const clingo_location_t *loc, const char *name, const clingo
   array_prob_fact_t *PF = (array_prob_fact_t*) pack[0];
   array_char_t *S = (array_char_t*) pack[1];
   program_t *P = (program_t*) pack[2];
+  array_symbol_t *gr_QE = (array_symbol_t*) pack[4];
   clingo_symbol_t ground_pf;
-  bool shared_grounding;
+  bool shared_grounding, ground_probs = PF->c > 0;
   double pr;
   array_uint8_t *pf_ids = NULL;
+  const char *err_msg = NULL;
 
+  if (ground_probs && !strcmp("unify", name)) goto grprob;
+
+  /* Grounding query. */
+  /* Set error message for query grounding. */
+  err_msg = "could not ground query!";
+
+  if (!clingo_symbol_number(args[0], &id)) goto error;
+  /* Get number of query variables (reuse h). */
+  h = P->VQ[id].Q_n;
+  /* Get number of evidence variables (reuse b). */
+  b = P->VQ[id].E_n;
+
+  array_symbol_t *QE = &gr_QE[id];
+#define ARGS_START 1
+  for (i = 0; i < h; ++i) if (!array_clingo_symbol_t_append(QE, args[ARGS_START+i])) goto error;
+  for (i = 0; i < b; ++i) if (!array_clingo_symbol_t_append(QE, args[ARGS_START+h+i])) goto error;
+
+  return sym_callback(args, 1, sym_data);
+
+  /* Grounding probabilistic rule. */
+grprob:
+  /* Set error message for probabilistic rule grounding. */
+  err_msg = "could not pre-ground probabilistic rules!";
   /* Get the ID (i.e. index) of probabilistic rule. */
   if (!clingo_symbol_number(args[0], &id)) goto error;
   pr = P->PR[id].p;
@@ -54,6 +79,7 @@ bool unify_callback(const clingo_location_t *loc, const char *name, const clingo
   /* Get number of body subgoals. */
   if (!clingo_symbol_number(args[5], &b)) goto error;
 
+#undef ARGS_START
 #define ARGS_START 6
 
   /* Get rule name. */
@@ -114,7 +140,7 @@ bool unify_callback(const clingo_location_t *loc, const char *name, const clingo
   /* Pass the actual head arguments down to the original rule. */
   return sym_callback(args + ARGS_START, h, sym_data);
 error:
-  clingo_set_error(clingo_error_runtime, "could not pre-ground probabilistic rules!");
+  clingo_set_error(clingo_error_runtime, err_msg);
   return false;
 }
 
@@ -188,141 +214,179 @@ cleanup:
   return ok;
 }
 
+bool query_from_symbols(varquery_t *VQ, array_symbol_t *gr_QE, size_t offset, query_t *q,
+    semantics_t sem) {
+  bool ok = false;
+  q->Q = NULL; q->E = NULL;
+  q->Q_s = NULL; q->E_s = NULL;
+  q->Q_u = NULL; q->E_u = NULL;
+  q->Q = (clingo_symbol_t*) malloc(VQ->Q_n*sizeof(clingo_symbol_t));
+  if (!q->Q) goto nomem;
+  q->E = (clingo_symbol_t*) malloc(VQ->E_n*sizeof(clingo_symbol_t));
+  if (!q->E) goto nomem;
+  q->Q_s = (uint8_t*) malloc(VQ->Q_n*sizeof(uint8_t));
+  if (!q->Q_s) goto nomem;
+  q->E_s = (uint8_t*) malloc(VQ->E_n*sizeof(uint8_t));
+  if (!q->E_s) goto nomem;
+  if (sem) {
+    q->Q_u = (clingo_symbol_t*) malloc(VQ->Q_n*sizeof(clingo_symbol_t));
+    if (!q->Q_u) goto nomem;
+    q->E_u = (clingo_symbol_t*) malloc(VQ->E_n*sizeof(clingo_symbol_t));
+    if (!q->E_u) goto nomem;
+  }
+  size_t len;
+  char atom_name[256] = "_";
+  for (size_t j = 0; j < VQ->Q_n; ++j) {
+    q->Q[j] = gr_QE->d[offset+j];
+    q->Q_s[j] = VQ->Q_s[j];
+    if (sem) {
+      if (!clingo_symbol_to_string_size(q->Q[j], &len)) goto cleanup;
+      if (!clingo_symbol_to_string(q->Q[j], atom_name+1, len)) goto cleanup;
+      if (!clingo_parse_term(atom_name, NULL, NULL, 20, &q->Q_u[j])) goto cleanup;
+    }
+  }
+  for (size_t j = 0; j < VQ->E_n; ++j) {
+    q->E[j] = gr_QE->d[offset+VQ->Q_n+j];
+    q->E_s[j] = VQ->E_s[j];
+    if (sem) {
+      if (!clingo_symbol_to_string_size(q->E[j], &len)) goto cleanup;
+      if (!clingo_symbol_to_string(q->E[j], atom_name+1, len)) goto cleanup;
+      if (!clingo_parse_term(atom_name, NULL, NULL, 20, &q->E_u[j])) goto cleanup;
+    }
+  }
+  q->Q_n = VQ->Q_n; q->E_n = VQ->E_n;
+  /* Partial semantics auxiliary variables. */
+  ok = true;
+  goto cleanup;
+nomem:
+  PyErr_SetString(PyExc_MemoryError, "no free memory available!");
+cleanup:
+  return ok;
+}
+
+bool varquery_update_program(program_t *P, array_symbol_t *gr_QE) {
+  bool ok = false;
+  size_t num_new_queries = 0;
+  query_t *new_Q = NULL;
+
+  /* Get number of new queries (i.e. ground queries). */
+  for (size_t i = 0; i < P->VQ_n; ++i)
+    num_new_queries += gr_QE[i].n / (P->VQ[i].Q_n + P->VQ[i].E_n);
+
+  /* Nothing to ground; nothing to change. */
+  if (!num_new_queries) return true;
+
+  new_Q = (query_t*) realloc(P->Q, (P->Q_n + num_new_queries)*sizeof(query_t));
+  if (!new_Q) goto error;
+  P->Q = new_Q;
+
+  size_t l = 0;
+  for (size_t i = 0; i < P->VQ_n; ++i) {
+    varquery_t *VQ = &P->VQ[i];
+    /* Update C side. */
+    for (size_t j = 0; j < gr_QE[i].n; j += VQ->Q_n + VQ->E_n)
+      if (!query_from_symbols(VQ, gr_QE, j, &new_Q[P->Q_n + (l++)], P->sem)) goto error;
+    /* Update Python side. */
+    PyObject *tup = PyTuple_New(gr_QE[i].n);
+    if (!tup) goto error;
+    for (size_t j = 0; j < gr_QE[i].n; ++j)
+      PyTuple_SET_ITEM(tup, j, PyLong_FromUnsignedLongLong(gr_QE[i].d[j]));
+    if (!PyObject_CallMethod(VQ->self, "to_ground", "OO", tup, P->py_P)) {
+      Py_DECREF(tup);
+      goto error;
+    }
+    Py_DECREF(tup);
+  }
+
+  P->Q_n += num_new_queries;
+  ok = true;
+error:
+  return ok;
+}
+
+bool set_is_ground_bit(program_t *P) {
+  if (PyObject_SetAttrString(P->py_P, "is_ground", Py_True)) {
+    PyErr_SetString(PyExc_AttributeError, "could not attribute value to Program.is_ground!");
+    return false;
+  }
+  return true;
+}
+
 bool ground_all(program_t *P, prob_storage_t *Q) {
   size_t i;
   clingo_control_t *C = NULL;
   array_prob_fact_t gr_PF = {0};
   array_char_t gr_P = {0};
-  void *pack[4] = {(void*) &gr_PF, (void*) &gr_P, (void*) P, NULL};
-  bool ok = false;
+  array_symbol_t *gr_QE = NULL;
+  void *pack[] = {(void*) &gr_PF, (void*) &gr_P, (void*) P, NULL, NULL};
+  bool ok = false, ground_queries = P->VQ_n > 0, ground_probs = false;
 
-  if (P->gr_P[0]) return true;
+  /* Check if probabilistic components need to be grounded. */
+  for (size_t i = 0; i < P->PR_n; ++i) if (!P->PR[i].is_prop) { ground_probs = true; break; }
 
-  if (!array_prob_fact_t_init(&gr_PF)) goto error;
-  if (!array_char_init(&gr_P)) goto error;
+  if (ground_probs) {
+    if (!array_prob_fact_t_init(&gr_PF)) goto error;
+    if (!array_char_init(&gr_P)) goto error;
+  }
+  if (ground_queries) {
+    gr_QE = (array_symbol_t*) malloc(P->VQ_n*sizeof(array_symbol_t));
+    for (size_t i = 0; i < P->VQ_n; ++i)
+      if (!array_clingo_symbol_t_init(&gr_QE[i])) {
+        for (size_t j = 0; j < i; ++j) array_clingo_symbol_t_free_contents(&gr_QE[j]);
+        free(gr_QE); gr_QE = NULL;
+        goto error;
+      }
+    pack[4] = (void*) gr_QE;
+  }
 
   if (!clingo_control_new(NULL, 0, undef_atom_ignore, NULL, 20, &C)) goto error;
 
   if (!add_all_atoms_as_choice(C, P)) goto error;
   if (!clingo_control_add(C, "base", NULL, 0, P->P)) goto error;
-  for (i = 0; i < P->PR_n; ++i)
-    if (!P->PR[i].is_prop) if (!clingo_control_add(C, "base", NULL, 0, P->PR[i].unify)) goto error;
+  if (ground_probs) {
+    for (i = 0; i < P->PR_n; ++i)
+      if (!P->PR[i].is_prop)
+        if (!clingo_control_add(C, "base", NULL, 0, P->PR[i].unify)) goto error;
 
-  if (Q) {
-    pack[3] = (void*) Q->I_GR;
-    for (i = 0; i < Q->pr; ++i) array_uint8_t_clear(&Q->I_GR[i]);
+    if (Q) {
+      pack[3] = (void*) Q->I_GR;
+      for (i = 0; i < Q->pr; ++i) array_uint8_t_clear(&Q->I_GR[i]);
+    }
   }
+  if (ground_queries)
+    for (i = 0; i < P->VQ_n; ++i)
+      if (!clingo_control_add(C, "base", NULL, 0, P->VQ[i].gr_rule)) goto error;
 
-  if (!clingo_control_ground(C, GROUND_DEFAULT_PARTS, 1, unify_callback, (void*) pack)) goto error;
+  if (!clingo_control_ground(C, GROUND_DEFAULT_PARTS, 1, ground_callback, (void*) pack)) goto error;
 
-  if (!partial_update_program(P, &gr_P, &gr_PF)) goto error;
+  if (ground_probs) {
+    if (!partial_update_program(P, &gr_P, &gr_PF)) goto error;
+    if (!gr_P.n) {
+      array_prob_fact_t_free_contents(&gr_PF);
+      array_char_free_contents(&gr_P);
+    }
+  }
+  if (ground_queries) if (!varquery_update_program(P, gr_QE)) goto error;
+  if (!set_is_ground_bit(P)) goto error;
 
-  if (!gr_P.n) {
+  ok = true;
+error:
+  if (clingo_error_code() != clingo_error_success) raise_clingo_error(NULL);
+  if (!ok && ground_probs) {
     array_prob_fact_t_free_contents(&gr_PF);
     array_char_free_contents(&gr_P);
-    ok = true;
-    goto error;
   }
-
-  ok = true;
-error:
-  if (clingo_error_code() != clingo_error_success) raise_clingo_error(NULL);
-  if (C) clingo_control_free(C);
-  return ok;
-}
-
-/* Do not use. */
-bool ground_per_total_choice(program_t *P, total_choice_t *theta, array_prob_fact_t *PF,
-    total_choice_t *gamma, char **rules, prob_storage_t *Q) {
-  size_t i;
-  clingo_control_t *C = NULL;
-  array_prob_fact_t gr_PF = {0};
-  array_char_t gr_P = {0};
-  void *pack[5] = {(void*) &gr_PF, (void*) &gr_P, (void*) P, (void*) true, NULL};
-  bool ok = false;
-
-  if (!array_prob_fact_t_init(&gr_PF)) goto error;
-  if (!array_char_init(&gr_P)) goto error;
-
-  if (!clingo_control_new(NULL, 0, undef_atom_ignore, NULL, 20, &C)) goto error;
-  if (!add_atoms_from_total_choice(C, P, theta)) goto error;
-  if (!clingo_control_add(C, "base", NULL, 0, P->P)) goto error;
-  for (i = 0; i < P->PR_n; ++i) {
-    if (!P->PR[i].sharing) continue;
-    if (!clingo_control_add(C, "base", NULL, 0, P->PR[i].unify)) goto error;
+  if (gr_QE) {
+    for (size_t i = 0; i < P->VQ_n; ++i) array_clingo_symbol_t_free_contents(&gr_QE[i]);
+    free(gr_QE);
   }
-
-  if (Q) {
-    pack[4] = (void*) Q->I_GR;
-    for (i = 0; i < Q->pr; ++i) array_uint8_t_clear(&Q->I_GR[i]);
-  }
-
-  if (!clingo_control_ground(C, GROUND_DEFAULT_PARTS, 1, unify_callback, (void*) pack)) goto error;
-
-  /* Nothing to ground. */
-  if (!gr_P.n) {
-    array_prob_fact_t_free_contents(&gr_PF);
-    array_char_free_contents(&gr_P);
-    ok = true;
-    goto error;
-  }
-  /* Update PFs to probabilities of their respective PRs. The grounded unify string may not be
-   * entirely updated after learning. */
-  /*if (Q)*/
-    /*for (i = 0; i < Q->pr; ++i) {*/
-      /*array_uint8_t *pf_ids = &Q->I_GR[i];*/
-      /*for (size_t l = 0; l < pf_ids->n; ++l) gr_PF.d[pf_ids->d[l]].p = P->PR[Q->I_PR[i]].p;*/
-    /*}*/
-
-  PF->d = gr_PF.d; PF->c = gr_PF.c; PF->n = gr_PF.n;
-  if (!bitvec_init(&gamma->pf, gr_PF.n)) goto error;
-  bitvec_zeron(&gamma->pf, gr_PF.n);
-  gamma->ad_n = 0; gamma->theta_ad = NULL;
-  if (gr_P.n) *rules = gr_P.d;
-
-  ok = true;
-error:
-  if (clingo_error_code() != clingo_error_success) raise_clingo_error(NULL);
-  if (C) clingo_control_free(C);
-  return ok;
-}
-
-bool ground(program_t *P) {
-  clingo_control_t *C = NULL;
-  array_prob_fact_t gr_PF = {0};
-  array_char_t gr_P = {0};
-  void *pack[4] = {(void*) &gr_PF, (void*) &gr_P, (void*) P, NULL};
-  bool ok = false;
-
-  if (P->gr_P[0]) return true;
-
-  if (!array_prob_fact_t_init(&gr_PF)) goto error;
-  if (!array_char_init(&gr_P)) goto error;
-
-  if (!clingo_control_new(NULL, 0, undef_atom_ignore, NULL, 20, &C)) goto error;
-  if (!clingo_control_add(C, "base", NULL, 0, P->P)) goto error;
-  for (size_t i = 0; i < P->PR_n; ++i) {
-    if (P->PR[i].is_prop || P->PR[i].sharing) continue;
-    if (!clingo_control_add(C, "base", NULL, 0, P->PR[i].unify)) goto error;
-  }
-  if (!clingo_control_ground(C, GROUND_DEFAULT_PARTS, 1, unify_callback, (void*) pack)) goto error;
-  /* Nothing to ground. */
-  if (!gr_P.n) {
-    array_prob_fact_t_free_contents(&gr_PF);
-    ok = true;
-    goto error;
-  }
-  if (!partial_update_program(P, &gr_P, &gr_PF)) goto error;
-
-  ok = true;
-error:
-  if (clingo_error_code() != clingo_error_success) raise_clingo_error(NULL);
-  array_char_free_contents(&gr_P);
   if (C) clingo_control_free(C);
   return ok;
 }
 
 bool needs_ground(program_t *P) {
+  if (P->is_ground) return false;
   for (size_t i = 0; i < P->PR_n; ++i) if (!P->PR[i].is_prop) return true;
+  if (P->VQ_n > 0) return true;
   return false;
 }

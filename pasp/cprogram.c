@@ -130,6 +130,15 @@ void free_query_contents(query_t *Q) {
 }
 void free_query(query_t *Q) { free_query_contents(Q); free(Q); }
 
+void free_varquery_contents(varquery_t *VQ) {
+  if (!VQ) return;
+  free(VQ->Q_s);
+  free(VQ->E_s);
+  Py_DECREF(VQ->py_gr_rule);
+}
+
+void free_varquery(varquery_t *VQ) { free_varquery_contents(VQ); free(VQ); }
+
 void print_program(program_t *P) {
   size_t i;
   string_t s = {NULL, 0};
@@ -156,6 +165,8 @@ void free_program_contents(program_t *P) {
   free(P->PR);
   for (i = 0; i < P->Q_n; ++i) free_query_contents(&P->Q[i]);
   free(P->Q);
+  for (i = 0; i < P->VQ_n; ++i) free_varquery_contents(&P->VQ[i]);
+  free(P->VQ);
   for (i = 0; i < P->CF_n; ++i) free_credal_fact_contents(&P->CF[i]);
   free(P->CF);
   for (i = 0; i < P->AD_n; ++i) free_annot_disj_contents(&P->AD[i]);
@@ -548,6 +559,60 @@ cleanup:
   return false;
 }
 
+bool from_python_varquery(PyObject *py_vq, varquery_t *vq) {
+  PyObject *py_gr_rule, *py_Q, *py_E = py_Q = py_gr_rule = NULL;
+  const char *gr_rule = NULL;
+  uint8_t *Q_s, *E_s = Q_s = NULL;
+  size_t Q_n, E_n;
+  bool ok = false;
+
+  py_gr_rule = PyObject_GetAttrString(py_vq, "gr_rule");
+  if (!py_gr_rule) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field gr_rule of supposed VarQuery object!");
+    goto cleanup;
+  }
+  gr_rule = PyUnicode_AsUTF8(py_gr_rule);
+  if (!gr_rule) {
+    PyErr_SetString(PyExc_TypeError, "field gr_rule of VarQuery must be a string!");
+    goto cleanup;
+  }
+  py_Q = PyObject_GetAttrString(py_vq, "Q_s");
+  if (!py_gr_rule) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field Q_s of supposed VarQuery object!");
+    goto cleanup;
+  }
+  Q_n = PyList_GET_SIZE(py_Q);
+  Q_s = (uint8_t*) malloc(Q_n*sizeof(uint8_t));
+  if (!Q_s) goto nomem;
+  for (size_t i = 0; i < Q_n; ++i) Q_s[i] = PyLong_AsLong(PyList_GET_ITEM(py_Q, i));
+  py_E = PyObject_GetAttrString(py_vq, "E_s");
+  if (!py_gr_rule) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field E_s of supposed VarQuery object!");
+    goto cleanup;
+  }
+  E_n = PyList_GET_SIZE(py_E);
+  E_s = (uint8_t*) malloc(E_n*sizeof(uint8_t));
+  if (!E_s) goto nomem;
+  for (size_t i = 0; i < E_n; ++i) E_s[i] = PyLong_AsLong(PyList_GET_ITEM(py_E, i));
+
+  vq->gr_rule = gr_rule;
+  vq->py_gr_rule = py_gr_rule;
+  vq->Q_n = Q_n; vq->Q_s = Q_s;
+  vq->E_n = E_n; vq->E_s = E_s;
+  vq->self = py_vq;
+
+  ok = true;
+  goto cleanup;
+nomem:
+  PyErr_SetString(PyExc_MemoryError, "no free memory available!");
+  free(Q_s); free(E_s);
+cleanup:
+  if (!ok) Py_XDECREF(py_gr_rule);
+  Py_XDECREF(py_Q);
+  Py_XDECREF(py_E);
+  return ok;
+}
+
 bool from_python_ad(PyObject *py_ad, annot_disj_t *ad) {
   PyObject *py_P, *py_F, *py_cl_F = py_F = py_P = NULL;
   PyObject *py_P_L, *py_F_L, *py_cl_F_L = py_F_L = py_P_L = NULL;
@@ -853,10 +918,12 @@ bool from_python_program(PyObject *py_P, program_t *P) {
   PyObject *py_P_AD_L = py_P_AD = py_P_CF_L = py_P_CF = py_P_Q_L = py_P_Q = py_P_PR_L = py_P_PR = py_P_PF_L = py_P_PF = py_P_P = NULL;
   PyObject *py_P_NR, *py_P_NR_L, *py_P_NA, *py_P_NA_L = py_P_NA = py_P_NR_L = py_P_NR = NULL;
   PyObject *py_m = NULL, *py_P_stable = NULL, *py_gr_P = NULL;
+  PyObject *py_P_VQ, *py_P_VQ_L = py_P_VQ = NULL;
   const char *P_P, *gr_P;
   prob_fact_t *PF = NULL;
   prob_rule_t *PR = NULL;
   query_t *Q = NULL;
+  varquery_t *VQ = NULL;
   credal_fact_t *CF = NULL;
   annot_disj_t *AD = NULL;
   neural_rule_t *NR = NULL;
@@ -864,6 +931,7 @@ bool from_python_program(PyObject *py_P, program_t *P) {
   program_t *stable = NULL;
   semantics_t sem;
   size_t i, m_train, m_test;
+  bool is_ground;
 
   py_P_P = PyObject_GetAttrString(py_P, "P");
   if (!py_P_P) {
@@ -891,6 +959,11 @@ bool from_python_program(PyObject *py_P, program_t *P) {
     PyErr_SetString(PyExc_AttributeError, "could not access field Q of supposed Program object!");
     goto cleanup;
   }
+  py_P_VQ = PyObject_GetAttrString(py_P, "VQ");
+  if (!py_P_VQ) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field VQ of supposed Program object!");
+    goto cleanup;
+  }
   py_P_CF = PyObject_GetAttrString(py_P, "CF");
   if (!py_P_CF) {
     PyErr_SetString(PyExc_AttributeError, "could not access field CF of supposed Program object!");
@@ -911,6 +984,12 @@ bool from_python_program(PyObject *py_P, program_t *P) {
     PyErr_SetString(PyExc_AttributeError, "could not access field NA of supposed Program object!");
     goto cleanup;
   }
+  PyObject *py_is_ground = PyObject_GetAttrString(py_P, "is_ground");
+  if (!py_is_ground) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field is_ground of supposed Program object!");
+  }
+  is_ground = PyLong_AsLong(py_is_ground);
+  Py_DECREF(py_is_ground);
 
   py_m = PyObject_GetAttrString(py_P, "m_test");
   if (!py_m) {
@@ -971,6 +1050,8 @@ bool from_python_program(PyObject *py_P, program_t *P) {
   if (!py_P_PR_L) goto cleanup;
   py_P_Q_L = PySequence_Fast(py_P_Q, "field Program.Q must either be a list or tuple!");
   if (!py_P_Q_L) goto cleanup;
+  py_P_VQ_L = PySequence_Fast(py_P_VQ, "field Program.VQ must either be a list or tuple!");
+  if (!py_P_VQ_L) goto cleanup;
   py_P_CF_L = PySequence_Fast(py_P_CF, "field Program.CF must either be a list or tuple!");
   if (!py_P_CF_L) goto cleanup;
   py_P_AD_L = PySequence_Fast(py_P_AD, "field Program.AD must either be a list or tuple!");
@@ -983,6 +1064,7 @@ bool from_python_program(PyObject *py_P, program_t *P) {
   P->PF_n = PySequence_Fast_GET_SIZE(py_P_PF_L);
   P->PR_n = PySequence_Fast_GET_SIZE(py_P_PR_L);
   P->Q_n = PySequence_Fast_GET_SIZE(py_P_Q_L);
+  P->VQ_n = PySequence_Fast_GET_SIZE(py_P_VQ_L);
   P->CF_n = PySequence_Fast_GET_SIZE(py_P_CF_L);
   P->AD_n = PySequence_Fast_GET_SIZE(py_P_AD_L);
   P->NR_n = PySequence_Fast_GET_SIZE(py_P_NR_L);
@@ -994,6 +1076,8 @@ bool from_python_program(PyObject *py_P, program_t *P) {
   if (!PR) goto nomem;
   Q = (query_t*) malloc(P->Q_n*sizeof(query_t));
   if (!Q) goto nomem;
+  VQ = (varquery_t*) malloc(P->VQ_n*sizeof(varquery_t));
+  if (!VQ) goto nomem;
   CF = (credal_fact_t*) malloc(P->CF_n*sizeof(credal_fact_t));
   if (!CF) goto nomem;
   AD = (annot_disj_t*) malloc(P->AD_n*sizeof(annot_disj_t));
@@ -1009,6 +1093,8 @@ bool from_python_program(PyObject *py_P, program_t *P) {
     if (!from_python_prob_rule(PySequence_Fast_GET_ITEM(py_P_PR_L, i), &PR[i])) goto cleanup;
   for (i = 0; i < P->Q_n; ++i)
     if (!from_python_query(PySequence_Fast_GET_ITEM(py_P_Q_L, i), &Q[i], sem)) goto cleanup;
+  for (i = 0; i < P->VQ_n; ++i)
+    if (!from_python_varquery(PySequence_Fast_GET_ITEM(py_P_VQ_L, i), &VQ[i])) goto cleanup;
   for (i = 0; i < P->CF_n; ++i)
     if (!from_python_credal_fact(PySequence_Fast_GET_ITEM(py_P_CF_L, i), &CF[i])) goto cleanup;
   for (i = 0; i < P->AD_n; ++i)
@@ -1023,6 +1109,7 @@ bool from_python_program(PyObject *py_P, program_t *P) {
   P->PF = PF;
   P->PR = PR;
   P->Q = Q;
+  P->VQ = VQ;
   P->CF = CF;
   P->AD = AD;
   P->NR = NR;
@@ -1032,6 +1119,7 @@ bool from_python_program(PyObject *py_P, program_t *P) {
 
   P->gr_P = gr_P;
   P->py_gr_P = py_gr_P;
+  P->is_ground = is_ground;
 
   P->sem = sem;
   P->stable = stable;
@@ -1040,6 +1128,7 @@ bool from_python_program(PyObject *py_P, program_t *P) {
   Py_DECREF(py_P_PF);
   Py_DECREF(py_P_PR);
   Py_DECREF(py_P_Q);
+  Py_DECREF(py_P_VQ);
   Py_DECREF(py_P_CF);
   Py_DECREF(py_P_AD);
   Py_DECREF(py_P_NR);
@@ -1062,6 +1151,7 @@ cleanup:
   Py_XDECREF(py_P_PF);
   Py_XDECREF(py_P_PR);
   Py_XDECREF(py_P_Q);
+  Py_XDECREF(py_P_VQ);
   Py_XDECREF(py_P_CF);
   Py_XDECREF(py_P_AD);
   Py_XDECREF(py_P_NR);
@@ -1079,6 +1169,7 @@ cleanup:
   free(PF);
   free(PR);
   free(Q);
+  free(VQ);
   free(CF);
   free(AD);
   free(NR);

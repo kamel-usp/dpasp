@@ -60,4 +60,5 @@ input(1) ~ test(@mnist_images_test(1)), train(@mnist_images_train(1)).
 sum(Z) :- digit(0, X), digit(1, Y), Z = X+Y.
 
 #semantics maxent.
-#learn @mnist_labels_train, lr = 1., niters = 10, alg = "lagrange", batch = 1000.
+#learn @mnist_labels_train, lr = 1., niters = 5, alg = "lagrange", batch = 1000.
+#query sum(X).

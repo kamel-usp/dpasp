@@ -1,7 +1,8 @@
 import pathlib, enum, math, collections.abc
 import lark, lark.reconstruct, clingo, numpy
 from numpy import ascontiguousarray as contiguous
-from .program import ProbFact, Query, ProbRule, Program, CredalFact, unique_fact, Semantics, Data
+from .program import ProbFact, Query, VarQuery, ProbRule, Program, CredalFact, unique_fact, \
+  Semantics, Data
 from .program import AnnotatedDisjunction, NeuralRule, NeuralAD, unique_pgrule_id
 
 def read(*files: str, G: lark.Lark = None, from_str: bool = False, start = "plp") -> lark.Tree:
@@ -76,6 +77,7 @@ class StableTransformer(lark.Transformer):
     self.torch_scope = {}
     self.n_prules = 0
     self.consts = consts
+    self.varquery_id = 0
 
   @staticmethod
   def pack(t: str, rep: str = None, val = None, scope: dict = {}) -> tuple[str, str, str, dict]:
@@ -209,7 +211,7 @@ class StableTransformer(lark.Transformer):
     rep = f"{name}({', '.join(getnths(P[1:], 1))})"
     return self.pack("pred", rep.replace(";", ",") if replace_semicolons else rep, name, self.join_scope(P))
   def grpred(self, P): return self.pred(P)
-  def query_grpred(self, P): return self.pred(P, replace_semicolons = True)
+  def query_pred(self, P): return self.pred(P, replace_semicolons = True)
 
   # Literals.
   def lit(self, P):
@@ -445,12 +447,19 @@ class StableTransformer(lark.Transformer):
 
   # Query elements.
   def qelement(self, E):
-    return self.pack("qelement", " ".join(getnths(E, 1)))
+    return self.pack("qelement", " ".join(getnths(E, 1)), scope = self.join_scope(E))
   # Interpretations.
   def interp(self, I):
-    return self.pack("interp", "", getnths(I, 1))
+    return self.pack("interp", "", getnths(I, 1), scope = self.join_scope(I))
   # Queries.
   def query(self, Q):
+    Sc = self.join_scope(Q)
+    if len(Sc) > 0:
+      P = self.pack("varquery", "", VarQuery(self.varquery_id, list(Q[0][2]), \
+                                             list(Q[1][2]) if len(Q) > 1 else [], \
+                                             semantics = self.sem))
+      self.varquery_id += 1
+      return P
     return self.pack("query", "", Query(Q[0][2], Q[1][2] if len(Q) > 1 else [], semantics = self.sem))
 
   # Constant definition.
@@ -485,6 +494,8 @@ class StableTransformer(lark.Transformer):
     PR = []
     # Queries.
     Q  = []
+    # VarQueries.
+    VQ = []
     # Credal Facts.
     CF = []
     # Annotated Disjunction.
@@ -497,7 +508,8 @@ class StableTransformer(lark.Transformer):
     # Directives.
     directives = {}
     # Mapping.
-    M = {"pfact": PF, "prule": PR, "query": Q, "cfact": CF, "ad": AD, "nrule": TNR, "nad": TNA}
+    M = {"pfact": PF, "prule": PR, "query": Q, "varquery": VQ, "cfact": CF, "ad": AD, "nrule": TNR,
+         "nad": TNA}
     for t, L, O, _ in C:
       if len(L) > 0: push(P, L)
       if t in M: push(M[t], O)
@@ -511,7 +523,7 @@ class StableTransformer(lark.Transformer):
     self.check_data(D)
     self.register_nrule(TNR, NR, D)
     self.register_nad(TNA, NA, D)
-    return Program("\n".join(P), PF, PR, Q, CF, AD, NR, NA, semantics = self.sem, \
+    return Program("\n".join(P), PF, PR, Q, VQ, CF, AD, NR, NA, semantics = self.sem, \
                    directives = directives)
 
 class PartialTransformer(StableTransformer):
@@ -592,16 +604,22 @@ class PartialTransformer(StableTransformer):
     PR = []
     # Queries.
     Q  = []
+    # Variable queries.
+    VQ = []
     # Credal Facts.
     CF = []
     # Annotated Disjunction.
     AD = []
+    # Neural arguments and data.
+    TNR, TNA = [], []
+    D = {}
     # Neural rules and ADs.
     NR, NA = [], []
     # Directives.
     directives = {}
     # Mapping.
-    M = {"pfact": PF, "prule": PR, "query": Q, "cfact": CF, "ad": AD}
+    M = {"pfact": PF, "prule": PR, "query": Q, "varquery": VQ, "cfact": CF, "ad": AD, "nrule": TNR,
+         "nad": TNA}
     for t, L, O, _ in C:
       if len(L) > 0: push(P, L)
       if t in M: push(M[t], O)
@@ -609,7 +627,10 @@ class PartialTransformer(StableTransformer):
         PF.append(O[0].prop_pf)
       if t == "directive": directives[O[0]] = tup if len(tup := O[1:]) > 1 else tup[0]
     P.extend(f"_{x} :- {x}." for x in self.PT)
-    return Program("\n".join(P), PF, PR, Q, CF, AD, NR, NA, semantics = self.sem, \
+    self.check_data(D)
+    self.register_nrule(TNR, NR, D)
+    self.register_nad(TNA, NA, D)
+    return Program("\n".join(P), PF, PR, Q, VQ, CF, AD, NR, NA, semantics = self.sem, \
                    stable_p = self.stable_p, directives = directives)
 
   def transform(self, tree):

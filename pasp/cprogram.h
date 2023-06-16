@@ -110,6 +110,22 @@ typedef struct {
   clingo_symbol_t *E_u; /* Potentially true auxiliary variables for partial semantics. */
 } query_t;
 
+typedef struct {
+  /* Grounding rule. */
+  const char *gr_rule;
+  PyObject *py_gr_rule;
+  /* Number of query variables. */
+  size_t Q_n;
+  /* Signs of query variables. */
+  uint8_t *Q_s;
+  /* Number of evidence variables. */
+  size_t E_n;
+  /* Signs of evidence variables. */
+  uint8_t *E_s;
+  /* VarQuery Python object. */
+  PyObject *self;
+} varquery_t;
+
 typedef enum semantics {
   STABLE_SEMANTICS = 0,
   PARTIAL_SEMANTICS = 1,
@@ -126,6 +142,8 @@ typedef struct program {
   size_t PR_n;
   query_t *Q;
   size_t Q_n;
+  varquery_t *VQ;
+  size_t VQ_n;
   credal_fact_t *CF;
   size_t CF_n;
   annot_disj_t *AD;
@@ -133,6 +151,7 @@ typedef struct program {
 
   const char *gr_P;
   PyObject *py_gr_P;
+  bool is_ground;
 
   neural_rule_t *NR;
   size_t NR_n;
