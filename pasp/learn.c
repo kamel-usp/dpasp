@@ -17,6 +17,41 @@
 #define DISPLAY_PROGRESS_S      "progress"
 #define DISPLAY_LOGLIKELIHOOD_S "loglikelihood"
 
+static bool prepare_dw(program_t *P) {
+  PyObject *py_tensor_dw = NULL;
+  PyArrayObject *py_dw = NULL;
+  float *dw;
+
+  for (size_t i = 0; i < P->NA_n; ++i) {
+    py_tensor_dw = PyObject_GetAttrString(P->NA[i].self, "dw");
+    if (!py_tensor_dw) {
+      PyErr_SetString(PyExc_AttributeError, "could not access field dw of supposed NeuralRule object!");
+      goto cleanup;
+    }
+    if (P->NA[i].learnable) {
+      py_dw = (PyArrayObject*) PyObject_CallMethod(py_tensor_dw, "numpy", NULL);
+      if (!py_dw) {
+        PyErr_SetString(PyExc_AttributeError, "could not call method numpy in tensor NeuralRule.dw!");
+        goto cleanup;
+      }
+      dw = (float*) PyArray_DATA(py_dw);
+    } else dw = NULL;
+
+    P->NA[i].dw = dw;
+
+    Py_DECREF(py_tensor_dw);
+    Py_DECREF(py_dw);
+    py_tensor_dw = NULL;
+    py_dw = NULL;
+  }
+
+  return true;
+cleanup:
+  Py_XDECREF(py_tensor_dw);
+  Py_XDECREF(py_dw);
+  return false;
+}
+
 static PyObject* learn(PyObject *self, PyObject *args, PyObject *kwargs) {
   program_t P = {0};
   PyObject *py_P, *py_obs, *py_obs_counts, *py_atoms;
@@ -84,6 +119,7 @@ static PyObject* learn(PyObject *self, PyObject *args, PyObject *kwargs) {
   }
 
   if (!from_python_program(py_P, &P)) return NULL;
+  if (!prepare_dw(&P)) goto cleanup;
 
   lstable_sat = lstable_sat && (P.sem == LSTABLE_SEMANTICS);
   switch(alg) {
@@ -155,6 +191,7 @@ static PyObject* learn_batch(PyObject *self, PyObject *args, PyObject *kwargs) {
   }
 
   if (!from_python_program(py_P, &P)) return NULL;
+  if (!prepare_dw(&P)) goto cleanup;
 
   lstable_sat = lstable_sat && (P.sem == LSTABLE_SEMANTICS);
   switch(alg) {

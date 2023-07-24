@@ -814,11 +814,10 @@ cleanup:
 }
 
 bool from_python_neural_ad(PyObject *py_nad, neural_annot_disj_t *nad) {
-  PyObject *py_learnable = NULL, *py_tensor_dw = NULL, *py_o = NULL;
-  PyArrayObject *py_H, *py_B, *py_S, *py_dw = py_S = py_B = py_H = NULL;
+  PyObject *py_learnable = NULL, *py_o = NULL;
+  PyArrayObject *py_H, *py_B, *py_S = py_B = py_H = NULL;
   clingo_symbol_t *H = NULL, *B = NULL;
   bool *S = NULL;
-  float *dw;
   long learnable;
   size_t n, v, k = 0, o;
   bool ok = false;
@@ -882,24 +881,10 @@ bool from_python_neural_ad(PyObject *py_nad, neural_annot_disj_t *nad) {
     S = PyArray_DATA(py_S);
   }
 
-  py_tensor_dw = PyObject_GetAttrString(py_nad, "dw");
-  if (!py_tensor_dw) {
-    PyErr_SetString(PyExc_AttributeError, "could not access field dw of supposed NeuralRule object!");
-    goto cleanup;
-  }
-  if (learnable) {
-    py_dw = (PyArrayObject*) PyObject_CallMethod(py_tensor_dw, "numpy", NULL);
-    if (!py_dw) {
-      PyErr_SetString(PyExc_AttributeError, "could not call method numpy in tensor NeuralRule.dw!");
-      goto cleanup;
-    }
-    dw = (float*) PyArray_DATA(py_dw);
-  } else dw = NULL;
-
   nad->n = n; nad->k = k; nad->v = v;
   nad->P = NULL;
   nad->H = H; nad->B = B; nad->S = S;
-  nad->dw = dw;
+  nad->dw = NULL;
   nad->learnable = learnable;
   nad->self = py_nad;
   nad->o = o;
@@ -908,7 +893,7 @@ bool from_python_neural_ad(PyObject *py_nad, neural_annot_disj_t *nad) {
 cleanup:
   if (!ok) { free(H); free(B); free(S); }
   Py_XDECREF(py_H); Py_XDECREF(py_B); Py_XDECREF(py_S); Py_XDECREF(py_learnable);
-  Py_XDECREF(py_tensor_dw); Py_XDECREF(py_dw); Py_XDECREF(py_o);
+  Py_XDECREF(py_o);
   return ok;
 }
 

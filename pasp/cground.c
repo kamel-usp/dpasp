@@ -309,7 +309,7 @@ bool set_is_ground_bit(program_t *P) {
     PyErr_SetString(PyExc_AttributeError, "could not attribute value to Program.is_ground!");
     return false;
   }
-  return true;
+  return P->is_ground = true;
 }
 
 bool ground_all(program_t *P, prob_storage_t *Q) {
