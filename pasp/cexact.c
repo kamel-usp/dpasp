@@ -1247,3 +1247,8 @@ double ll_prob_storage(prob_storage_t *P, size_t n) {
   for (size_t i = 0; i < n; ++i) ll += log(P->P[i].o);
   return ll;
 }
+double ll_prob_storage_counts(prob_storage_t *P, size_t n, PyArrayObject *counts) {
+  double ll = 0.0;
+  for (size_t i = 0; i < n; ++i) ll += ((int) *((int*) PyArray_GETPTR1(counts, i)))*log(P->P[i].o);
+  return ll;
+}

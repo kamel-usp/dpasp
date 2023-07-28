@@ -87,6 +87,7 @@ void free_prob_storage(prob_storage_t *Q);
 bool prob_storage_learnable(prob_storage_t *S);
 
 double ll_prob_storage(prob_storage_t *Q, size_t n);
+double ll_prob_storage_counts(prob_storage_t *Q, size_t n, PyArrayObject *counts);
 
 /* Compute the probability of an observation O (a '\0' terminating const char*), returning the
  * probability ℙ(θ, O) and ℙ(O), where θ covers learnable PFs and ADs. The probabilities are not

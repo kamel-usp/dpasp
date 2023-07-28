@@ -188,7 +188,7 @@ bool learn(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
     update_ground_pr(P, &Q[0]);
 
     /* Update progress bar. */
-    if (bar) progressbar_inc(bar, display ? (ll = ll_prob_storage(&Q[0], O.n)) : 0.);
+    if (bar) progressbar_inc(bar, display ? (ll = ll_prob_storage_counts(&Q[0], O.n, obs_counts)) : 0.);
 
     /* Check for signals. */
     if (PyErr_CheckSignals()) goto cleanup;
