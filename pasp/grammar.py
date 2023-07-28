@@ -468,7 +468,7 @@ class StableTransformer(lark.Transformer):
   @staticmethod
   def path2obs(path: str):
     import pandas, numpy
-    data = pandas.read_csv(path, dtype = bool)
+    data = pandas.read_csv(path, dtype = int)
     return lambda: (data.values, data.columns.values.tolist())
 
   # Learning directive.
