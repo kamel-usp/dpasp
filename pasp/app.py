@@ -129,13 +129,14 @@ def parse_args() -> dict:
   return args, files
 
 def main():
+  print("pasp version", pasp.__version__)
   A, F = parse_args()
   if len(F) > 0:
     P = pasp.parse(*F, semantics = A["sem"])
     if "psemantics" not in P.directives: P.directives["psemantics"] = {"psemantics": A["psem"]}
     P()
   else:
-    print("pasp version", pasp.__version__)
+    print("Reading from stdin")
     inp = ""
     for l in sys.stdin: inp += l
     pasp.exact(pasp.parse(inp, from_str = True, semantics = A["sem"]), psemantics = A["psem"])
