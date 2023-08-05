@@ -74,9 +74,27 @@ sample   = Extension("sample",
                      extra_compile_args = ["-Wno-unused-function"],
                      define_macros = STD_MACROS)
 
+approx   = Extension("approx",
+                     libraries = ["clingo", "pthread", "ncurses", "m"],
+                     depends = ["pasp/approx.c", "pasp/cprogram.c", "pasp/cinf.c", "pasp/cutils.c",
+                                "pasp/carray.c", "pasp/cground.c", "pasp/capprox.c",
+                                "pasp/cmodels.c", "pasp/cdata.c", "pasp/cstorage.c",
+                                "pasp/ctree.c", "pasp/caseo.c", "pasp/ccounter.c",
+                                "bitvector/bitvector.c","thpool/thpool.c",
+                                "progressbar/statusbar.c"],
+                     sources = ["pasp/approx.c", "pasp/cprogram.c", "pasp/cinf.c", "pasp/cutils.c",
+                                "pasp/carray.c", "pasp/cground.c", "pasp/capprox.c",
+                                "pasp/ccounter.c", "pasp/cmodels.c", "pasp/caseo.c",
+                                "pasp/cdata.c", "pasp/ctree.c", "pasp/cstorage.c",
+                                "bitvector/bitvector.c", "thpool/thpool.c",
+                                "progressbar/statusbar.c"],
+                     include_dirs = [np.get_include()],
+                     extra_compile_args = ["-Wno-unused-function"],
+                     define_macros = STD_MACROS)
+
 setup(
   packages = find_packages(where = ".", include = ["pasp*"]),
   include_package_data = True,
-  ext_modules = [exact, ground, learn, sample],
+  ext_modules = [exact, ground, learn, sample, approx],
   cmdclass = {"test": TestCommand},
 )
