@@ -414,7 +414,7 @@ class Program:
         from .wlearn import learn
         if isinstance(D, tuple): learn(self, *D, **A)
         else: learn(self, D, **A)
-    if len(self.Q) > 0:
+    if len(self.Q) + len(self.VQ) > 0:
       from exact import exact
       A = {"quiet": False, "status": True}
       A.update(kwargs)
