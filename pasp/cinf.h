@@ -13,7 +13,7 @@
 
 typedef enum {
   CREDAL_SEMANTICS = 0,
-  MAXENT_SEMANTICS   = 1,
+  MAXENT_SEMANTICS = 1,
 } psemantics_t;
 
 typedef struct {
@@ -88,5 +88,16 @@ bool prepare_control_preground(clingo_control_t **C, program_t *P, total_choice_
 bool setup_config(clingo_control_t *C, const char *nmodels, bool parallelize_clingo);
 bool has_total_model(program_t *P, total_choice_t *theta, bool *has);
 bool atomic_ground(clingo_control_t *C, clingo_ground_callback_t gcb, void *gdata);
+
+size_t num_prob_params(program_t *P);
+
+#define MODEL_CONTAINS_QUERY true
+#define MODEL_CONTAINS_EVI   false
+
+#define PROCS_STR(x) #x ",compete"
+#define PROCS_XSTR(x) PROCS_STR(x)
+#define NUM_PROCS_CONFIG_STR PROCS_XSTR(NUM_PROCS)
+
+bool model_contains(const clingo_model_t *M, query_t *q, size_t i, bool *c, bool query_or_evi, bool is_partial);
 
 #endif

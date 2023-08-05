@@ -15,7 +15,7 @@ static PyObject* exact(PyObject *self, PyObject *args, PyObject *kwargs) {
   double *R = NULL;
   bool r = false, parallel = true, lstable_sat = true, quiet = false, status = true;
   const char *psem_arg = "credal";
-  static char *kwlist[] = { "", "parallel", "lstable_sat", "psemantics", "quiet", "status", NULL };
+  static char *kwlist[] = { "program", "parallel", "lstable_sat", "psemantics", "quiet", "status", NULL };
   psemantics_t psem = CREDAL_SEMANTICS;
 
   if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|bbsbb", kwlist, &py_P, &parallel, &lstable_sat,

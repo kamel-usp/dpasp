@@ -237,10 +237,6 @@ bool dispatch_job(total_choice_t *theta, pthread_mutex_t *wakeup, bool *busy_pro
       compute_func, (void*) &S[id]);
 }
 
-#define PROCS_STR(x) #x ",compete"
-#define PROCS_XSTR(x) PROCS_STR(x)
-#define NUM_PROCS_CONFIG_STR PROCS_XSTR(NUM_PROCS)
-
 bool add_facts_from_total_choice(clingo_control_t *C, array_prob_fact_t *PF, total_choice_t *theta) {
   clingo_backend_t *back;
   if (!clingo_control_backend(C, &back)) return false;
@@ -420,7 +416,7 @@ bool _prepare_control(clingo_control_t **C, program_t *P, total_choice_t *theta,
   if (append) if (!clingo_control_add(*C, "base", NULL, 0, append)) return false;
   /* Add grounded probabilistic rules. */
   if (P->gr_P[0]) if (!clingo_control_add(*C, "base", NULL, 0, P->gr_P)) return false;
-  if (!add_atoms_from_total_choice(*C, P, theta)) return false;
+  if (theta) if (!add_atoms_from_total_choice(*C, P, theta)) return false;
   return true;
 }
 
@@ -487,4 +483,47 @@ cleanup:
   return false;
 }
 
+size_t num_prob_params(program_t *P) {
+  size_t n = P->PF_n + P->NR_n;
+  for (size_t i = 0; i < P->AD_n; ++i) n += P->AD[i].n;
+  for (size_t i = 0; i < P->NA_n; ++i) n += P->NA[i].v*P->NA[i].n*P->NA[i].o;
+  return n;
+}
+
+bool neg_partial_cmp(bool x, bool _x, char s) {
+  /* See page 36 of the lparse manual. This is the negation of the truth value of an atom. */
+  if (s == QUERY_TERM_POS)
+    return !(x && _x);
+  else if (s == QUERY_TERM_UND)
+    return x || !_x; /* ≡ !(!x && _x) */
+  /* else s == QUERY_TERM_NEG */
+  return _x; /* (x && _x) || (!x && _x) ≡ !(x && _x) && !(!x && _x); */
+}
+
+bool model_contains(const clingo_model_t *M, query_t *q, size_t i, bool *c, bool query_or_evi, bool is_partial) {
+  clingo_symbol_t x, x_u;
+  uint8_t s;
+  bool c_x;
+
+  if (query_or_evi) {
+    /* Query. */
+    x = q->Q[i]; s = q->Q_s[i];
+    if (is_partial) x_u = q->Q_u[i];
+  } else {
+    /* Evidence. */
+    x = q->E[i]; s = q->E_s[i];
+    if (is_partial) x_u = q->E_u[i];
+  }
+
+  if (!clingo_model_contains(M, x, &c_x)) return false;
+  if (is_partial) {
+    bool c_a;
+    if (!clingo_model_contains(M, x_u, &c_a)) return false;
+    if (neg_partial_cmp(c_x, c_a, s)) { *c = false; return true; }
+  } else {
+    if (c_x != s) { *c = false; return true; }
+  }
+  *c = true;
+  return true;
+}
 
