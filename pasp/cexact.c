@@ -785,7 +785,7 @@ bool prob_obs(program_t *P, observations_t *obs, bool lstables_sat, prob_storage
     PyErr_SetString(PyExc_ValueError, "received NULL prob_storage_t as argument!");
     goto cleanup;
   }
-  if (!prob_obs_reuse(P, obs, lstables_sat, ret, Q, derive)) goto cleanup;
+  if (!prob_obs_reuse(P, obs, lstables_sat, ret, Q, derive, num_procs)) goto cleanup;
 
   return true;
 cleanup:
@@ -798,10 +798,9 @@ cleanup:
 }
 
 bool prob_obs_reuse(program_t *P, observations_t *obs, bool lstable_sat, prob_storage_t *ret,
-    prob_storage_t Q[NUM_PROCS], bool derive) {
+    prob_storage_t Q[NUM_PROCS], bool derive, size_t num_procs) {
   total_choice_t theta;
   size_t total_choice_n = get_num_facts(P);
-  size_t num_procs = estimate_nprocs(total_choice_n + P->AD_n + P->NA_n);
   bool busy_procs[NUM_PROCS] = {0};
   storage_t S[NUM_PROCS] = {{0}};
   size_t i;

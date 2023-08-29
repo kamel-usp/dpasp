@@ -14,7 +14,7 @@ bool prob_storage_learnable(prob_storage_t *S) { return S->n || S->m || S->pr ||
 
 size_t init_prob_storage_seq(prob_storage_t Q[NUM_PROCS], program_t *P, observations_t *O) {
   size_t total_choice_n = get_num_facts(P);
-  size_t num_procs = estimate_nprocs(total_choice_n + P->AD_n);
+  size_t num_procs = estimate_nprocs(total_choice_n + P->AD_n + P->NA_n);
   size_t i = 0;
 
   for (i = 0; i < num_procs; ++i) {

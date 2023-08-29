@@ -180,7 +180,7 @@ bool learn(program_t *P, PyArrayObject *obs, PyArrayObject *obs_counts,
     if (!forward_neural(P, &O)) goto cleanup;
 
     /* Compute probabilities. */
-    if (!prob_obs_reuse(P, &O, lstable_sat, NULL, Q, derive)) goto cleanup;
+    if (!prob_obs_reuse(P, &O, lstable_sat, NULL, Q, derive, num_procs)) goto cleanup;
 
     alg[which](P, &Q[0], N, eta, obs_counts, &O);
 
@@ -387,7 +387,7 @@ bool learn_batch(program_t *P, PyArrayObject *obs, size_t niters, double eta, si
       if (!forward_neural(P, &O)) goto cleanup;
 
       /* Compute probabilities. */
-      if (!prob_obs_reuse(P, &O, lstable_sat, NULL, Q, derive)) goto cleanup;
+      if (!prob_obs_reuse(P, &O, lstable_sat, NULL, Q, derive, num_procs)) goto cleanup;
 
       alg[which](P, &Q[0], &O, eta, smooth);
 
