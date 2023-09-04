@@ -398,6 +398,8 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
           goto cleanup;
         if (bar) statusbar_inc(bar);
       } while (incr_total_choice_ad(&theta, P));
+      /* Check for signals. */
+      if (PyErr_CheckSignals()) goto cleanup;
     } while (incr_total_choice(&theta));
     thpool_wait(pool);
 
