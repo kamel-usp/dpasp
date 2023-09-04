@@ -144,10 +144,11 @@ _learn_opt_lr: /lr/ "=" REAL
 _learn_opt_alg: /alg/ "=" "\"" (/lagrange/ | /neurasp/ | /fixpoint/) "\""
 _learn_opt_batch: /batch/ "=" ID
 _learn_opt_niters: /niters/ "=" ID
+_learn_opt_momentum: /momentum/ "=" REAL
 _learn_opt_smoothing: /smoothing/ "=" REAL
 _learn_opt_display: /display/ "=" "\"" (/none/ | /progress/ | /loglikelihood/) "\""
 _learn_opt: (_learn_opt_lr | _learn_opt_alg | _learn_opt_batch | _learn_opt_niters
-           | _learn_opt_display | _learn_opt_smoothing)
+           | _learn_opt_display | _learn_opt_smoothing | _learn_opt_momentum)
 _learn_exp: (("@" PY_FUNC) | path) ("," _learn_opt)*
 learn: "#learn" (("(" _learn_exp ")") | (_learn_exp)) "."
 
