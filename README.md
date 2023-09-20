@@ -23,7 +23,67 @@ standalone language and interpreter.
 
 The easiest way to get started is by reading the tutorial [Learning dPASP Through Examples](http://kamel.ime.usp.br/pages/learn_dpasp).
 
-## Acknowledgment
+## Features
+
+dPASP allows for several semantics by combining logic programming semantics and probabilistic semantics:
+
+### Logic semantics
+
+- Stable semantics;
+- Partial semantics;
+- L-Stable semantics.
+
+### Probabilistic semantics
+
+- Credal semantics;
+- MaxEnt semantics.
+
+There are two uses of the systems: learning and querying. 
+Currently, learning allows only for MaxEnt-Stable semantics.
+
+Learning and querying can either be made by (highly inneficient) enumerative algorithms and (more efficient) approximate inference.
+Enumerative algorithms are available to all possible (logic and probabilistic) semantics, while currently only MaxEnt-Stable semantics implements all approximate algorithms.
+Developing more efficient and accurate approximate algorithms is a current active line of research.
+
+## Example
+
+Assuming you have dPASP installed and configured, open a Python Shell and load the library by:
+
+```
+>>> import pasp
+>>> program_str = '''
+#const n = 5.
+v(1..n).
+0.5::e(X, Y) :- v(X), v(Y), X < Y.
+e(X, Y) :- e(Y, X).
+c(X, r) :- not c(X, g), not c(X, b), v(X).
+c(X, g) :- not c(X, r), not c(X, b), v(X).
+c(X, b) :- not c(X, r), not c(X, g), v(X).
+f :- not f, e(X, Y), c(X, Z), c(Y, Z).
+#semantics maxent.
+'''
+>>> P = pasp.parse(program_str, from_str=True)
+```
+Note the directive `#semantics maxent` selecting the respective probabilistic semantics (other options are `partial`, `lstable`, `credal`).
+
+You can check that the program was correctly parsed by verifying the object `P`
+
+```
+>>> P()
+```
+
+To run exact (enumerative) inference, do:
+```
+>>> pasp.exact(P)
+```
+
+You can also run inference with a specified semantics:
+To run exact (enumerative) inference, do:
+```
+>>> pasp.exact(P, psemantics="credal")
+```
+
+## Acknowledgments
 
 This software is being developed by the KAMeL group of the University of São Paulo and the Center for Artificial Intelligence.
 If you use this software, please acknowledge by citing the paper below:
