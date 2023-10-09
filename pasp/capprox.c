@@ -57,20 +57,8 @@ bool approx_query_credal(const clingo_model_t *cM, program_t *P, models_t *M, ob
   return false;
 }
 
-bool approx_query_maxent(program_t *P, models_t *M, double **R) {
-  bool ok = false;
-  double *a, *b, *r = b = a = NULL;
+void approx_query_maxent_ab(program_t *P, models_t *M, double *a, double *b) {
   size_t n = M->n;
-
-  /* The resulting (flattened) array has dimension n*k x 1, where n is the number of queries and k
-   * is the number of examples in the neural dataset. */
-  r = (double*) malloc(M->n*sizeof(double));
-  if (!r) goto cleanup;
-  /* Arrays a and b are the cumulated probabilities for each query. */
-  a = (double*) calloc(M->n, sizeof(double));
-  if (!a) goto cleanup;
-  b = (double*) calloc(M->n, sizeof(double));
-  if (!b) goto cleanup;
 
   /*printf("n = %lu, m = %lu\n", n, M->m);*/
   for (size_t i = 0; i < n; ++i) {
@@ -83,11 +71,30 @@ bool approx_query_maxent(program_t *P, models_t *M, double **R) {
       /*printf("b[%lu] += %d * %f / %lu = %f %f\n", i, counter_GET(&M->C, l, j), M->L[j]->pr, M->L[j]->n,*/
           /*counter_GET(&M->C, l, j)*M->L[j]->pr/M->L[j]->n, b[i]);*/
     }
-    r[i] = a[i]/b[i];
     /*printf("  a[%lu] * b[%lu] = %f\n", i, i, r[i]);*/
   }
+}
 
-  *R = r;
+void approx_query_maxent_r(program_t *P, models_t *M, double *r, double *a, double *b) {
+  for (size_t i = 0; i < M->n; ++i) r[i] = a[i]/b[i];
+}
+
+bool approx_query_maxent(program_t *P, models_t *M, double **R) {
+  bool ok = false;
+  double *a, *b, *r = a = b = NULL;
+
+  /* The resulting (flattened) array has dimension n*k x 1, where n is the number of queries and k
+   * is the number of examples in the neural dataset. */
+  r = (double*) malloc(M->n*sizeof(double));
+  if (!r) goto cleanup;
+  /* Arrays a and b are the cumulated probabilities for each query. */
+  a = (double*) calloc(M->n, sizeof(double));
+  if (!a) goto cleanup;
+  b = (double*) calloc(M->n, sizeof(double));
+  if (!b) goto cleanup;
+
+  approx_query_maxent_ab(P, M, a, b);
+  approx_query_maxent_r(P, M, r, a, b);
 
   ok = true;
 cleanup:
@@ -95,3 +102,4 @@ cleanup:
   if (!ok) free(r);
   return ok;
 }
+

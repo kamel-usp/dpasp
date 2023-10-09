@@ -85,4 +85,9 @@ bool prob_storage_learnable(prob_storage_t *S);
 double ll_prob_storage(prob_storage_t *Q, size_t n);
 double ll_prob_storage_counts(prob_storage_t *Q, size_t n, PyArrayObject *counts);
 
+/* Get dimension (number of classes) of the i-th learnable AD in storage S. */
+#define STORAGE_AD_DIM(P, S, i) ((P)->AD[(S)->I_A[(i)]].n)
+
+void reset_prob_storage_obs(program_t *P, prob_storage_t *Q, size_t num_procs, observations_t *obs);
+
 #endif

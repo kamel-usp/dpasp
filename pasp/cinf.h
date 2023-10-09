@@ -8,9 +8,6 @@
 #include <pthread.h>
 #include "../thpool/thpool.h"
 
-/* Get dimension (number of classes) of the i-th learnable AD in storage S. */
-#define STORAGE_AD_DIM(P, S, i) ((P)->AD[(S)->I_A[(i)]].n)
-
 typedef enum {
   CREDAL_SEMANTICS = 0,
   MAXENT_SEMANTICS = 1,

@@ -111,25 +111,22 @@ class StableTransformer(lark.Transformer):
 
   @staticmethod
   def cont_head_sym(name: str, T: list, O: list, V: list = None):
-    g = None
+    g, S = None, None
     if V is None:
-      if O is None:
-        g = (clingo.parse_term(f"{name}({t.arg})")._rep for t in T)
-      else:
-        g = (clingo.parse_term(f"{name}({t.arg}, {o})")._rep for t in T for o in O)
+      if O is None: S = [f"{name}({t.arg})" for t in T]
+      else: S = [f"{name}({t.arg}, {o})" for t in T for o in O]
     else:
-      if O is None:
-        g = (clingo.parse_term(f"{name}({t.arg}, {v})")._rep for t in T for v in V)
-      else:
-        g = (clingo.parse_term(f"{name}({t.arg}, {v}, {o})")._rep for t in T for o in O for v in V)
-    return contiguous(tuple(g), dtype=numpy.uint64)
+      if O is None: S = [f"{name}({t.arg}, {v})" for t in T for v in V]
+      else: S = [f"{name}({t.arg}, {v}, {o})" for t in T for o in O for v in V]
+    g = (clingo.parse_term(s)._rep for s in S)
+    return contiguous(tuple(g), dtype=numpy.uint64), S
 
   @staticmethod
   def register_nrule(TNR: list, NR: list, D: list):
     for name, inp, O, net, body, rep, learnable, params in TNR:
       t = StableTransformer.find_data_pred(D, body, "rule", name)
       # Ground rules.
-      H = StableTransformer.cont_head_sym(name, t, O)
+      H, _ = StableTransformer.cont_head_sym(name, t, O)
       B, S = None, None
       if len(body) > 1:
         # B and S do not depend on the number of outcomes |O|, only on |t| and |body|.
@@ -146,7 +143,7 @@ class StableTransformer(lark.Transformer):
       t = StableTransformer.find_data_pred(D, body, "AD", name)
       # Ground rules.
       V = list(vals.keys())
-      H = StableTransformer.cont_head_sym(name, t, O, V)
+      H, H_s = StableTransformer.cont_head_sym(name, t, O, V)
       B, S = None, None
       if len(body) > 1:
         body_no_data = [b for b in body if b[2][1] != t[0].name]
@@ -155,7 +152,7 @@ class StableTransformer(lark.Transformer):
                                                 else lit2atom(b[1]))._rep for i in range(len(t)) \
                               for b in body_no_data), dtype = numpy.uint64)
         S = contiguous(tuple(b[2][0] for i in range(len(t)) for b in body_no_data), dtype = bool)
-      NA.append(NeuralAD(H, B, S, name, V, net, rep, t, learnable, params, O))
+      NA.append(NeuralAD(H, B, S, name, V, net, rep, t, learnable, params, O, H_s))
 
   def __default__(self, _, __, ___): return lark.visitors.Discard
 

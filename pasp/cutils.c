@@ -4,6 +4,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <wchar.h>
 
 #include "cutils.h"
 
@@ -84,7 +85,7 @@ bool print_symbol(clingo_symbol_t symbol, model_buffer_t *buf) {
   }
   // retrieve the symbol's string
   if (!clingo_symbol_to_string(symbol, buf->string, n)) { goto error; }
-  printf("%s", buf->string);
+  wprintf(L"%s", buf->string);
   goto out;
 error:
   ret = false;
@@ -110,12 +111,12 @@ bool print_model(const clingo_model_t *model, model_buffer_t *buf, const char *l
   }
   // retrieve the symbols in the model
   if (!clingo_model_symbols(model, show, buf->symbols, n)) { goto error; }
-  printf("%s:", label);
+  wprintf(L"%s:", label);
   for (it = buf->symbols, ie = buf->symbols + n; it != ie; ++it) {
-    printf(" ");
+    wprintf(L" ");
     if (!print_symbol(*it, buf)) { goto error; }
   }
-  printf("\n");
+  wprintf(L"\n");
   goto out;
 error:
   ret = false;
@@ -138,7 +139,7 @@ bool print_solution(const clingo_model_t *model) {
   }
   // get running number of model
   if (!clingo_model_number(model, &number)) { goto error; }
-  printf("%s %" PRIu64 ":\n", type_string, number);
+  wprintf(L"%s %" PRIu64 ":\n", type_string, number);
   if (!print_model(model, &data, "  shown", clingo_show_type_shown)) { goto error; }
   if (!print_model(model, &data, "  atoms", clingo_show_type_atoms)) { goto error; }
   if (!print_model(model, &data, "  terms", clingo_show_type_terms)) { goto error; }
@@ -153,12 +154,12 @@ out:
 }
 
 void print_bin(unsigned long long int x, size_t n) {
-  while (n--) printf("%llu", (x >> n) % 2);
+  while (n--) wprintf(L"%llu", (x >> n) % 2);
 }
 
 void undef_atom_ignore(clingo_warning_t code, const char *msg, void *data) {
   if (code == clingo_warning_atom_undefined) return;
-  printf("clingo | error code %d: %s\n", code, msg);
+  wprintf(L"clingo | error code %d: %s\n", code, msg);
   (void) data;
 }
 

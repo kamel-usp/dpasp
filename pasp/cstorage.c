@@ -285,4 +285,24 @@ cleanup:
   return false;
 }
 
-
+void reset_prob_storage_obs(program_t *P, prob_storage_t *Q, size_t num_procs, observations_t *obs) {
+  for (size_t i = 0; i < num_procs; ++i) {
+    /* Fill probs with zero. */
+    for (size_t j = 0; j < obs->n; ++j) {
+      prob_obs_storage_t *pr = &Q[i].P[j];
+      memset(pr->F, 0, Q[0].n*sizeof(double[2]));
+      for (size_t l = 0; l < Q[0].m; ++l)
+        memset(pr->A[l], 0, STORAGE_AD_DIM(P, &Q[0], l)*sizeof(double));
+      memset(pr->R, 0, Q[0].pr*sizeof(double[2]));
+      for (size_t l = 0; l < Q[0].nr; ++l) {
+        neural_rule_t *nr = &P->NR[Q[0].I_NR[l]];
+        memset(pr->NR[l], 0, 2*nr->n*nr->o*sizeof(double));
+      }
+      for (size_t l = 0; l < Q[0].na; ++l) {
+        neural_annot_disj_t *na = &P->NA[Q[0].I_NA[l]];
+        memset(pr->NA[l], 0, na->v*na->n*na->o*sizeof(double));
+      }
+      pr->o = 0.0;
+    }
+  }
+}

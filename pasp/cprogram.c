@@ -82,7 +82,7 @@ bool backward_neural_annot_disj(neural_annot_disj_t *na) {
   return PyObject_CallMethod(na->self, "backward", NULL);
 }
 
-void free_neural_annot_disj_contents(neural_annot_disj_t *na) {}
+void free_neural_annot_disj_contents(neural_annot_disj_t *na) { free(na->H_s); }
 void free_neural_annot_disj(neural_annot_disj_t *na) { free_neural_annot_disj_contents(na); free(na); }
 
 bool print_query_with_buffer(query_t *q, string_t *s) {
@@ -815,27 +815,28 @@ cleanup:
 
 bool from_python_neural_ad(PyObject *py_nad, neural_annot_disj_t *nad) {
   PyObject *py_learnable = NULL, *py_o = NULL;
-  PyArrayObject *py_H, *py_B, *py_S = py_B = py_H = NULL;
+  PyArrayObject *py_H, *py_B, *py_S, *py_H_s = py_S = py_B = py_H = NULL;
   clingo_symbol_t *H = NULL, *B = NULL;
   bool *S = NULL;
   long learnable;
   size_t n, v, k = 0, o;
   bool ok = false;
+  const char **H_s = NULL;
 
   py_learnable = PyObject_GetAttrString(py_nad, "learnable");
   if (!py_learnable) {
-    PyErr_SetString(PyExc_AttributeError, "could not access field learnable of supposed NeuralRule object!");
+    PyErr_SetString(PyExc_AttributeError, "could not access field learnable of supposed NeuralAD object!");
     goto cleanup;
   }
   learnable = PyLong_AsLong(py_learnable);
   if ((learnable == (long) -1) && !PyErr_Occurred()) {
-    PyErr_SetString(PyExc_TypeError, "field learnable of NeuralRule must be a bool!");
+    PyErr_SetString(PyExc_TypeError, "field learnable of NeuralAD must be a bool!");
     goto cleanup;
   }
 
   PyObject *py_V = PyObject_GetAttrString(py_nad, "vals");
   if (!py_V) {
-    PyErr_SetString(PyExc_AttributeError, "could not access field vals of supposed NeuralRule object!");
+    PyErr_SetString(PyExc_AttributeError, "could not access field vals of supposed NeuralAD object!");
     goto cleanup;
   }
   PyObject *py_V_L = PySequence_Fast(py_V, "field NeuralAD.vals must either be a list or tuple!");
@@ -845,18 +846,18 @@ bool from_python_neural_ad(PyObject *py_nad, neural_annot_disj_t *nad) {
 
   py_o = PyObject_GetAttrString(py_nad, "outcomes");
   if (!py_o) {
-    PyErr_SetString(PyExc_AttributeError, "could not access field outcomes of supposed NeuralRule object!");
+    PyErr_SetString(PyExc_AttributeError, "could not access field outcomes of supposed NeuralAD object!");
     goto cleanup;
   }
   o = PyLong_AsUnsignedLong(py_o);
   if ((o == (size_t) -1) && !PyErr_Occurred()) {
-    PyErr_SetString(PyExc_TypeError, "field outcomes of NeuralRule must be an integer!");
+    PyErr_SetString(PyExc_TypeError, "field outcomes of NeuralAD must be an integer!");
     goto cleanup;
   }
 
   py_H = (PyArrayObject*) PyObject_GetAttrString(py_nad, "H");
   if (!py_H) {
-    PyErr_SetString(PyExc_AttributeError, "could not access field H of supposed NeuralRule object!");
+    PyErr_SetString(PyExc_AttributeError, "could not access field H of supposed NeuralAD object!");
     goto cleanup;
   }
   H = (clingo_symbol_t*) PyArray_DATA(py_H);
@@ -865,7 +866,7 @@ bool from_python_neural_ad(PyObject *py_nad, neural_annot_disj_t *nad) {
 
   PyObject *_py_B = PyObject_GetAttrString(py_nad, "B");
   if (!_py_B) {
-    PyErr_SetString(PyExc_AttributeError, "could not access field B of supposed NeuralRule object!");
+    PyErr_SetString(PyExc_AttributeError, "could not access field B of supposed NeuralAD object!");
     goto cleanup;
   }
   if (_py_B != Py_None) {
@@ -875,10 +876,33 @@ bool from_python_neural_ad(PyObject *py_nad, neural_annot_disj_t *nad) {
 
     py_S = (PyArrayObject*) PyObject_GetAttrString(py_nad, "S");
     if (!py_S) {
-      PyErr_SetString(PyExc_AttributeError, "could not access field S of supposed NeuralRule object!");
+      PyErr_SetString(PyExc_AttributeError, "could not access field S of supposed NeuralAD object!");
       goto cleanup;
     }
     S = PyArray_DATA(py_S);
+  }
+  py_H_s = (PyArrayObject*) PyObject_GetAttrString(py_nad, "heads_str");
+  if (!py_H_s) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field heads_str of supposed NeuralAD object!");
+    goto cleanup;
+  }
+  if (!PyList_Check(py_H_s)) {
+    PyErr_SetString(PyExc_TypeError, "field heads_str of NeuralAD should be a list!");
+    goto cleanup;
+  }
+  size_t n_H_s = PyArray_SIZE(py_H);
+  H_s = (const char**) malloc(n_H_s*sizeof(char*));
+  if (!H_s) {
+    PyErr_SetString(PyExc_MemoryError, "no memory available!");
+    goto cleanup;
+  }
+  for (size_t i = 0; i < n_H_s; ++i) {
+    PyObject *a = PyList_GET_ITEM(py_H_s, i);
+    H_s[i] = PyUnicode_AsUTF8(a);
+    if (!H_s[i]) {
+      PyErr_SetString(PyExc_TypeError, "elements of list heads_str should be strings!");
+      goto cleanup;
+    }
   }
 
   nad->n = n; nad->k = k; nad->v = v;
@@ -888,12 +912,13 @@ bool from_python_neural_ad(PyObject *py_nad, neural_annot_disj_t *nad) {
   nad->learnable = learnable;
   nad->self = py_nad;
   nad->o = o;
+  nad->H_s = H_s;
 
   ok = true;
 cleanup:
-  if (!ok) { free(H); free(B); free(S); }
+  if (!ok) { free(H); free(B); free(S); free(H_s); }
   Py_XDECREF(py_H); Py_XDECREF(py_B); Py_XDECREF(py_S); Py_XDECREF(py_learnable);
-  Py_XDECREF(py_o);
+  Py_XDECREF(py_o); Py_XDECREF(py_H_s);
   return ok;
 }
 

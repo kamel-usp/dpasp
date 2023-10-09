@@ -43,13 +43,12 @@ bool control_set_nmodels(clingo_control_t *C, size_t n) {
 
 /** Probabilistic components to weak rules. */
 bool pc2wr(program_t *P, clingo_control_t *C, clingo_backend_t *back, int scale,
-    clingo_weighted_literal_t *W) {
+    clingo_weighted_literal_t *W, size_t neural_idx) {
   bool ok = false;
   clingo_weighted_literal_t wl = {0};
   clingo_atom_t choice;
 
-  if (!clingo_backend_begin(back)) goto cleanup;
-
+  /* Probabilistic facts. */
   for (size_t i = 0; i < P->PF_n; ++i) {
     if (!clingo_backend_add_atom(back, &P->PF[i].cl_f, &choice)) goto cleanup;
     wl.literal = choice;
@@ -64,7 +63,7 @@ bool pc2wr(program_t *P, clingo_control_t *C, clingo_backend_t *back, int scale,
    * might be more efficient, but the AST API is still a mistery to me. */
 #define MAX_RULE_LENGTH 8192
   char rule[MAX_RULE_LENGTH];
-  size_t offset;
+  size_t offset, r = P->PF_n;
   for (size_t i = 0; i < P->AD_n; ++i) {
     rule[0] = '{'; rule[1] = '\0';
     offset = 1;
@@ -73,20 +72,100 @@ bool pc2wr(program_t *P, clingo_control_t *C, clingo_backend_t *back, int scale,
     wl.literal = choice;
     wl.weight = -round(scale*log(P->AD[i].P[0]/(1-P->AD[i].P[0])));
     if (!clingo_backend_minimize(back, 0, &wl, 1)) goto cleanup;
-    W[P->PF_n] = wl;
+    W[r] = wl;
     for (size_t j = 1; j < P->AD[i].n; ++j) {
       offset += sprintf(rule+offset, "; %s", P->AD[i].F[j]);
       if (!clingo_backend_add_atom(back, &P->AD[i].cl_F[j], &choice)) goto cleanup;
       wl.literal = choice;
       wl.weight = -round(scale*log(P->AD[i].P[j]/(1-P->AD[i].P[j])));
       if (!clingo_backend_minimize(back, 0, &wl, 1)) goto cleanup;
-      W[j+P->PF_n] = wl;
+      W[j+r] = wl;
     }
     strcpy(rule+offset, "} = 1.");
     if (!clingo_control_add(C, "base", NULL, 0, rule)) goto cleanup;
   }
+  r += P->AD_n;
 #undef MAX_RULE_LENGTH
-  if (!clingo_backend_end(back)) goto cleanup;
+
+  /* Neural facts. */
+  /* TODO: when implementing learning, m has to be P->batch. */
+  size_t m = P->m_test;
+  clingo_atom_t h;
+  clingo_literal_t B[64];
+  for (size_t i = 0; i < P->NR_n; ++i) {
+    float *prob = P->NR[i].P + neural_idx*P->NR[i].o;
+    for (size_t j = 0; j < P->NR[i].n; ++j) {
+      /* Add rule. */
+      if (P->NR[i].k > 0) {
+        for (size_t b = 0; b < P->NR[i].k; ++b) {
+          size_t u = j*P->NR[i].k+b;
+          if (!clingo_backend_add_atom(back, &P->NR[i].B[u], (clingo_atom_t*) &B[b])) goto cleanup;
+          if (!P->NR[i].S[u]) B[b] = -B[b];
+        }
+        for (size_t o = 0; o < P->NR[i].o; ++o) {
+          if (!clingo_backend_add_atom(back, &P->NR[i].H[j*P->NR[i].o+o], &h)) goto cleanup;
+          if (!clingo_backend_rule(back, false, &h, 1, B, P->NR[i].k)) return false;
+        }
+      }
+      /* Add weak rule. */
+      for (size_t o = 0; o < P->NR[i].o; ++o) {
+        double p = prob[j*P->NR[i].o*m+o];
+        if (!clingo_backend_add_atom(back, &P->NR[i].H[j], &choice)) goto cleanup;
+        wl.literal = choice;
+        wl.weight = -round(scale*log(p/(1-p)));
+        if (!clingo_backend_rule(back, true, &choice, 1, NULL, 0)) goto cleanup;
+        if (!clingo_backend_minimize(back, 0, &wl, 1)) goto cleanup;
+        W[r+o] = wl;
+      }
+      r += P->NR[i].o;
+    }
+  }
+
+  /* Neural annotated disjunctions. */
+  for (size_t i = 0; i < P->NA_n; ++i) {
+    float *prob = P->NA[i].P + neural_idx*P->NA[i].v*P->NA[i].o;
+    for (size_t j = 0; j < P->NA[i].n; ++j) {
+      /* Add rule. */
+      if (P->NA[i].k > 0) {
+        for (size_t b = 0; b < P->NA[i].k; ++b) {
+          size_t u = j*P->NA[i].k+b;
+          if (!clingo_backend_add_atom(back, &P->NA[i].B[u], (clingo_atom_t*) &B[b])) goto cleanup;
+          if (!P->NA[i].S[u]) B[b] = -B[b];
+        }
+        for (size_t o = 0; o < P->NA[i].o; ++o) {
+          for (size_t v = 0; v < P->NA[i].v; ++v)
+            if (!clingo_backend_add_atom(back, &P->NA[i].H[j*P->NA[i].v*P->NA[i].o+o*P->NA[i].v+v], &h))
+              goto cleanup;
+          if (!clingo_backend_rule(back, false, &h, 1, B, P->NA[i].k)) goto cleanup;
+        }
+      }
+      /* Add weak rule. */
+      for (size_t o = 0; o < P->NA[i].o; ++o) {
+        size_t h_offset = j*P->NA[i].v*P->NA[i].o+o*P->NA[i].v;
+        rule[0] = '{'; rule[1] = '\0';
+        offset = 1;
+        offset += sprintf(rule+offset, "%s", P->NA[i].H_s[h_offset]);
+        if (!clingo_backend_add_atom(back, &P->NA[i].H[h_offset], &choice)) goto cleanup;
+        wl.literal = choice;
+        double p = prob[j*P->NA[i].o*m+o];
+        wl.weight = -round(scale*log(p/(1-p)));
+        if (!clingo_backend_minimize(back, 0, &wl, 1)) goto cleanup;
+        W[P->PF_n] = wl;
+        for (size_t v = 1; v < P->NA[i].v; ++v) {
+          offset += sprintf(rule+offset, "; %s", P->NA[i].H_s[h_offset+v]);
+          if (!clingo_backend_add_atom(back, &P->NA[i].H[h_offset+v], &choice)) goto cleanup;
+          wl.literal = choice;
+          p = prob[j*P->NA[i].o*m+o+v];
+          wl.weight = -round(scale*log(p/(1-p)));
+          if (!clingo_backend_minimize(back, 0, &wl, 1)) goto cleanup;
+          W[r+v] = wl;
+        }
+        r += P->NA[i].v;
+        strcpy(rule+offset, "} = 1.");
+        if (!clingo_control_add(C, "base", NULL, 0, rule)) goto cleanup;
+      }
+    }
+  }
 
   ok = true;
 cleanup:
@@ -95,8 +174,8 @@ cleanup:
 
 bool aseo_solve(program_t *P, clingo_control_t *C, size_t k,
     clingo_solve_result_bitset_t *solve_ret, size_t *N, models_t *models, observations_t *O,
-    bool (*f)(const clingo_model_t*, program_t*, models_t*, size_t, observations_t*,
-      clingo_control_t*)) {
+    size_t neural_offset, bool (*f)(const clingo_model_t*, program_t*, models_t*, size_t,
+      observations_t*, clingo_control_t*)) {
   bool ok = false, opt;
   clingo_solve_handle_t *handle;
   const clingo_model_t *M;
@@ -110,18 +189,11 @@ bool aseo_solve(program_t *P, clingo_control_t *C, size_t k,
       /* Whether this model is optimal. */
       if (!clingo_model_optimality_proven(M, &opt)) goto cleanup;
       if (!opt) continue;
-      ctree_t *leaf = ctree_add(&models->root, M, P);
+      ctree_t *leaf = ctree_add(&models->root, M, P, neural_offset);
       if (!leaf) goto cleanup;
       models->L[*N+m] = leaf;
       if (!f(M, P, models, *N+m, O, C)) goto cleanup;
       ++m;
-      /* DEBUG BEGIN */
-      /*printf("=================\n%lu-th model (run %lu):\n=================\n", *N+m, m);*/
-      /*print_solution(M);*/
-      /*int64_t cost;*/
-      /*if (!clingo_model_cost(M, &cost, 1)) goto cleanup;*/
-      /*printf("Cost: %ld\tOptimal: %d\n", cost, opt);*/
-      /* DEBUG END */
     } else break;
   }
   if (!clingo_solve_handle_get(handle, solve_ret)) goto cleanup;
@@ -153,20 +225,21 @@ bool set_upper_bound(clingo_backend_t *back, clingo_weighted_literal_t *W, size_
   return ok;
 }
 
-models_t* aseo(program_t *P, size_t k, psemantics_t psem, observations_t *O, int scale,
+bool aseo_reuse(program_t *P, size_t k, psemantics_t psem, observations_t *O, int scale,
+    size_t neural_idx, clingo_weighted_literal_t *W, clingo_weighted_literal_t *U, models_t* M,
     bool (*f)(const clingo_model_t*, program_t*, models_t*, size_t, observations_t*,
       clingo_control_t*)) {
   bool ok = false;
   clingo_control_t *C = NULL;
   clingo_backend_t *back = NULL;
-  /*clingo_ground_program_observer_t obs = {NULL}; obs.minimize = watch_minimize;*/
-  models_t *M = NULL;
 
   size_t n = num_prob_params(P);
-  clingo_weighted_literal_t *W = (clingo_weighted_literal_t*) malloc(n*sizeof(clingo_weighted_literal_t));
-  clingo_weighted_literal_t *U = (clingo_weighted_literal_t*) malloc(n*sizeof(clingo_weighted_literal_t));
-  if (!(W && U)) goto nomem;
-  M = O ? models_create(k, O->n, true) : models_create(k, P->Q_n, false);
+  if (!(W && U)) {
+    PyErr_SetString(PyExc_RuntimeError, "weighted literals W and U in aseo were passed as NULL!");
+    goto cleanup;
+  }
+  if (O) { if (!models_init(M, k, O->n, true)) goto cleanup; }
+  else if (!models_init(M, k, P->Q_n, false)) goto cleanup;
 
   clingo_configuration_t *cfg = NULL;
   clingo_id_t cfg_root, cfg_sub;
@@ -189,8 +262,10 @@ models_t* aseo(program_t *P, size_t k, psemantics_t psem, observations_t *O, int
   /*size_t i_W = 0;*/
   /*void *pack[] = {(void*) W, (void*) &i_W};*/
   if (!clingo_control_backend(C, &back)) goto cleanup;
+  if (!clingo_backend_begin(back)) goto cleanup;
   /* Convert probabilistic components into weak rules. */
-  if (!pc2wr(P, C, back, scale, W)) goto cleanup;
+  if (!pc2wr(P, C, back, scale, W, neural_idx)) goto cleanup;
+  if (!clingo_backend_end(back)) goto cleanup;
   /*if (!clingo_control_register_observer(C, &obs, false, (void*) pack)) goto cleanup;*/
   if (!control_set_nmodels(C, k)) goto cleanup;
   if (!clingo_control_ground(C, GROUND_DEFAULT_PARTS, 1, NULL, NULL)) goto cleanup;
@@ -205,7 +280,7 @@ models_t* aseo(program_t *P, size_t k, psemantics_t psem, observations_t *O, int
 
   size_t m = 0; /* Number of optimal models seen so far. */
   double cost;
-  if (!aseo_solve(P, C, k, &res, &m, M, O, f)) goto cleanup;
+  if (!aseo_solve(P, C, k, &res, &m, M, O, neural_idx, f)) goto cleanup;
   while ((res & clingo_solve_result_satisfiable) && !(res & clingo_solve_result_interrupted)) {
     if (m >= k) break;
     else if (!control_set_nmodels(C, k-m)) goto cleanup;
@@ -215,26 +290,44 @@ models_t* aseo(program_t *P, size_t k, psemantics_t psem, observations_t *O, int
     if (!clingo_statistics_value_get(stats, cost_key, &cost)) goto cleanup;
 
     if (!set_upper_bound(back, W, n, U, (int) cost)) goto cleanup;
-    if (!aseo_solve(P, C, k, &res, &m, M, O, f)) goto cleanup;
+    if (!aseo_solve(P, C, k, &res, &m, M, O, neural_idx, f)) goto cleanup;
   }
   M->m = m;
 
+#ifdef DEBUG_CTREE
   /* Debug: write models to dot. */
   char buffer[1048576];
   if (!ctree_dot(&M->root, P, buffer)) goto cleanup;
   FILE *file = fopen("/tmp/test.dot", "w");
   fputs(buffer, file);
   fclose(file);
+#endif
+
+  ok = true;
+  goto cleanup;
+cleanup:
+  if (clingo_error_code() != clingo_error_success) raise_clingo_error(NULL);
+  else if (!ok) PyErr_SetString(PyExc_RuntimeError, "an error has occurred during ASEO!");
+  clingo_control_free(C);
+  if (!ok) { models_free(M); M = NULL; }
+  return ok;
+}
+
+bool aseo(program_t *P, size_t k, psemantics_t psem, observations_t *O, int scale,
+    size_t neural_idx, models_t *M, bool (*f)(const clingo_model_t*, program_t*, models_t*, size_t,
+      observations_t*, clingo_control_t*)) {
+  bool ok = false;
+  size_t n = num_prob_params(P);
+  clingo_weighted_literal_t *W = (clingo_weighted_literal_t*) malloc(n*sizeof(clingo_weighted_literal_t));
+  clingo_weighted_literal_t *U = (clingo_weighted_literal_t*) malloc(n*sizeof(clingo_weighted_literal_t));
+  if (!(W && U)) goto nomem;
+  if (!aseo_reuse(P, k, psem, O, scale, neural_idx, W, U, M, f)) goto cleanup;
 
   ok = true;
   goto cleanup;
 nomem:
   PyErr_SetString(PyExc_MemoryError, "could not allocate enough memory for ASEO!");
 cleanup:
-  if (clingo_error_code() != clingo_error_success) raise_clingo_error(NULL);
-  else if (!ok) PyErr_SetString(PyExc_RuntimeError, "an error has occurred during ASEO!");
-  clingo_control_free(C);
   free(W); free(U);
-  if (!ok) { models_free(M); M = NULL; }
-  return M;
+  return ok;
 }

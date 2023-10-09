@@ -21,5 +21,6 @@ bool counter_init(counter_t *C, size_t n, size_t k) {
 
 void counter_free_contents(counter_t *C) {
   for (size_t i = 0; i < C->n; ++i) bitvec_free_contents(&C->c[i]);
+  free(C->c);
 }
 void counter_free(counter_t *C) { counter_free_contents(C); free(C); }

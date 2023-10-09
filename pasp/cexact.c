@@ -821,23 +821,8 @@ bool prob_obs_reuse(program_t *P, observations_t *obs, bool lstable_sat, prob_st
     if (!init_total_choice(&S[i].theta, total_choice_n, P)) goto cleanup;
     tuple[i].Q = &Q[i]; tuple[i].S = &S[i];
     tuple[i].O = obs; tuple[i].derive = derive;
-    /* Fill probs with zero. */
-    for (size_t j = 0; j < obs->n; ++j) {
-      prob_obs_storage_t *pr = &Q[i].P[j];
-      memset(pr->F, 0, Q[0].n*sizeof(double[2]));
-      for (size_t l = 0; l < Q[0].m; ++l) memset(pr->A[l], 0, STORAGE_AD_DIM(P, &Q[0], l)*sizeof(double));
-      memset(pr->R, 0, Q[0].pr*sizeof(double[2]));
-      for (size_t l = 0; l < Q[0].nr; ++l) {
-        neural_rule_t *nr = &P->NR[Q[0].I_NR[l]];
-        memset(pr->NR[l], 0, 2*nr->n*nr->o*sizeof(double));
-      }
-      for (size_t l = 0; l < Q[0].na; ++l) {
-        neural_annot_disj_t *na = &P->NA[Q[0].I_NA[l]];
-        memset(pr->NA[l], 0, na->v*na->n*na->o*sizeof(double));
-      }
-      pr->o = 0.0;
-    }
   }
+  reset_prob_storage_obs(P, Q, num_procs, obs);
 
   do {
     do {

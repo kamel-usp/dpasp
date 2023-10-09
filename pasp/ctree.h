@@ -31,7 +31,7 @@ void ctree_free(ctree_t *T);
 void ctree_free_contents(ctree_t *T);
 
 /** Add model to ctree_t T. */
-ctree_t* ctree_add(ctree_t *T, const clingo_model_t *M, program_t *P);
+ctree_t* ctree_add(ctree_t *T, const clingo_model_t *M, program_t *P, size_t neural_offset);
 
 /** Write T as a dot file in buffer. */
 bool ctree_dot(ctree_t *T, program_t *P, char *buffer);

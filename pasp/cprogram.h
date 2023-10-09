@@ -91,6 +91,8 @@ typedef struct {
   /* Derivative tensor data. */
   float *dw;
   bool learnable;
+  /* Heads as strings. */
+  const char **H_s;
   PyObject *self;
 } neural_annot_disj_t;
 

@@ -123,8 +123,8 @@ class Data:
   def __repr__(self): return self.__str__()
 
 class Neural:
-  def __init__(self, net, data: Data, learnable: bool, rep: str, nvals: int,
-               opt_params: dict, outcomes: list):
+  def __init__(self, net, data: Data, learnable: bool, rep: str, nvals: int, opt_params: dict,
+               outcomes: list, heads: list, bodies: list, signs: list, name: str):
     self.net = net
     self.learnable = learnable
     self.rep = rep
@@ -132,17 +132,33 @@ class Neural:
     self.outcomes = 1 if outcomes is None else len(outcomes)
     self.nvals = nvals
 
+    self.H = heads
+    self.B = bodies
+    self.S = signs
+    self.name = name
+
     # Update default opt_params with given params.
     _opt_params = {"lr": 1., "maximize": True}
     _opt_params.update(opt_params)
     optimizer = _opt_params.pop("optim", "SGD")
     self.opt = getattr(torch.optim, optimizer)(net.parameters(), **_opt_params)
 
-    self.test = torch.cat(tuple(d.test for d in data), dim = 0)
+    self.test = torch.cat(tuple(d.test for d in data))
     self.out = None
     self.view = None
     # Derivatives of the logic program to be passed to backwards.
     self.dw = None
+    # Initialize dw so we can use inference without learning.
+    self.prepare_train(0)
+
+    # Temp: accuracy
+    # import torchvision
+    # self.test_labels = torchvision.datasets.MNIST(root="/tmp", train=False, \
+                                                  # download=True).targets.data.numpy()
+    # self.test_both_labels = self.test_labels[:(h := len(self.test_labels)//2)] + \
+                            # self.test_labels[h:]
+    # self.accuracy = []
+    # self.accuracy_program = []
 
   def __str__(self): return self.rep
   def __repr__(self): return self.__str__()
@@ -159,8 +175,8 @@ class Neural:
     else:
       T = self.view
       if (s := T.untyped_storage().size()//(T.element_size()*dims.numel())) < batch:
-        self.view.resize(batch*len(self.data), *dims)
-        if self.learnable: self.dw.resize(self.out_shape(batch))
+        self.view.resize_(batch*len(self.data), *dims)
+        if self.learnable: self.dw.resize_(self.out_shape(batch))
 
   def out_shape(self, batch: int) -> tuple:
     "The output tensor shape."
@@ -194,12 +210,8 @@ class Neural:
 class NeuralRule(Neural):
   def __init__(self, heads: list, bodies: list, signs: list, name: str, net, rep: str, data: list,
                learnable: bool, params: dict, outcomes: list):
-    super().__init__(net, data, learnable, rep, 1, params, outcomes)
+    super().__init__(net, data, learnable, rep, 1, params, outcomes, heads, bodies, signs, name)
     # Heads and bodies must be numpy.uint64 values representing _rep, not Symbols.
-    self.H = heads
-    self.B = bodies
-    self.S = signs
-    self.name = name
 
     # Validate net during parsing so that it won't blow up in our faces during inference or learning.
     p = self.pr()
@@ -211,13 +223,11 @@ class NeuralRule(Neural):
 
 class NeuralAD(Neural):
   def __init__(self, heads: list, bodies: list, signs: list, name: str, vals: list, net, rep: str, \
-               data: list, learnable: bool, params: dict, outcomes: list):
-    super().__init__(net, data, learnable, rep, len(vals), params, outcomes)
-    self.H = heads
-    self.B = bodies
-    self.S = signs
-    self.name  = name
+               data: list, learnable: bool, params: dict, outcomes: list, heads_str: list):
+    super().__init__(net, data, learnable, rep, len(vals), params, outcomes, heads, bodies, signs,
+                     name)
     self.vals  = vals
+    self.heads_str = heads_str
 
     # Validate net during parsing so that it won't blow up in our faces during inference or learning.
     p = self.pr()
