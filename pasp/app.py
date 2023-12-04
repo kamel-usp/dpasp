@@ -1,5 +1,7 @@
 import pasp
 import sys
+#from program import Program
+#from graph import Graph
 
 ARGUMENTS = ["sem", "psem", "help"]
 ARGUMENTS_SHORTCUTS = ["s", "p", "h"]
@@ -130,16 +132,28 @@ def parse_args() -> dict:
 
 def main():
   print("pasp version", pasp.__version__)
-  A, F = parse_args()
-  if len(F) > 0:
-    P = pasp.parse(*F, semantics = A["sem"])
-    if "psemantics" not in P.directives: P.directives["psemantics"] = {"psemantics": A["psem"]}
-    P()
+  args, files = parse_args()
+  if len(files) > 0:
+    prog = pasp.parse(*files, semantics = args["sem"])
+    if "psemantics" not in prog.directives: prog.directives["psemantics"] = {"psemantics": args["psem"]}
+
+    pos = prog.graph.isPositiveCyclic()
+    neg = prog.graph.isNegativeCyclic()
+    isCyclic = pos or neg
+
+    if isCyclic:
+      print("Program constains cycle(s).")
+    else:
+      print("Program doesn't contain a cycle.")
+
+    prog.run()
+
+    print(prog)
   else:
     print("Reading from stdin")
     inp = ""
     for l in sys.stdin: inp += l
-    pasp.exact(pasp.parse(inp, from_str = True, semantics = A["sem"]), psemantics = A["psem"])
+    pasp.exact(pasp.parse(inp, from_str = True, semantics = args["sem"]), psemantics = args["psem"])
   return 0
 
 if __name__ == "__main__": main()

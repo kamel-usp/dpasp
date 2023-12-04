@@ -4,8 +4,18 @@ from numpy import ascontiguousarray as contiguous
 from .program import ProbFact, Query, VarQuery, ProbRule, Program, CredalFact, unique_fact, \
   Semantics, Data
 from .program import AnnotatedDisjunction, NeuralRule, NeuralAD, unique_pgrule_id
+from .graph import Graph
 
-def read(*files: str, G: lark.Lark = None, from_str: bool = False, start = "plp") -> lark.Tree:
+NODE_TYPE = 0
+NODE_REPR = 1
+NODE_VAL = 2
+NODE_CTX = 3
+NODE_LABEL = 4
+
+RULE_HEAD = 0
+RULE_BODY = 1
+
+def do_parse(*files: str, G: lark.Lark = None, from_str: bool = False, start = "plp") -> lark.Tree:
   "Read all `files` and parse them with grammar `G`, returning a single `lark.Tree`."
   if G is None:
     try:
@@ -49,6 +59,7 @@ class PreparsingTransformer(lark.Transformer):
   def __init__(self):
     super().__init__()
     self.consts = {}
+
   def __default__(self, _, __, ___): return lark.visitors.Discard
   def SEMANTICS_OPT_LOGIC(self, O): return str(O)
   def SEMANTICS_OPT_PROB(self, _): return lark.visitors.Discard
@@ -58,6 +69,24 @@ class PreparsingTransformer(lark.Transformer):
   def constdef(self, C):
     self.consts[C[0]] = C[1]
     return lark.visitors.Discard
+
+  # def import_file(self, T):
+  #   try:
+  #     fname = T[0].value
+  #     fext = pathlib.Path(fname).suffix
+  #     if fext not in [".py", ".plp"]:
+  #       raise ValueError(f"Extension not supported for imported file {fname}.")
+  #     with open(fname, "r") as f:
+  #       fcontent = f.read()
+  #       if fext is ".py":
+  #         subTree = self.add_code(fcontent)
+  #       else:
+  #         subTree = parse(fcontent, from_str=True, semantics=self.sem)
+  #       T.children.extend(u for u in subTree.children if u not in T.children)
+  #       return lark.visitors.Discard
+  #   except Exception as ex:
+  #     raise ex
+    
   "Verify which logic semantic should be used and record constant definitions."
   def plp(self, S):
     return S[0] if len(S) > 0 else None, self.consts
@@ -65,9 +94,9 @@ class PreparsingTransformer(lark.Transformer):
 class StableTransformer(lark.Transformer):
   class Pack(tuple):
     @staticmethod
-    def __new__(cls, tp: str, r: str = None, v = None, sc: dict = {}):
+    def __new__(cls, tp: str, r: str = None, v = None, sc: dict = {}, nlabel: tuple = None):
       return super(StableTransformer.Pack, cls).__new__(cls, (tp, str(v) if r is None else r, \
-                                                              r if v is None else v, sc))
+                                                              r if v is None else v, sc, nlabel))
     def __str__(self): return self[1]
     def __repr__(self): return f"<{self[0]}: {self.__str__()}>"
 
@@ -78,10 +107,11 @@ class StableTransformer(lark.Transformer):
     self.n_prules = 0
     self.consts = consts
     self.varquery_id = 0
+    self.graph = Graph()
 
   @staticmethod
-  def pack(t: str, rep: str = None, val = None, scope: dict = {}) -> tuple[str, str, str, dict]:
-    return StableTransformer.Pack(t, rep, val, scope)
+  def pack(type: str, rep: str = None, val = None, scope: dict = {}, nlabel: tuple = None) -> tuple[str, str, str, dict, tuple]:
+    return StableTransformer.Pack(type, rep, val, scope, nlabel)
 
   @staticmethod
   def join_scope(A: list) -> dict: return dict((y, None) for S in A for y in S[3])
@@ -168,7 +198,7 @@ class StableTransformer(lark.Transformer):
   def NEG(self, n): return self.pack("NEG", str(n))
   def VAR(self, v):
     x = str(v); X = {v: None}
-    return self.pack("VAR", x, scope = X)
+    return self.pack("VAR", x, ".*", scope = X)
   def ID(self, i): return self.pack("ID", val = int(i))
   def OP(self, o): return self.pack("OP", str(o))
   def REAL(self, r): return self.pack("REAL", val = float(r))
@@ -203,17 +233,23 @@ class StableTransformer(lark.Transformer):
   def interval(self, I): return self.pack("interval", f"{I[0][2]}..{I[1][2]}", (I[0][2], I[1][2]))
 
   # Predicates.
-  def pred(self, P, replace_semicolons = False):
-    name = P[0][1]
-    rep = f"{name}({', '.join(getnths(P[1:], 1))})"
-    return self.pack("pred", rep.replace(";", ",") if replace_semicolons else rep, name, self.join_scope(P))
-  def grpred(self, P): return self.pred(P)
+  def pred(self, node, replace_semicolons = False):
+    name = node[0][1]
+    rep = f"{name}({', '.join(getnths(node[1:], 1))})"
+    nlabel = f"{name}({', '.join( ('.*' if child[0] == 'VAR' else child[1] for child in node[1:]) )})"
+    return self.pack("pred", rep.replace(";", ",") if replace_semicolons else rep, name, self.join_scope(node), (nlabel))
+  def grpred(self, P): 
+    return self.pred(P)
   def query_pred(self, P): return self.pred(P, replace_semicolons = True)
 
   # Literals.
   def lit(self, P):
     s = P[0][0] != "NEG"
-    return self.pack("lit", " ".join(getnths(P, 1)), (s, P[0][2] if s else P[1][2]), self.join_scope(P))
+    expr = P[0][2] if s else P[1][2]
+    nlabel = (1 if s else -1, P[0][4] if s else P[1][4])
+    if nlabel[1] is None:
+      nlabel = (nlabel[0], expr)
+    return self.pack("lit", " ".join(getnths(P, 1)), (s, expr), self.join_scope(P), nlabel)
   def grlit(self, P): return self.lit(P)
 
   # Binary operations.
@@ -222,27 +258,46 @@ class StableTransformer(lark.Transformer):
   # Facts.
   def fact(self, F):
     f = f"{''.join(getnths(F, 1))}"
+    self.graph.addVertex(f)
     # Facts are always grounded.
     return self.pack("fact", f + ".", f)
+  
   def pfact(self, PF):
     p, f = PF[0][2], PF[1][1]
+    self.graph.addVertex(f)
     return self.pack("pfact", "", ProbFact(p, f))
   def cfact(self, CF):
     l, u, f = CF[0][2], CF[1][2], CF[2][1]
+    self.graph.addVertex(f)
     return self.pack("cfact", "", CredalFact(l, u, f))
   def lpfact(self, PF):
     if PF[0][0] == "prob": p, f = PF[0][2], PF[1][1]
     else: p, f = 0.5, PF[0][1]
+    self.graph.addVertex(f)
     return self.pack("pfact", "", ProbFact(p, f, learnable = True))
 
   # Heads.
-  def head(self, H): return self.pack("head", ", ".join(getnths(H, 1)), H, self.join_scope(H))
-  def ohead(self, H): return self.pack("head", H[0][1], H[0][2], H[0][3])
+  def head(self, H): 
+    return self.pack("head", ", ".join(getnths(H, 1)), H, self.join_scope(H), H[0][4])
+  def ohead(self, H): 
+    return self.pack("head", H[0][1], H[0][2], H[0][3], H[0][4])
   # Body.
-  def body(self, B): return self.pack("body", ", ".join(getnths(B, 1)), B, self.join_scope(B))
-
+  def body(self, B): 
+    nlabels = []
+    for pred in B:
+      nlabels.append(pred[NODE_LABEL])
+    return self.pack("body", ", ".join(getnths(B, 1)), B, self.join_scope(B), tuple(nlabels))
+  
   # Rules.
-  def rule(self, R): return self.pack("rule", " :- ".join(getnths(R, 1)) + ".")
+  def rule(self, R):
+    hlabel = R[RULE_HEAD][NODE_LABEL]
+    blabel = R[RULE_BODY][NODE_LABEL]
+    nlabel = blabel
+    h, b = R[-2], R[-1]
+    o = f"{h[1]} :- {b[1]}"
+    self.graph.addVertex(o)
+    return self.pack("rule", " :- ".join(getnths(R, 1)) + ".", self.join_scope(R), nlabel=nlabel)
+  
   def prule(self, R):
     l = "LEARN" in getnths(R, 0)
     e = "EXPAND" in getnths(R, 0)
@@ -348,11 +403,6 @@ class StableTransformer(lark.Transformer):
     test, train = D[2][2], D[3][2] if len(D) > 3 else None
     return self.pack("data", f"{name}({arg}).", Data(name, arg, test, train))
 
-  # Python block.
-  def python(self, T):
-    exec("import torch\n\n" + T[0].value, self.torch_scope)
-    return self.pack("python", "")
-
   # Local hubconf repo.
   def LOCAL_NET(self, L): return self.pack("LOCAL_NET", str(L))
   # GitHub hubconf repo.
@@ -439,8 +489,12 @@ class StableTransformer(lark.Transformer):
     rep = f"{A[0][1]}::{name}({inp}, {A[3][1]}{'' if outcomes is None else f'; {A[offset-1][1]}'}) as {hub_repr} :- {', '.join(getnths(body, 1))}."
     return self.pack("nad", "", (name, inp, vals, outcomes, net, body, rep, learnable, params))
 
+
+
+
   # Constraint.
-  def constraint(self, C): return self.pack("constraint", f":- {C[0][1]}.")
+  def constraint(self, C): 
+    return self.pack("constraint", f":- {C[0][1]}.")
 
   # Query elements.
   def qelement(self, E):
@@ -482,7 +536,7 @@ class StableTransformer(lark.Transformer):
       lark.visitors.Discard
 
   # Probabilistic Logic Program.
-  def plp(self, C) -> Program:
+  def plp(self, nodes) -> Program:
     # Logic Program.
     P  = []
     # Probabilistic Facts.
@@ -505,15 +559,29 @@ class StableTransformer(lark.Transformer):
     # Directives.
     directives = {}
     # Mapping.
-    M = {"pfact": PF, "prule": PR, "query": Q, "varquery": VQ, "cfact": CF, "ad": AD, "nrule": TNR,
+    map = {"pfact": PF, "prule": PR, "query": Q, "varquery": VQ, "cfact": CF, "ad": AD, "nrule": TNR,
          "nad": TNA}
-    for t, L, O, _ in C:
-      if len(L) > 0: push(P, L)
-      if t in M: push(M[t], O)
-      if t == "data":
-        if O.name in D: D[O.name].append(O)
-        else: D[O.name] = [O]
-      if t == "directive": directives[O[0]] = tup if len(tup := O[1:]) > 1 else tup[0]
+    for type, expr, obj, ctx, nlabel in nodes:
+      if len(expr) > 0: 
+        push(P, expr)
+      if type in map:
+        push(map[type], obj)
+      if type == "data":
+        if obj.name in D: D[obj.name].append(obj)
+        else: D[obj.name] = [obj]
+      elif type == "directive": 
+        directives[obj[0]] = tup if len(tup := obj[1:]) > 1 else tup[0]
+      elif type == "rule":
+        for item in nlabel:
+          if item is None:
+            continue
+          isNegative = item[0]
+          regex = item[1]
+          adjacencies = self.graph.searchVertices(regex)
+          for new_vertex in adjacencies:
+            vertex = expr if expr[-1] != '.' else expr[:-1]
+            self.graph.addEdge(vertex, new_vertex, isNegative)
+          
     # Deal with ungrounded probabilistic rules.
     for r in PR:
       if r.is_prop: PF.append(r.prop_pf)
@@ -521,7 +589,7 @@ class StableTransformer(lark.Transformer):
     self.register_nrule(TNR, NR, D)
     self.register_nad(TNA, NA, D)
     return Program("\n".join(P), PF, PR, Q, VQ, CF, AD, NR, NA, semantics = self.sem, \
-                   directives = directives)
+                   directives = directives, graph = self.graph)
 
 class PartialTransformer(StableTransformer):
   def __init__(self, sem: str, consts: dict = {}):
@@ -595,6 +663,10 @@ class PartialTransformer(StableTransformer):
   def plp(self, C: list[tuple]) -> Program:
     # Logic Program.
     P  = []
+    # Facts
+    facts = []
+    # Rules
+    rules = []
     # Probabilistic Facts.
     PF = []
     # Probabilistic Rules.
@@ -626,24 +698,27 @@ class PartialTransformer(StableTransformer):
     P.extend(f"_{x} :- {x}." for x in self.PT)
     self.check_data(D)
     self.register_nrule(TNR, NR, D)
-    self.register_nad(TNA, NA, D)
+    self.register_nad(TNA, NA, D) 
     return Program("\n".join(P), PF, PR, Q, VQ, CF, AD, NR, NA, semantics = self.sem, \
-                   stable_p = self.stable_p, directives = directives)
+                   stable_p = self.stable_p, directives = directives, facts=facts, rules=rules)
 
   def transform(self, tree):
     self.o_tree = tree
     self.stable_p = StableTransformer(self.sem).transform(tree)
     return super().transform(tree)
 
-def parse(*files: str, G: lark.Lark = None, from_str: bool = False, semantics: str = "stable") -> Program:
+def parse(*files: str, grammar: lark.Lark = None, from_str: bool = False, semantics: str = "stable") -> Program:
   """Either parses `streams` as blocks of text containing the PLP when `from_str = True`, or
   interprets `streams` as filenames to be read and parsed into a `Program`."""
   if semantics not in parse.trans_map:
     raise ValueError("semantics not supported (must either be 'stable', 'partial' or 'lstable')!")
-  T = read(*files, G = G, from_str = from_str)
-  sem, consts = PreparsingTransformer().transform(T)
+  tree = do_parse(*files, G = grammar, from_str = from_str)
+
+  sem, consts = PreparsingTransformer().transform(tree)
   if sem is not None: semantics = sem
-  return parse.trans_map[semantics](semantics, consts).transform(T)
+  prog = parse.trans_map[semantics](semantics, consts).transform(tree)
+  return prog
+
 parse.trans_map = {}
 parse.trans_map["stable"] = StableTransformer
 parse.trans_map["lstable"] = PartialTransformer

@@ -34,8 +34,8 @@ CMP_OP: EQQ
       | LEQ
       | GEQ
 
-frac: REAL "/" REAL
-prob: frac | REAL
+frac: FLOAT "/" FLOAT
+prob: frac | FLOAT
 
 // Constants.
 WORD: /[a-z]\w*/
@@ -65,18 +65,18 @@ LEARN:  "?"
 CONST:  "!"
 
 // Set.
-set: "{" (((ID | WORD) ("," (ID | WORD))+) | interval) "}"
+set: "{" (((INT | WORD) ("," (INT | WORD))+) | interval) "}"
 
 // Atom.
 _atom: WORD
 // Interval.
-interval: (ID | WORD) ".." (ID | WORD)
+interval: (INT | WORD) ".." (INT | WORD)
 // Predicate.
 _ground: (_atom | grpred)
 _nground: (_atom | pred)
-grpred: WORD "(" (_ground | ID | interval) ("," (_ground | ID | interval))* ")"
-query_pred: WORD "(" (VAR | _nground | ID | interval) ((";" | ",") (VAR | _nground | ID | interval))* ")"
-pred: WORD "(" (_nground | ID | interval | VAR) ("," (_nground | ID | interval | VAR))* ")"
+grpred: WORD "(" (_ground | INT | interval) ("," (_ground | INT | interval))* ")"
+query_pred: WORD "(" (VAR | _nground | INT | interval) ((";" | ",") (VAR | _nground | INT | interval))* ")"
+pred: WORD "(" (_nground | INT | interval | VAR) ("," (_nground | INT | interval | VAR))* ")"
 // Literal.
 lit: NEG* _nground
 grlit: NEG* _ground
@@ -117,20 +117,20 @@ adr: (ad_head{_nground} | lad_head{_nground}) ":-" body "."
 _ad: ad | adr
 
 // Python function call with arguments.
-py_func_args: WORD | REAL | ID
-py_func_kwargs: WORD "=" (WORD | REAL | ID)
+py_func_args: WORD | FLOAT | INT
+py_func_kwargs: WORD "=" (WORD | FLOAT | INT)
 py_func_call: PY_FUNC ("(" (py_func_args | py_func_kwargs) ("," (py_func_args | py_func_kwargs))* ")")?
 
 // Data special rule.
 test: "test" "(" (path | ("@" py_func_call)) ")"
 train: "train" "(" (path | ("@" py_func_call)) ")"
-data: WORD "(" (WORD | ID) ")" "~" test ("," train)? "."
+data: WORD "(" (WORD | INT) ")" "~" test ("," train)? "."
 // Torch block.
 python: "#python" /(?:.|\n)+?(?=\#end\.)/ "#end."
 // PyTorch hub.
 hub: "@" PY_FUNC ("on" (("\"" LOCAL_NET "\"" ("at" "\"local\"")?) | ("\"" GITHUB "\"" "at" "\"github\"")))?
 // Optimizer parameters.
-_param: WORD "=" (REAL | BOOL | NULL | ("\"" /\w+/ "\""))
+_param: WORD "=" (FLOAT | BOOL | NULL | ("\"" /\w+/ "\""))
 // Sequence of parameters.
 params: _param ("," _param)*
 // Neural fact.
@@ -139,13 +139,16 @@ nrule: (LEARN | CONST) "::" WORD "(" VAR (";" set)? ")" "as" hub ("with" params)
 nad: (LEARN | CONST) "::" WORD "(" VAR "," set (";" set)? ")" "as" hub ("with" params)? ":-" lit ("," lit)* "."
 _neural: nrule | nad
 
+// Import another file into the current program
+import_file: "#import" /(.+)\/([^\/]+)/
+
 // Learning options and directive.
-_learn_opt_lr: /lr/ "=" REAL
+_learn_opt_lr: /lr/ "=" FLOAT
 _learn_opt_alg: /alg/ "=" "\"" (/lagrange/ | /neurasp/ | /fixpoint/) "\""
-_learn_opt_batch: /batch/ "=" ID
-_learn_opt_niters: /niters/ "=" ID
-_learn_opt_momentum: /momentum/ "=" REAL
-_learn_opt_smoothing: /smoothing/ "=" REAL
+_learn_opt_batch: /batch/ "=" INT
+_learn_opt_niters: /niters/ "=" INT
+_learn_opt_momentum: /momentum/ "=" FLOAT
+_learn_opt_smoothing: /smoothing/ "=" FLOAT
 _learn_opt_display: /display/ "=" "\"" (/none/ | /progress/ | /loglikelihood/) "\""
 _learn_opt: (_learn_opt_lr | _learn_opt_alg | _learn_opt_batch | _learn_opt_niters
            | _learn_opt_display | _learn_opt_smoothing | _learn_opt_momentum)
@@ -162,7 +165,7 @@ semantics: "#semantics" (("(" _semantics_exp ")") | (_semantics_exp)) "."
 constraint: ":-" body "."
 
 // Binary operation.
-bop: ((ID | VAR | bop | WORD) OP (ID | VAR | bop | WORD)) | (VAR EQQ interval)
+bop: ((INT | VAR | bop | WORD) OP (INT | VAR | bop | WORD)) | (VAR EQQ interval)
 
 // Query.
 qelement: (NEG | UND)? (WORD | query_pred)
@@ -171,15 +174,15 @@ _interp_exp: interp ("|" interp)?
 query: "#query" (("(" _interp_exp ")") | ( _interp_exp )) "."?
 
 // Constant definition.
-constdef: "#const" WORD "=" ID "."
+constdef: "#const" WORD "=" INT "."
 
 plp: (constdef | _fact | _rule | _ad | _neural | data | python | constraint | query | learn | semantics | _aggr)*
 
 COMMENT: "%" /[^\n]*/ NEWLINE
 
 %import common.WORD -> NAME
-%import common.INT -> ID
-%import common.NUMBER -> REAL
+%import common.INT -> INT
+%import common.NUMBER -> FLOAT
 %import common.NEWLINE -> NEWLINE
 %import common.WS
 

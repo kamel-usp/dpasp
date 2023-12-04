@@ -355,7 +355,7 @@ class Program:
   def __init__(self, P: str, PF: list[ProbFact], PR: list[ProbRule], Q: list[Query], \
                VQ: list[VarQuery], CF: list[CredalFact], AD: list[AnnotatedDisjunction], \
                NR: list[NeuralRule], NA: list[NeuralAD], semantics: Semantics = Semantics.STABLE, \
-               stable_p = None, directives: list = None):
+               stable_p = None, directives: list = None, graph = None):
     """
     Constructs a PLP out of a logic program `P`, probabilistic facts `PF`, credal facts `CF` and
     queries `Q`.
@@ -369,6 +369,7 @@ class Program:
     self.AD = AD
     self.NR = NR
     self.NA = NA
+    self.graph = graph
 
     # Number of instances in data.
     self.m_test = 0
@@ -417,6 +418,9 @@ class Program:
   def __repr__(self) -> str: return self.__str__()
 
   def __call__(self, **kwargs):
+    self.run(kwargs)
+
+  def run(self, **kwargs):
     if self.directives is not None:
       if "learn" in self.directives:
         f, A = self.directives["learn"]
