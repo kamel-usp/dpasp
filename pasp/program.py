@@ -149,7 +149,7 @@ class Neural:
     # Derivatives of the logic program to be passed to backwards.
     self.dw = None
     # Initialize dw so we can use inference without learning.
-    self.prepare_train(0)
+    if self.data[0].train is not None: self.prepare_train(0)
 
     # Temp: accuracy
     # import torchvision
