@@ -158,6 +158,11 @@ SEMANTICS_OPT_PROB:  "maxent" | "credal"
 _semantics_exp: ((SEMANTICS_OPT_LOGIC ("," SEMANTICS_OPT_PROB)?) | (SEMANTICS_OPT_PROB ("," SEMANTICS_OPT_LOGIC)?))
 semantics: "#semantics" (("(" _semantics_exp ")") | (_semantics_exp)) "."
 
+// Inference directive.
+exact_inf: "exact"
+aseo_inf: "aseo" "," "nmodels" "=" ID
+inference: "#inference" (exact_inf | aseo_inf) "."
+
 // Constraint.
 constraint: ":-" body "."
 
@@ -173,7 +178,7 @@ query: "#query" (("(" _interp_exp ")") | ( _interp_exp )) "."?
 // Constant definition.
 constdef: "#const" WORD "=" ID "."
 
-plp: (constdef | _fact | _rule | _ad | _neural | data | python | constraint | query | learn | semantics | _aggr)*
+plp: (constdef | _fact | _rule | _ad | _neural | data | python | constraint | query | learn | semantics | _aggr | inference)*
 
 COMMENT: "%" /[^\n]*/ NEWLINE
 

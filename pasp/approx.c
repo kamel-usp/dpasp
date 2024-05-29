@@ -7,7 +7,8 @@
 #include "caseo.h"
 #include "cground.h"
 
-static bool _aseo_maxent(program_t *P, size_t n_samples, size_t scale, double **R) {
+static bool _aseo_maxent(program_t *P, size_t n_samples, size_t scale, double **R, bool quiet,
+    bool status) {
   bool ok = false;
   double *a, *b, *r = a = b = NULL;
 
@@ -26,7 +27,7 @@ static bool _aseo_maxent(program_t *P, size_t n_samples, size_t scale, double **
   /* Run first ASEO separately to get the number of models. */
   models_t M = {0};
   if (!aseo_reuse(P, n_samples, MAXENT_SEMANTICS, NULL, (int) scale, 0, W, U, &M,
-        approx_rec_query_maxent)) goto cleanup;
+        approx_rec_query_maxent, false)) goto cleanup;
   size_t n_M = M.n;
 
   /* The resulting (flattened) array has dimension n*k x 1, where n is the number of queries and k
@@ -44,11 +45,18 @@ static bool _aseo_maxent(program_t *P, size_t n_samples, size_t scale, double **
   approx_query_maxent_ab(P, &M, a, b);
   approx_query_maxent_r(P, &M, r, a, b);
   models_free_contents(&M);
+  if (!quiet) {
+    for (size_t i = 0; i < P->Q_n; ++i) {
+      print_query(P->Q+i);
+      wprintf(L" = %f\n", r[i]);
+    }
+    fputws(L"---\n", stdout);
+  }
   r += n_M;
 
   for (size_t i = 1; i < m_neural; ++i) {
     if (!aseo_reuse(P, n_samples, MAXENT_SEMANTICS, NULL, (int) scale, i, W, U, &M,
-          approx_rec_query_maxent)) {
+          approx_rec_query_maxent, status)) {
       models_free_contents(&M);
       goto cleanup;
     }
@@ -57,6 +65,13 @@ static bool _aseo_maxent(program_t *P, size_t n_samples, size_t scale, double **
     approx_query_maxent_ab(P, &M, a, b);
     approx_query_maxent_r(P, &M, r, a, b);
     models_free_contents(&M);
+    if (!quiet) {
+      for (size_t i = 0; i < P->Q_n; ++i) {
+        print_query(P->Q+i);
+        wprintf(L" = %f\n", r[i]);
+      }
+      fputws(L"---\n", stdout);
+    }
     r += n_M;
   }
 
@@ -88,7 +103,7 @@ static PyObject* _aseo(PyObject *self, PyObject *args, PyObject *kwargs) {
     if (P.stable) if (!ground_all(P.stable, NULL)) goto cleanup;
   }
 
-  if (!_aseo_maxent(&P, n_samples, scale, &R)) goto cleanup;
+  if (!_aseo_maxent(&P, n_samples, scale, &R, quiet, status)) goto cleanup;
 
   bool has_neural = P.NA_n+P.NR_n > 0;
   npy_intp dims[3] = {P.Q_n, 1, 1};

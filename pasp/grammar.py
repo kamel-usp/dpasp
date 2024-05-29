@@ -474,6 +474,10 @@ class StableTransformer(lark.Transformer):
     data = self.torch_scope[L[0][1]] if L[0][0] == "PY_FUNC" else StableTransformer.path2obs(L[0][1])
     return self.pack("directive", "", ("learn", data, A))
 
+  def exact_inf(self, I): return ("inference", "exact", tuple())
+  def aseo_inf(self, I): return ("inference", "aseo", (I[0][2],))
+  def inference(self, I): return self.pack("directive", "", I[0])
+
   # Semantics directive and options.
   def SEMANTICS_OPT_LOGIC(self, _): return lark.visitors.Discard
   def SEMANTICS_OPT_PROB(self, O): return str(O)
@@ -503,7 +507,7 @@ class StableTransformer(lark.Transformer):
     # Actual neural rules and neural ADs.
     NR, NA = [], []
     # Directives.
-    directives = {}
+    directives = {"inference": ("exact", tuple())}
     # Mapping.
     M = {"pfact": PF, "prule": PR, "query": Q, "varquery": VQ, "cfact": CF, "ad": AD, "nrule": TNR,
          "nad": TNA}

@@ -4,6 +4,7 @@
 #include <math.h>
 
 #include "cutils.h"
+#include "../progressbar/statusbar.h"
 
 bool watch_minimize(clingo_weight_t p, const clingo_weighted_literal_t *W, size_t n, void *data) {
   void **pack = (void**) data;
@@ -228,10 +229,11 @@ bool set_upper_bound(clingo_backend_t *back, clingo_weighted_literal_t *W, size_
 bool aseo_reuse(program_t *P, size_t k, psemantics_t psem, observations_t *O, int scale,
     size_t neural_idx, clingo_weighted_literal_t *W, clingo_weighted_literal_t *U, models_t* M,
     bool (*f)(const clingo_model_t*, program_t*, models_t*, size_t, observations_t*,
-      clingo_control_t*)) {
+      clingo_control_t*), bool status) {
   bool ok = false;
   clingo_control_t *C = NULL;
   clingo_backend_t *back = NULL;
+  statusbar *bar = status ? statusbar_new("Querying") : NULL;
 
   size_t n = num_prob_params(P);
   if (!(W && U)) {
@@ -291,6 +293,7 @@ bool aseo_reuse(program_t *P, size_t k, psemantics_t psem, observations_t *O, in
 
     if (!set_upper_bound(back, W, n, U, (int) cost)) goto cleanup;
     if (!aseo_solve(P, C, k, &res, &m, M, O, neural_idx, f)) goto cleanup;
+    if (bar) statusbar_inc(bar);
   }
   M->m = m;
 
@@ -309,19 +312,20 @@ cleanup:
   if (clingo_error_code() != clingo_error_success) raise_clingo_error(NULL);
   else if (!ok) PyErr_SetString(PyExc_RuntimeError, "an error has occurred during ASEO!");
   clingo_control_free(C);
+  if (bar) statusbar_finish(bar);
   if (!ok) { models_free(M); M = NULL; }
   return ok;
 }
 
 bool aseo(program_t *P, size_t k, psemantics_t psem, observations_t *O, int scale,
     size_t neural_idx, models_t *M, bool (*f)(const clingo_model_t*, program_t*, models_t*, size_t,
-      observations_t*, clingo_control_t*)) {
+      observations_t*, clingo_control_t*), bool status) {
   bool ok = false;
   size_t n = num_prob_params(P);
   clingo_weighted_literal_t *W = (clingo_weighted_literal_t*) malloc(n*sizeof(clingo_weighted_literal_t));
   clingo_weighted_literal_t *U = (clingo_weighted_literal_t*) malloc(n*sizeof(clingo_weighted_literal_t));
   if (!(W && U)) goto nomem;
-  if (!aseo_reuse(P, k, psem, O, scale, neural_idx, W, U, M, f)) goto cleanup;
+  if (!aseo_reuse(P, k, psem, O, scale, neural_idx, W, U, M, f, status)) goto cleanup;
 
   ok = true;
   goto cleanup;

@@ -426,7 +426,11 @@ class Program:
         else: learn(self, D, **A)
     if len(self.Q) + len(self.VQ) > 0:
       from exact import exact
+      from approx import aseo
       A = {"quiet": False, "status": True}
       A.update(kwargs)
-      if "psemantics" in self.directives: A.update(self.directives["psemantics"])
-      return exact(self, **A)
+      # TODO: implement additional semantics for ASEO and remove the exact exception below.
+      if ("psemantics" in self.directives) and (self.directives["inference"][0] == "exact"):
+        A.update(self.directives["psemantics"])
+      f = vars()[self.directives["inference"][0]]
+      return f(self, *self.directives["inference"][1], **A)
