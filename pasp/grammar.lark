@@ -60,7 +60,7 @@ GITHUB: /[A-Za-z\d](?:[A-Za-z\d]|-(?=[A-Za-z\d])){0,38}\/[a-zA-Z0-9\-_.]{1,100}/
 // Path.
 path.10: "\"" (LOCAL_DATA | URL) "\""
 
-EXPAND: "+"
+SHARED: "*"
 LEARN:  "?"
 CONST:  "!"
 
@@ -104,7 +104,7 @@ body: (lit | bop) ("," (lit | bop))*
 // Rule.
 rule: head ":-" body "."
 // Probabilistic rule.
-prule: prob? (EXPAND? LEARN? | LEARN? EXPAND?) "::" ohead ":-" body "."
+prule: prob? (SHARED? LEARN? | LEARN? SHARED?) "::" ohead ":-" body "."
 _rule: prule | rule
 
 // Annotated disjunction head.

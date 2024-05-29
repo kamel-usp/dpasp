@@ -174,7 +174,7 @@ class StableTransformer(lark.Transformer):
   def REAL(self, r): return self.pack("REAL", val = float(r))
   def frac(self, f): return self.pack("frac", val = f[0][2]/f[1][2])
   def prob(self, p): return self.pack("prob", val = p[0][2])
-  def EXPAND(self, e): return self.pack("EXPAND",  str(e))
+  def SHARED(self, s): return self.pack("SHARED",  str(s))
   def LEARN(self, l): return self.pack("LEARN", str(l))
   def CONST(self, c): return self.pack("CONST", str(c))
   def BOOL(self, b): return self.pack("BOOL", v := b.lower(), v != "false")
@@ -245,7 +245,7 @@ class StableTransformer(lark.Transformer):
   def rule(self, R): return self.pack("rule", " :- ".join(getnths(R, 1)) + ".")
   def prule(self, R):
     l = "LEARN" in getnths(R, 0)
-    e = "EXPAND" in getnths(R, 0)
+    s = "SHARED" in getnths(R, 0)
     h, b = R[-2], R[-1]
     o = f"{h[1]} :- {b[1]}"
     p = R[0][2] if R[0][0] == "prob" else 0.5
@@ -262,12 +262,12 @@ class StableTransformer(lark.Transformer):
     h_s = ", ".join(hscope) + ", " if len(hscope) > 0 else ""
     b_s = ", ".join(map(lambda x: f"1, {x[1]}" if x[2][0] else f"0, {x[1][4:]}", body_preds))
     # If parameters are shared, then we require a special ID.
-    upr = -1 if (e or not l) else unique_pgrule_id()
+    upr = -1 if not (s and l) else unique_pgrule_id()
     # The number of body arguments is twice as we need to store the sugoal's sign and symbol.
     rid = self.n_prules; self.n_prules += 1
     u = f"{name}(@unify({rid}, {name}, {int(l)}, {upr}, {len(hscope)}, {2*len(body_preds)}, {h_s}{b_s})) :- {b[1]}."
     return self.pack("prule", "", ProbRule(p, o, is_prop = False, unify = u, learnable = l,
-                                           sharing = not e))
+                                           sharing = s))
 
   # Annotated disjunction head.
   def ad_head(self, H):
@@ -568,7 +568,7 @@ class PartialTransformer(StableTransformer):
 
   def prule(self, R):
     l = "LEARN" in getnths(R, 0)
-    e = "EXPAND" in getnths(R, 0)
+    s = "SHARED" in getnths(R, 0)
     p = R[0][2] if R[0][0] == "prob" else 0.5
     h, b = R[-2], R[-1]
     tr_negs = lambda x: x[1] if x[2][0] else f"not _{x[1][4:]}"
@@ -590,7 +590,7 @@ class PartialTransformer(StableTransformer):
     h_s = ", ".join(hscope) + ", " if len(hscope) > 0 else ""
     b1_s = ", ".join(map(lambda x: f"1, {x[1]}" if x[2][0] else f"0, _{x[1][4:]}", body_preds))
     # If parameters are shared, then we require a special ID.
-    upr = -1 if (e or not l) else unique_pgrule_id()
+    upr = -1 if not(s and l) else unique_pgrule_id()
     # Let the grounder deal with the _f rule.
     rid = self.n_prules; self.n_prules += 1
     u1 = f"{name}(@unify({rid}, {name}, {int(l)}, {upr}, {len(hscope)}, {2*len(body_preds)}, {h_s}{b1_s})) :- {b1}."

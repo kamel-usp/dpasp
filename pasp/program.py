@@ -58,7 +58,7 @@ class ProbRule:
 
   def __str__(self) -> str:
     return f"{self.prop_pf.p if self.is_prop else self.p}" \
-           f"{('' if (self.sharing or self.is_prop) else '+') + ('?' if self.learnable else '')}" \
+           f"{('*' if self.sharing else '') + ('?' if self.learnable else '')}" \
            f"::{self.f}"
   def __repr__(self) -> str: return self.__str__()
 
