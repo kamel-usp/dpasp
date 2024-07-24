@@ -388,7 +388,7 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
     goto cleanup;
   }
   *R = R_data;
-  double *I = R_data;
+  double *I_d = R_data;
   bool skip_print;
   quiet = quiet || (data_stride > 10);
   for (size_t ds = 0; ds < data_stride; ++ds) {
@@ -428,36 +428,36 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
           double _a, _b;
           bf(X, Pn[i][0].d, Pn[i][1].d, K[i][0].d, K[i][1].d, L_CF, U_CF, K[i][0].n, K[i][1].n,
               P->CF_n, &_a, &_b, true);
-          I[i_l] = _a, I[i_u] = _b;
+          I_d[i_l] = _a, I_d[i_u] = _b;
         } else {
           size_t _a = K[i][0].n, _b = K[i][1].n, _c = K[i][2].n, _d = K[i][3].n;
           if (_b + _d == 0) {
             fputws(L"Fail: ℙ(E) = 0!\n", stdout);
-            I[i_l] = -INFINITY, I[i_u] = INFINITY;
+            I_d[i_l] = -INFINITY, I_d[i_u] = INFINITY;
           } else {
-            if ((_b + _c == 0) && (_d > 0)) I[i_l] = 0, I[i_u] = 0;
-            else if ((_a + _d == 0) && (_b > 0)) I[i_l] = 1, I[i_u] = 1;
+            if ((_b + _c == 0) && (_d > 0)) I_d[i_l] = 0, I_d[i_u] = 0;
+            else if ((_a + _d == 0) && (_b > 0)) I_d[i_l] = 1, I_d[i_u] = 1;
             else {
               double min, max;
               bf_minmax(X, Pn[i][0].d, Pn[i][1].d, Pn[i][2].d, Pn[i][3].d, K[i][0].d, K[i][1].d,
                   K[i][2].d, K[i][3].d, L_CF, U_CF, _a, _b, _c, _d, P->CF_n, &min, &max);
-              I[i_l] = min, I[i_u] = max;
+              I_d[i_l] = min, I_d[i_u] = max;
             }
           }
         }
       } else {
-        if (psem == MAXENT_SEMANTICS) I[i_l] = a[i]/b[i];
+        if (psem == MAXENT_SEMANTICS) I_d[i_l] = a[i]/b[i];
         else {
           double _a = a[i], _b = b[i], _c = c[i], _d = d[i];
-          if (P->Q[i].E_n == 0) I[i_l] = _a, I[i_u] = _b;
+          if (P->Q[i].E_n == 0) I_d[i_l] = _a, I_d[i_u] = _b;
           else {
             if (_b + _d == 0) {
               fputws(L"Fail: ℙ(E) = 0!\n", stdout);
-              I[i_l] = -INFINITY, I[i_u] = INFINITY;
+              I_d[i_l] = -INFINITY, I_d[i_u] = INFINITY;
             } else {
-              if ((_b + _c == 0) && (_d > 0)) I[i_l] = 0, I[i_u] = 0;
-              else if ((_a + _d == 0) && (_b > 0)) I[i_l] = 1, I[i_u] = 1;
-              else I[i_l] = _a/(_a + _d), I[i_u] = _b/(_b + _c);
+              if ((_b + _c == 0) && (_d > 0)) I_d[i_l] = 0, I_d[i_u] = 0;
+              else if ((_a + _d == 0) && (_b > 0)) I_d[i_l] = 1, I_d[i_u] = 1;
+              else I_d[i_l] = _a/(_a + _d), I_d[i_u] = _b/(_b + _c);
             }
           }
         }
@@ -465,8 +465,8 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
       if (!skip_print) {
         if (!i && bar) putwchar('\n');
         print_query(P->Q+i);
-        if (psem == MAXENT_SEMANTICS) wprintf(L" = %f\n", I[i_l]);
-        else wprintf(L" = [%f, %f]\n", I[i_l], I[i_u]);
+        if (psem == MAXENT_SEMANTICS) wprintf(L" = %f\n", I_d[i_l]);
+        else wprintf(L" = [%f, %f]\n", I_d[i_l], I_d[i_u]);
       }
     }
     if (!skip_print) {
@@ -475,7 +475,7 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
     }
 
     /* Move memory for next batch. */
-    I += Q_n*sem_stride;
+    I_d += Q_n*sem_stride;
     for (i = 0; i < P->NR_n; ++i) P->NR[i].P += P->NR[i].o;
     for (i = 0; i < P->NA_n; ++i) P->NA[i].P += P->NA[i].v*P->NA[i].o;
     /* Reset memory for next batch. */
