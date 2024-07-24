@@ -35,7 +35,7 @@ bool atoms2symbols(PyArrayObject *atoms, sample_storage_t S[NUM_PROCS], size_t n
   /* Number of elements in atoms. */
   size_t n = PyArray_SIZE(atoms);
   /* Number of bytes in a (possibly wide) character. */
-  size_t a = PyArray_DESCR(atoms)->alignment;
+  size_t a = PyDataType_ALIGNMENT(PyArray_DESCR(atoms));
   /* Number of bytes in one (possibly wide) string. */
   size_t b = PyArray_ITEMSIZE(atoms);
   clingo_symbol_t *A = NULL;

@@ -171,3 +171,9 @@ void raise_clingo_error(const char *msg) {
   } else sprintf(buffer, "Clingo error %d: %s\n", clingo_error_code(), clingo_error_message());
   PyErr_SetString(PyExc_Exception, buffer);
 }
+
+// NumPy 1.* -> 2.* migration requires this definition.
+// See https://numpy.org/devdocs/numpy_2_0_migration_guide.html for more information.
+#if NPY_ABI_VERSION < 0x02000000
+  #define PyDataType_ALIGNMENT(descr) ((descr)->alignment)
+#endif
