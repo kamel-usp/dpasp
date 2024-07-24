@@ -617,7 +617,7 @@ class PartialTransformer(StableTransformer):
     # Neural rules and ADs.
     NR, NA = [], []
     # Directives.
-    directives = {}
+    directives = {"inference": ("exact", tuple())}
     # Mapping.
     M = {"pfact": PF, "prule": PR, "query": Q, "varquery": VQ, "cfact": CF, "ad": AD, "nrule": TNR,
          "nad": TNA}
