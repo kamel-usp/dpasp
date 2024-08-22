@@ -313,7 +313,6 @@ cleanup:
   else if (!ok) PyErr_SetString(PyExc_RuntimeError, "an error has occurred during ASEO!");
   clingo_control_free(C);
   if (bar) statusbar_finish(bar);
-  if (!ok) { models_free(M); M = NULL; }
   return ok;
 }
 

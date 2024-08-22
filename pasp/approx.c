@@ -27,7 +27,10 @@ static bool _aseo_maxent(program_t *P, size_t n_samples, size_t scale, double **
   /* Run first ASEO separately to get the number of models. */
   models_t M = {0};
   if (!aseo_reuse(P, n_samples, MAXENT_SEMANTICS, NULL, (int) scale, 0, W, U, &M,
-        approx_rec_query_maxent, false)) goto cleanup;
+        approx_rec_query_maxent, false)) {
+    models_free_contents(&M);
+    goto cleanup;
+  }
   size_t n_M = M.n;
 
   /* The resulting (flattened) array has dimension n*k x 1, where n is the number of queries and k

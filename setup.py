@@ -5,6 +5,7 @@ import numpy as np
 class TestCommand(Command):
   description = "Runs unit and functional tests for PASP."
   user_options = []
+  test_modules = ["examples", "counting", "sampling", "learning", "approx"]
 
   def initialize_options(self):
     self.cwd = None
@@ -14,8 +15,8 @@ class TestCommand(Command):
 
   def run(self):
     assert os.getcwd() == self.cwd, f"Must be in package root: {self.cwd}"
-    os.system("python setup.py build_ext --inplace && " \
-              "python -m unittest tests/examples.py tests/counting.py tests/sampling.py tests/learning.py -b")
+    cmd = "python -m unittest " + ' '.join(f"tests/{x}.py" for x in TestCommand.test_modules) + " -b"
+    os.system(f"python setup.py build_ext --inplace && {cmd}")
 
 # Debug concurrency problems by forcing sequential running.
 # STD_MACROS = [("NUM_PROCS", str(1)), ("_GNU_SOURCE", None)]

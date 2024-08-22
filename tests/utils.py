@@ -1,5 +1,5 @@
-import unittest
-import math
+import numpy as np
+import math, unittest
 
 CONFIDENCE = 0.99
 
@@ -10,7 +10,9 @@ def hoeffding(n: int, tol: float = 1e-2) -> float:
   return math.sqrt(math.log(2/(1-CONFIDENCE))/(2*n))+tol
 
 class PaspTest(unittest.TestCase):
-  def assertApproxEqual(self, X: list, Y: list, Z: list = None):
+  def assertApproxEqual(self, X: list, Y: list, Z: list = None, **kwargs):
+    if isinstance(X, np.ndarray) and isinstance(Y, np.ndarray):
+      return self.assertTrue(np.all(v := np.isclose(X, Y, **kwargs)), msg=f"{X} {Y} {v}")
     self.assertEqual(len(X), len(Y))
     if Z is not None: self.assertEqual(len(Y), len(Z))
     for x, y in zip(X, Y): self.assertAlmostEqual(x, y)

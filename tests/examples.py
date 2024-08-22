@@ -161,7 +161,7 @@ class TestLStable(PaspTest):
     # ℙ(undef f)
     self.assertApproxEqual(R[2,:], [0.064453125, 0.064453125])
 
-class TestPlog(PaspTest):
+class TestMaxent(PaspTest):
   def test_asia(self):
     P = pasp.parse("examples/asia.plp")
     R = pasp.exact(P, psemantics = "maxent", quiet = True).flatten()
