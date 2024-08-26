@@ -390,7 +390,7 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
   *R = R_data;
   double *I_d = R_data;
   bool skip_print;
-  quiet = quiet || (data_stride > 10);
+  /*quiet = quiet || (data_stride > 10);*/
   for (size_t ds = 0; ds < data_stride; ++ds) {
     do {
       do {
