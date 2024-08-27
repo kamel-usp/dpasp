@@ -27,8 +27,9 @@ dPASP allows for several semantics by combining logic programming semantics and 
 ### Logic semantics
 
 - Stable semantics;
-- Partial semantics;
-- L-Stable semantics.
+- Partial Stable semantics;
+- L-Stable semantics;
+- smProbLog semantics.
 
 ### Probabilistic semantics
 
@@ -36,7 +37,7 @@ dPASP allows for several semantics by combining logic programming semantics and 
 - MaxEnt semantics.
 
 There are two uses of the systems: learning and querying. 
-Currently, learning allows only for MaxEnt-Stable semantics.
+Currently, learning is only available for the MaxEnt-Stable semantics.
 
 Learning and querying can either be made by (highly inneficient) enumerative algorithms and (more efficient) approximate inference.
 Enumerative algorithms are available to all possible (logic and probabilistic) semantics, while currently only MaxEnt-Stable semantics implements all approximate algorithms.
