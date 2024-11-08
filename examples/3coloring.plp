@@ -13,6 +13,8 @@ c(X, b) :- not c(X, r), not c(X, g), v(X).
 % Produce a contradiction if two neighbors have the same color.
 f :- not f, e(X, Y), c(X, Z), c(Y, Z).
 
+#semantics lstable.
+
 % Query the probability of vertex a being red.
 #query(c(1, r)).
 % Query the probability of the edge e(1, 2) existing given that the graph is not 3-colorable.
