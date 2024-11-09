@@ -1,8 +1,9 @@
 import numpy as np
 
-def learn(P, D: np.ndarray, A: np.ndarray = None, niters: int = 30, alg: str = "fixpoint",
+def learn(P, D: np.ndarray, A: np.ndarray = None, niters: int = 30, alg: str = "em",
           lr: float = 0.001, batch: int = None, smoothing: float = 1e-4, lstable_sat: bool = True,
           display: str = "loglikelihood"):
+  if alg == "fixpoint": alg = "em"
   # If batch is not given, set batch to the size of the dataset.
   if batch is None: batch = len(D)
   # Prepare training tensors.

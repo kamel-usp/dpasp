@@ -9,7 +9,7 @@
 #include "cground.h"
 #include "cprogram.h"
 
-#define ALG_FIXPOINT_S "fixpoint"
+#define ALG_FIXPOINT_S "em"
 #define ALG_LAGRANGE_S "lagrange"
 #define ALG_NEURASP_S  "neurasp"
 
@@ -106,7 +106,7 @@ static PyObject* learn(PyObject *self, PyObject *args, PyObject *kwargs) {
   else if (!strcmp(alg_s, ALG_LAGRANGE_S)) alg = ALG_LAGRANGE;
   else if (!strcmp(alg_s, ALG_NEURASP_S)) alg = ALG_NEURASP;
   else {
-    PyErr_SetString(PyExc_ValueError, "alg must either be \"fixpoint\", \"lagrange\" or \"neurasp\"!");
+    PyErr_SetString(PyExc_ValueError, "alg must either be \"em\", \"lagrange\" or \"neurasp\"!");
     return NULL;
   }
 
@@ -178,7 +178,7 @@ static PyObject* learn_batch(PyObject *self, PyObject *args, PyObject *kwargs) {
   else if (!strcmp(alg_s, ALG_LAGRANGE_S)) alg = ALG_LAGRANGE;
   else if (!strcmp(alg_s, ALG_NEURASP_S)) alg = ALG_NEURASP;
   else {
-    PyErr_SetString(PyExc_ValueError, "alg must either be \"fixpoint\", \"lagrange\" or \"neurasp\"!");
+    PyErr_SetString(PyExc_ValueError, "alg must either be \"em\", \"lagrange\" or \"neurasp\"!");
     return NULL;
   }
 

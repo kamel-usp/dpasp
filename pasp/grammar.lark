@@ -141,7 +141,7 @@ _neural: nrule | nad
 
 // Learning options and directive.
 _learn_opt_lr: /lr/ "=" REAL
-_learn_opt_alg: /alg/ "=" "\"" (/lagrange/ | /neurasp/ | /fixpoint/) "\""
+_learn_opt_alg: /alg/ "=" "\"" (/lagrange/ | /neurasp/ | /fixpoint/ | /em/) "\""
 _learn_opt_batch: /batch/ "=" ID
 _learn_opt_niters: /niters/ "=" ID
 _learn_opt_momentum: /momentum/ "=" REAL
