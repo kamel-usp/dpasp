@@ -1,4 +1,4 @@
-import enum
+import enum, types
 
 import clingo
 from clingo.symbol import Function
@@ -150,15 +150,8 @@ class Neural:
     self.dw = None
     # Initialize dw so we can use inference without learning.
     if self.data[0].train is not None: self.prepare_train(0)
-
-    # Temp: accuracy
-    # import torchvision
-    # self.test_labels = torchvision.datasets.MNIST(root="/tmp", train=False, \
-                                                  # download=True).targets.data.numpy()
-    # self.test_both_labels = self.test_labels[:(h := len(self.test_labels)//2)] + \
-                            # self.test_labels[h:]
-    # self.accuracy = []
-    # self.accuracy_program = []
+    # User specified step function.
+    self.step = None
 
   def __str__(self): return self.rep
   def __repr__(self): return self.__str__()
@@ -203,6 +196,9 @@ class Neural:
     self.out.backward(self.dw[:len(self.out)])
     self.opt.step()
     self.opt.zero_grad()
+    if self.step is not None: self.step()
+
+  def set_step_callback(self, f): self.step = types.MethodType(f, self)
 
   def ntest(self): return self.data[0].test.shape[0]
   def ntrain(self): return self.data[0].train.shape[0] if self.learnable else 0
