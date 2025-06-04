@@ -121,12 +121,9 @@ bool print_query(query_t *Q) {
 
 void free_query_contents(query_t *Q) {
   if (!Q) return;
-  free(Q->Q);
-  free(Q->Q_s);
-  free(Q->Q_u);
-  free(Q->E);
-  free(Q->E_s);
-  free(Q->E_u);
+  free(Q->Q); free(Q->Q_s); free(Q->Q_u);
+  free(Q->E); free(Q->E_s); free(Q->E_u);
+  free(Q->O); free(Q->O_s);
 }
 void free_query(query_t *Q) { free_query_contents(Q); free(Q); }
 
@@ -449,10 +446,10 @@ cleanup:
 }
 
 bool from_python_query(PyObject *py_q, query_t *q, semantics_t sem) {
-  PyObject *py_Q, *py_E, *py_Q_L, *py_E_L = py_Q_L = py_E = py_Q = NULL;
-  clingo_symbol_t *Q, *E = Q = NULL;
+  PyObject *py_Q, *py_E, *py_O, *py_Q_L, *py_E_L, *py_O_L = py_E_L = py_Q_L = py_E = py_Q = NULL;
+  clingo_symbol_t *Q, *E, *O = E = Q = NULL;
   clingo_symbol_t *Q_u, *E_u = Q_u = NULL;
-  uint8_t *Q_s, *E_s = Q_s = NULL;
+  uint8_t *Q_s, *E_s, *O_s = E_s = Q_s = NULL;
   size_t i;
 
   py_Q = PyObject_GetAttrString(py_q, "Q");
@@ -465,23 +462,35 @@ bool from_python_query(PyObject *py_q, query_t *q, semantics_t sem) {
     PyErr_SetString(PyExc_AttributeError, "could not access field E of supposed Query object!");
     goto cleanup;
   }
+  py_O = PyObject_GetAttrString(py_q, "O");
+  if (!py_O) {
+    PyErr_SetString(PyExc_AttributeError, "could not access field O of supposed Query object!");
+    goto cleanup;
+  }
 
   py_Q_L = PySequence_Fast(py_Q, "field Query.Q must either be a list or tuple!");
   if (!py_Q_L) goto cleanup;
   py_E_L = PySequence_Fast(py_E, "field Query.E must either be a list or tuple!");
-  if (!py_E) goto cleanup;
+  if (!py_E_L) goto cleanup;
+  py_O_L = PySequence_Fast(py_O, "field Query.O must either be a list or tuple!");
+  if (!py_O_L) goto cleanup;
 
   q->Q_n = PySequence_Fast_GET_SIZE(py_Q_L);
   q->E_n = PySequence_Fast_GET_SIZE(py_E_L);
+  q->O_n = PySequence_Fast_GET_SIZE(py_O_L);
 
   Q = (clingo_symbol_t*) malloc(q->Q_n*sizeof(clingo_symbol_t));
   if (!Q) goto nomem;
   E = (clingo_symbol_t*) malloc(q->E_n*sizeof(clingo_symbol_t));
   if (!E) goto nomem;
+  O = (clingo_symbol_t*) malloc(q->O_n*sizeof(clingo_symbol_t));
+  if (!O) goto nomem;
   Q_s = (uint8_t*) malloc(q->Q_n*sizeof(uint8_t));
   if (!Q_s) goto nomem;
   E_s = (uint8_t*) malloc(q->E_n*sizeof(uint8_t));
   if (!E_s) goto nomem;
+  O_s = (uint8_t*) malloc(q->O_n*sizeof(uint8_t));
+  if (!O_s) goto nomem;
   if (sem) {
     Q_u = (clingo_symbol_t*) malloc(q->Q_n*sizeof(clingo_symbol_t));
     if (!Q_u) goto nomem;
@@ -533,28 +542,46 @@ bool from_python_query(PyObject *py_q, query_t *q, semantics_t sem) {
     Py_DECREF(t);
   }
 
+  for (i = 0; i < q->E_n; ++i) {
+    PyObject *rep = NULL;
+    PyObject *t = PySequence_Fast(PySequence_Fast_GET_ITEM(py_O_L, i), "elements of Query.O must either be tuples or lists!");
+    if (!t) goto cleanup;
+    if (PySequence_Fast_GET_SIZE(t) < 2) {
+      PyErr_SetString(PyExc_ValueError, "Query.O elements must be tuples (or lists) of size 2!");
+      goto cleanup;
+    }
+    rep = PyObject_GetAttrString(PySequence_Fast_GET_ITEM(t, 0), "_rep");
+    if (!rep) goto cleanup;
+    E[i] = PyLong_AsUnsignedLongLong(rep);
+    E_s[i] = PyLong_AsLong(PySequence_Fast_GET_ITEM(t, 1));
+    if (sem) { /* sem != (STABLE_SEMANTICS = 0) */
+      PyObject *u = PyObject_GetAttrString(PySequence_Fast_GET_ITEM(t, 2), "_rep");
+      if (!u) { Py_DECREF(rep); Py_DECREF(t); goto cleanup; }
+      E_u[i] = PyLong_AsUnsignedLongLong(u);
+      Py_DECREF(u);
+    }
+    Py_DECREF(rep);
+    Py_DECREF(t);
+  }
+
   Py_DECREF(py_Q);
   Py_DECREF(py_E);
   Py_DECREF(py_Q_L);
   Py_DECREF(py_E_L);
+  Py_DECREF(py_O_L);
 
-  q->Q = Q;
-  q->Q_s = Q_s;
-  q->Q_u = Q_u;
-  q->E = E;
-  q->E_s = E_s;
-  q->E_u = E_u;
+  q->Q = Q; q->Q_s = Q_s; q->Q_u = Q_u;
+  q->E = E; q->E_s = E_s; q->E_u = E_u;
+  q->O = O; q->O_s = O_s;
 
   return true;
 nomem:
   PyErr_SetString(PyExc_MemoryError, "no free memory available!");
 cleanup:
-  Py_XDECREF(py_Q);
-  Py_XDECREF(py_E);
-  Py_XDECREF(py_Q_L);
-  Py_XDECREF(py_E_L);
-  free(Q); free(E);
-  free(Q_s); free(E_s);
+  Py_XDECREF(py_Q); Py_XDECREF(py_E); free(py_O);
+  Py_XDECREF(py_Q_L); Py_XDECREF(py_E_L); Py_XDECREF(py_O_L);
+  free(Q); free(E); free(O);
+  free(Q_s); free(E_s); free(O_s);
   free(Q_u); free(E_u);
   return false;
 }

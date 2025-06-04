@@ -176,12 +176,18 @@ bop: ((ID | VAR | bop | WORD) OP (ID | VAR | bop | WORD)) | (VAR EQQ interval)
 qelement: (NEG | UND)? (WORD | query_pred)
 interp: qelement ("," qelement)*
 _interp_exp: interp ("|" interp)?
-query: "#query" (("(" _interp_exp ")") | ( _interp_exp )) "."?
+query: ("#query" | "#pr") (("(" _interp_exp ")") | ( _interp_exp )) "."?
+
+// Max query.
+qelement_max: (WORD | query_pred) "?"
+interp_max: (qelement | qelement_max) ("," (qelement | qelement_max))*
+_interp_exp_max: interp_max ("|" interp)?
+query_max: ("#max" | "#map") (("(" _interp_exp_max ")") | ( _interp_exp_max )) "."?
 
 // Constant definition.
 constdef: "#const" WORD "=" ID "."
 
-plp: (constdef | _fact | _rule | _ad | _neural | data | python | constraint | query | learn | semantics | _aggr | inference | include)*
+plp: (constdef | _fact | _rule | _ad | _neural | data | python | constraint | query | query_max | learn | semantics | _aggr | inference | include)*
 
 COMMENT: "%" /[^\n]*/ NEWLINE
 

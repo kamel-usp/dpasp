@@ -103,7 +103,7 @@ bool array_##type##_extend(array_##type##_t *a, size_t argc, ...) { \
   CARRAY_ARRAY_HEADER_ARG(t, bool, size_t, initn); \
   CARRAY_ARRAY_HEADER(t, void, clear);
 
-ARRAY_DECL(bool)
+ARRAY_DECL(_Bool)
 typedef array__Bool_t array_bool_t;
 #define array_bool_init array__Bool_init
 #define array_bool_free_contents array__Bool_free_contents

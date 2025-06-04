@@ -463,6 +463,19 @@ class StableTransformer(lark.Transformer):
       return P
     return self.pack("query", "", Query(Q[0][2], Q[1][2] if len(Q) > 1 else [], semantics = self.sem))
 
+  # Max query elements.
+  def qelement_max(self, E):
+    return self.pack("qelement_max", " ".join(getnths(E, 1)), scope = self.join_scope(E))
+  # Interpretations.
+  def interp_max(self, I):
+    queries = [x[2] for x in I if x[0] == "qelement"]
+    opt = [x[2] for x in I if x[0] == "qelement_max"]
+    return self.pack("interp_max", "", (queries, opt), scope = self.join_scope(I))
+  # Queries.
+  def query_max(self, Q):
+    # For now, only variable free queries.
+    return self.pack("query", "", Query(Q[0][2][0], Q[1][2] if len(Q) > 1 else [], Q[0][2][1], semantics = self.sem))
+
   # Constant definition.
   def constdef(self, C): return self.pack("constdef", f"#const {C[0][1]} = {C[1][1]}.")
 

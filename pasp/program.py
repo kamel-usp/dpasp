@@ -266,14 +266,17 @@ class Query:
   TERM_POS = 1
   TERM_UND = 2
 
-  def __init__(self, Q: iter = [], E: iter = [], semantics: Semantics = Semantics.STABLE):
+  def __init__(self, Q: iter = [], E: iter = [], O: iter = [], semantics: Semantics = Semantics.STABLE):
     """
-    Constructs a query from query (`Q`) and evidence (`E`) assignments.
+    Constructs a query from query (`Q`), evidence (`E`) assignments, and optionally optimization
+    variables (`O`) if the query is a MAP query.
 
     We use the notation `iter` as a type hint to mean `Q` and `E` are iterables.
     """
     self.Q = [Query.parse_term(q, semantics) for q in Q]
     self.E = [Query.parse_term(e, semantics) for e in E]
+    self.O = [Query.parse_term(o, semantics) for o in O]
+    self.is_map = len(O) > 0
 
   @staticmethod
   def parse_term(u: str, s: Semantics):
@@ -288,7 +291,11 @@ class Query:
     return t, s, None if sem == Semantics.STABLE else clingo.parse_term(f"_{str(t)}")
 
   def __str__(self) -> str:
-    qs = f"ℙ({', '.join(_str_query_assignment(q, t) for q, t, _ in self.Q)}"
+    qs = "ℙ("
+    if len(self.O):
+      O = ', '.join(_str_query_assignment(q, t) for q, t, _ in self.O)
+      qs = f"max_{{{O}}} {qs}{O}" + (', ' if len(self.Q) > 0 else '')
+    qs += ', '.join(_str_query_assignment(q, t) for q, t, _ in self.Q)
     if len(self.E) != 0: return qs + f" | {', '.join(_str_query_assignment(e, t) for e, t, _ in self.E)})"
     return qs + ")"
   def __repr__(self) -> str: return self.__str__()
