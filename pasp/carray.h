@@ -118,6 +118,8 @@ ARRAY_DECL(clingo_symbol_t)
 typedef array_clingo_symbol_t_t array_symbol_t;
 ARRAY_DECL(uint8_t)
 typedef array_uint8_t_t array_uint8_t;
+ARRAY_DECL(uint64_t)
+typedef array_uint64_t_t array_uint64_t;
 
 bool array_char_from(array_char_t *a, const char *s);
 bool array_char_writeln(array_char_t *a, char *s, size_t n);
