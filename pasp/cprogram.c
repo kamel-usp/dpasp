@@ -87,9 +87,24 @@ void free_neural_annot_disj(neural_annot_disj_t *na) { free_neural_annot_disj_co
 
 bool print_query_with_buffer(query_t *q, string_t *s) {
   size_t i;
-  bool has_E = q->E_n > 0;
+  bool has_E = q->E_n > 0, has_Q = q->Q_n > 0, has_O = q->O_n > 0;
 
+  if (has_O) fputws(L"max_{", stdout);
+  for (i = 0; i < q->O_n; ++i) {
+    if (!string_from_symbol(q->O[i], s)) return false;
+    wprintf(L"%s", s->s, q->O[i]);
+    if (i != q->O_n-1) fputws(L", ", stdout);
+    else fputws(L"} ", stdout);
+  }
   fputws(L"ℙ(", stdout);
+
+  for (i = 0; i < q->O_n; ++i) {
+    if (!string_from_symbol(q->O[i], s)) return false;
+    wprintf(L"%s", s->s, q->O[i]);
+    if (i != q->O_n-1 || has_Q) fputws(L", ", stdout);
+    else if (has_E) fputws(L" | ", stdout);
+    else fputws(L")", stdout);
+  }
   for (i = 0; i < q->Q_n; ++i) {
     if (q->Q_s[i] == QUERY_TERM_NEG) fputws(L"not ", stdout);
     else if (q->Q_s[i] == QUERY_TERM_UND) fputws(L"undef ", stdout);
@@ -542,7 +557,7 @@ bool from_python_query(PyObject *py_q, query_t *q, semantics_t sem) {
     Py_DECREF(t);
   }
 
-  for (i = 0; i < q->E_n; ++i) {
+  for (i = 0; i < q->O_n; ++i) {
     PyObject *rep = NULL;
     PyObject *t = PySequence_Fast(PySequence_Fast_GET_ITEM(py_O_L, i), "elements of Query.O must either be tuples or lists!");
     if (!t) goto cleanup;
@@ -552,8 +567,8 @@ bool from_python_query(PyObject *py_q, query_t *q, semantics_t sem) {
     }
     rep = PyObject_GetAttrString(PySequence_Fast_GET_ITEM(t, 0), "_rep");
     if (!rep) goto cleanup;
-    E[i] = PyLong_AsUnsignedLongLong(rep);
-    E_s[i] = PyLong_AsLong(PySequence_Fast_GET_ITEM(t, 1));
+    O[i] = PyLong_AsUnsignedLongLong(rep);
+    O_s[i] = PyLong_AsLong(PySequence_Fast_GET_ITEM(t, 1));
     if (sem) { /* sem != (STABLE_SEMANTICS = 0) */
       PyObject *u = PyObject_GetAttrString(PySequence_Fast_GET_ITEM(t, 2), "_rep");
       if (!u) { Py_DECREF(rep); Py_DECREF(t); goto cleanup; }
