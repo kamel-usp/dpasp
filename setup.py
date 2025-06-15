@@ -18,10 +18,22 @@ class TestCommand(Command):
     cmd = "python -m unittest " + ' '.join(f"tests/{x}.py" for x in TestCommand.test_modules) + " -b"
     os.system(f"python setup.py build_ext --inplace && {cmd}")
 
+def _attribute_environment_var(macros: list, key: str):
+  if key not in os.environ: return
+  for i, (k, v) in enumerate(macros):
+    if k == key:
+      macros[i] = (key, os.environ[key])
+      break
+
+def check_environment_vars(macros: list) -> dict:
+  _attribute_environment_var(macros, "NUM_PROCS")
+  return macros
+
 # Debug concurrency problems by forcing sequential running.
 # STD_MACROS = [("NUM_PROCS", str(1)), ("_GNU_SOURCE", None)]
-STD_MACROS = [("NUM_PROCS", str(nproc-1 if (nproc := os.cpu_count()) > 1 else nproc)), \
-              ("_GNU_SOURCE", None)]
+STD_MACROS = check_environment_vars(
+  [("NUM_PROCS", str(nproc-1 if (nproc := os.cpu_count()) > 1 else nproc)), ("_GNU_SOURCE", None)]
+)
 
 exact    = Extension("exact",
                      libraries = ["m", "clingo", "pthread"],
