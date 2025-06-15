@@ -41,8 +41,7 @@ uint64_t argmax_map_mapping(map_mapping_t *M, double *p) {
       m = M->P[i];
       i_max = i;
     }
-  /* If no evidence (i.e. M->z == 0), then do not normalize. */
-  *p = m/((M->z == 0)+(M->z != 0)*M->z);
+  *p = m/M->z;
   return i_max;
 }
 
@@ -75,7 +74,11 @@ bool print_vals_map_mapping(map_mapping_t *M, uint64_t X) {
   return true;
 }
 
-void reset_map_mapping(map_mapping_t *M) { memset(M->P, 0, M->n*sizeof(double)); }
+void reset_map_mapping(map_mapping_t *M) {
+  memset(M->P, 0, M->n*sizeof(double));
+  M->z = 0;
+  array_uint64_t_clear(&M->C);
+}
 
 void free_contents_map_mapping(map_mapping_t *M) {
   free(M->P);
