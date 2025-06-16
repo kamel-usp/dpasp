@@ -443,7 +443,7 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
     for (i = 0; i < Q_n; ++i) {
       size_t i_l = i*sem_stride;
       size_t i_u = i_l+1;
-      uint64_t argmax;
+      uint64_t argmax = 0;
 
       if (has_credal) {
         if (P->Q[i].E_n == 0) {

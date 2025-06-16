@@ -34,6 +34,7 @@ def check_environment_vars(macros: list) -> dict:
 STD_MACROS = check_environment_vars(
   [("NUM_PROCS", str(nproc-1 if (nproc := os.cpu_count()) > 1 else nproc)), ("_GNU_SOURCE", None)]
 )
+EXTRA_COMPILE_FLAGS = ["-Wno-unused-function", "-std=c11"]
 
 exact    = Extension("exact",
                      libraries = ["m", "clingo", "pthread"],
@@ -47,7 +48,7 @@ exact    = Extension("exact",
                                 "pasp/cstorage.c", "pasp/cmap.c",
                                 "progressbar/statusbar.c"],
                      include_dirs = [np.get_include()],
-                     extra_compile_args = ["-Wno-unused-function"],
+                     extra_compile_args = EXTRA_COMPILE_FLAGS,
                      define_macros = STD_MACROS)
 
 ground   = Extension("ground",
@@ -59,6 +60,7 @@ ground   = Extension("ground",
                                 "pasp/carray.c", "pasp/cprogram.c", "bitvector/bitvector.c",
                                 "pasp/cinf.c", "pasp/cmap.c", "thpool/thpool.c"],
                      include_dirs = [np.get_include()],
+                     extra_compile_args = EXTRA_COMPILE_FLAGS,
                      define_macros = STD_MACROS)
 
 learn    = Extension("learn",
@@ -74,7 +76,7 @@ learn    = Extension("learn",
                                 "pasp/coptimize.c", "pasp/cground.c", "progressbar/progressbar.c",
                                 "progressbar/statusbar.c"],
                      include_dirs = [np.get_include()],
-                     extra_compile_args = ["-Wno-unused-function"],
+                     extra_compile_args = EXTRA_COMPILE_FLAGS,
                      define_macros = STD_MACROS)
 
 sample   = Extension("sample",
@@ -85,7 +87,7 @@ sample   = Extension("sample",
                                 "bitvector/bitvector.c", "pasp/cutils.c", "pasp/csample.c",
                                 "pasp/carray.c", "pasp/cground.c", "pasp/cmap.c"],
                      include_dirs = [np.get_include()],
-                     extra_compile_args = ["-Wno-unused-function"],
+                     extra_compile_args = EXTRA_COMPILE_FLAGS,
                      define_macros = STD_MACROS)
 
 approx   = Extension("approx",
@@ -103,7 +105,7 @@ approx   = Extension("approx",
                                 "bitvector/bitvector.c", "thpool/thpool.c",
                                 "progressbar/statusbar.c"],
                      include_dirs = [np.get_include()],
-                     extra_compile_args = ["-Wno-unused-function"],
+                     extra_compile_args = EXTRA_COMPILE_FLAGS,
                      define_macros = STD_MACROS)
 
 setup(
