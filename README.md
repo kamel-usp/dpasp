@@ -18,7 +18,7 @@ can arise as outputs of neural network classifiers, and both the statistical mod
 dPASP has both a domain-specific language (DSL) and command-line interpreter (parser) for that language, which can be used as
 a standalone tool. Alternatively, dPASP can be accessed as Python library or more directly through its C backend.
 
-The easiest way to get started is by reading the tutorial [Learning dPASP Through Examples](http://kamel.ime.usp.br/pages/learn_dpasp).
+The easiest way to get started is by reading the tutorial [Learning dPASP Through Examples](https://kamel-usp.github.io/pages/learn_dpasp.html)
 
 ## Features
 
@@ -47,7 +47,7 @@ Developing more efficient and accurate approximate algorithms is a current activ
 
 Here's a simple example of dPASP for inference in probabilistic logic programs (no neural networks and no learning).
 
-Assuming you have dPASP installed and configured (see the [tutorial](http://kamel.ime.usp.br/pages/learn_dpasp) if not), open a Python Shell and load the Python library by:
+Assuming you have dPASP installed and configured (see the [tutorial](https://kamel-usp.github.io/pages/learn_dpasp.html) if not), open a Python Shell and load the Python library by:
 
 ```bash
 pasp examples/earthquake.plp
