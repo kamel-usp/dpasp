@@ -40,7 +40,7 @@ prob: frac | REAL
 // Constants.
 WORD: /[a-z]\w*/
 // Variables.
-VAR: /[A-Z]\w*/
+VAR: /-?[A-Z]\w*/
 
 // Boolean type.
 BOOL: (/true/i | /false/i)
@@ -186,7 +186,7 @@ plp: (constdef | _fact | _rule | _ad | _neural | data | python | constraint | qu
 COMMENT: "%" /[^\n]*/ NEWLINE
 
 %import common.WORD -> NAME
-%import common.INT -> ID
+%import common.SIGNED_INT -> ID
 %import common.NUMBER -> REAL
 %import common.NEWLINE -> NEWLINE
 %import common.WS
