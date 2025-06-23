@@ -9,11 +9,10 @@ authors = [
   { name = "Renato Lui Geh", email = "renatogeh@gmail.com" },
 ]
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
 requires-python = ">=3.10"
 classifiers = [
   "Programming Language :: Python :: 3",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: POSIX :: Linux",
   "Development Status :: 3 - Alpha",
   "Environment :: Console",

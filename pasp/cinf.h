@@ -3,6 +3,7 @@
 
 #include "cprogram.h"
 #include "carray.h"
+#include "cmap.h"
 #include "../bitvector/bitvector.h"
 
 #include <pthread.h>
@@ -38,6 +39,7 @@ typedef struct {
   double *a, *b, *c, *d;
   array_bool_t (*Pn)[4];
   array_double_t (*K)[4];
+  map_mapping_t *maps;
   program_t *P;
   total_choice_t theta;
   bool fail, *busy_procs, lstable_sat, warn;
@@ -55,6 +57,7 @@ void free_storage_contents(storage_t *s);
 bool setup_conds(bool **cond_1, bool **cond_2, bool **cond_3, bool **cond_4, size_t n);
 bool setup_counts(size_t **count_q_e, size_t **count_e, size_t **count_partial_q_e, size_t n);
 bool setup_abcd(double **a, double **b, double **c, double **d, size_t n, size_t s);
+bool setup_map_mappings(program_t *P, map_mapping_t **maps);
 
 #ifndef NUM_PROCS
 #define NUM_PROCS 1

@@ -61,6 +61,7 @@ bool init_storage(storage_t *s, program_t *P, array_bool_t (*Pn)[4],
   s->mu = mu; s->wakeup = wakeup; s->avail = avail;
   if (!setup_conds(&s->cond_1, &s->cond_2, &s->cond_3, &s->cond_4, P->Q_n*sizeof(bool))) goto error;
   if (!setup_counts(&s->count_q_e, &s->count_e, &s->count_partial_q_e, P->Q_n*sizeof(size_t))) goto error;
+  if (!setup_map_mappings(P, &s->maps)) goto error;
   if (!P->CF_n) { if (!setup_abcd(&s->a, &s->b, &s->c, &s->d, P->Q_n, sizeof(double))) goto error; }
   s->busy_procs = busy_procs; s->lstable_sat = lstable_sat;
   s->pid = id;
@@ -72,11 +73,20 @@ error:
   return false;
 }
 
+void free_storage_map_mappings(storage_t *s) {
+  size_t i_map = 0;
+  for (size_t i = 0; i < s->P->Q_n; ++i) {
+    if (s->P->Q[i].O_n > 0) free_contents_map_mapping(&s->maps[i_map++]);
+  }
+  free(s->maps);
+}
+
 void free_storage_contents(storage_t *s) {
   free(s->cond_1); free(s->cond_2); free(s->cond_3); free(s->cond_4);
   free(s->count_q_e); free(s->count_e); free(s->count_partial_q_e);
   if (!s->P->CF_n) { free(s->a); free(s->b); free(s->c); free(s->d); }
   free_total_choice_contents(&s->theta);
+  free_storage_map_mappings(s);
 }
 
 bool setup_conds(bool **cond_1, bool **cond_2, bool **cond_3, bool **cond_4, size_t n) {
@@ -130,6 +140,28 @@ nomem:
   free(*c); free(*d);
   *a = *b = *c = *d = NULL;
   return false;
+}
+
+bool setup_map_mappings(program_t *P, map_mapping_t **maps) {
+  size_t n = 0;
+  for (size_t i = 0; i < P->Q_n; ++i)
+    if (P->Q[i].O_n > 0) ++n;
+  if (!n) {
+    *maps = NULL;
+    return true;
+  }
+  *maps = (map_mapping_t*) malloc(n*sizeof(map_mapping_t));
+  if (!*maps) return false;
+  size_t i_map = 0;
+  for (size_t i = 0; i < P->Q_n; ++i) {
+    if (P->Q[i].O_n <= 0) continue;
+    if (!init_map_mapping(&((*maps)[i_map++]), &P->Q[i])) {
+      for (size_t j = 0; j < i_map; ++j) free_contents_map_mapping(&((*maps)[j]));
+      free(*maps);
+      return false;
+    }
+  }
+  return true;
 }
 
 bool _init_total_choice(total_choice_t *theta, size_t n, size_t m) {
@@ -202,7 +234,8 @@ void print_total_choice(total_choice_t *theta) {
 }
 
 size_t estimate_nprocs(size_t total_choice_n) {
-  return (total_choice_n > log2(NUM_PROCS)) ? NUM_PROCS : (1 << total_choice_n);
+  /*return (total_choice_n > log2(NUM_PROCS)) ? NUM_PROCS : (1 << total_choice_n);*/
+  return NUM_PROCS;
 }
 
 int retr_free_proc(bool *busy_procs, size_t num_procs, pthread_mutex_t *wakeup,

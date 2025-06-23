@@ -20,6 +20,15 @@ bool char_from_symbol(clingo_symbol_t sym, char *s, size_t n) {
   return true;
 }
 
+bool print_from_symbol(clingo_symbol_t sym) {
+  string_t s = {NULL, 0};
+  bool r;
+  r = string_from_symbol(sym, &s);
+  wprintf(L"%s\n", s.s);
+  string_free(&s);
+  return r;
+}
+
 bool string_from_symbol(clingo_symbol_t sym, string_t *buf) {
   bool r = true;
   char *s;

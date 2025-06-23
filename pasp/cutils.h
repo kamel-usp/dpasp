@@ -12,6 +12,7 @@ typedef struct string {
   size_t n;
 } string_t;
 
+bool print_from_symbol(clingo_symbol_t sym);
 bool string_from_symbol(clingo_symbol_t sym, string_t *buf);
 void string_free(string_t *s);
 bool print_solution(const clingo_model_t *model);

@@ -58,3 +58,4 @@ bool array_char_writeln(array_char_t *a, char *s, size_t n) {
 #define ARRAY_MAGIC_MULTIPLIER 1.5
 
 ARRAY_IMPL(uint8_t)
+ARRAY_IMPL(uint64_t)

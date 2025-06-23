@@ -7,6 +7,7 @@
 #include "coptimize.h"
 #include "cutils.h"
 #include "cground.h"
+#include "cmap.h"
 #include "../progressbar/statusbar.h"
 
 bool setup_polynomial(array_bool_t (**Pn)[4], array_double_t (**K)[4], program_t *P) {
@@ -289,6 +290,9 @@ void compute_total_choice_maxent(void *data) {
 
   memset(count_q_e, 0, Q_n_bytes);
   memset(count_e, 0, Q_n_bytes);
+
+  map_mapping_t *maps = st->maps;
+
   /* Solving. */ {
     bool ok = true;
     clingo_solve_handle_t *handle;
@@ -302,6 +306,7 @@ void compute_total_choice_maxent(void *data) {
       if (!clingo_solve_handle_resume(handle)) goto solve_error;
       if (!clingo_solve_handle_model(handle, &M)) goto solve_error;
       if (M) {
+        size_t i_map = 0;
         for (i = 0; i < Q_n; ++i) {
           size_t j;
           query_t *q = (P->Q)+i;
@@ -317,6 +322,10 @@ void compute_total_choice_maxent(void *data) {
           }
           ++count_e[i];
           if (all_q) ++count_q_e[i];
+          if ((q->O_n > 0) && all_q) { /* If it is a MMAP query... */
+            if (!count_map_mapping(&maps[i_map], M)) goto solve_error;
+            ++i_map;
+          }
         }
       } else break;
     }
@@ -330,9 +339,12 @@ solve_cleanup:
   /* Probabilities are wrong when a total choice has no model. */
   if (m == 0) st->warn = true;
   p = prob_total_choice(P, theta);
+  double u = p/m;
+  size_t i_map = 0;
   for (i = 0; i < Q_n; ++i) {
-    a[i] += (count_q_e[i]*p)/m;
-    b[i] += (count_e[i]*p)/m;
+    a[i] += count_q_e[i]*u;
+    b[i] += count_e[i]*u;
+    if (P->Q[i].O_n > 0) accumulate_map_mapping(&maps[i_map++], u, count_e[i]);
   }
 
   st->fail = false;
@@ -390,6 +402,7 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
   *R = R_data;
   double *I_d = R_data;
   bool skip_print;
+  size_t i_map;
   /*quiet = quiet || (data_stride > 10);*/
   for (size_t ds = 0; ds < data_stride; ++ds) {
     do {
@@ -408,21 +421,30 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
     if (!has_credal) {
       a = S[0].a; b = S[0].b; c = S[0].c; d = S[0].d;
       for (i = 1; i < num_procs; ++i) {
-        size_t j;
+        size_t j, i_map = 0;
         for (j = 0; j < Q_n; ++j) {
           a[j] += S[i].a[j];
           b[j] += S[i].b[j];
           c[j] += S[i].c[j];
           d[j] += S[i].d[j];
+          /* MMAP queries. */
+          if (P->Q[j].O_n > 0) {
+            add_map_mapping(&S[0].maps[i_map], &S[i].maps[i_map]);
+            reset_map_mapping(&S[i].maps[i_map]);
+            ++i_map;
+          }
         }
       }
     }
 
+    i_map = 0;
 #define SKIP_THRESHOLD 1
     skip_print = quiet || ((ds > SKIP_THRESHOLD) && (ds < data_stride-SKIP_THRESHOLD-1));
     for (i = 0; i < Q_n; ++i) {
       size_t i_l = i*sem_stride;
       size_t i_u = i_l+1;
+      uint64_t argmax = 0;
+
       if (has_credal) {
         if (P->Q[i].E_n == 0) {
           double _a, _b;
@@ -446,8 +468,12 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
           }
         }
       } else {
-        if (psem == MAXENT_SEMANTICS) I_d[i_l] = a[i]/b[i];
-        else {
+        if (psem == MAXENT_SEMANTICS) {
+          if (P->Q[i].O_n > 0) {
+            argmax = argmax_map_mapping(&S[0].maps[i_map], &I_d[i_l]);
+            reset_map_mapping(&S[0].maps[i_map]);
+          } else I_d[i_l] = a[i]/b[i];
+        } else {
           double _a = a[i], _b = b[i], _c = c[i], _d = d[i];
           if (P->Q[i].E_n == 0) I_d[i_l] = _a, I_d[i_u] = _b;
           else {
@@ -465,8 +491,11 @@ bool exact_enum(program_t *P, double **R, bool lstable_sat, psemantics_t psem, b
       if (!skip_print) {
         if (!i && bar) putwchar('\n');
         print_query(P->Q+i);
-        if (psem == MAXENT_SEMANTICS) wprintf(L" = %f\n", I_d[i_l]);
-        else wprintf(L" = [%f, %f]\n", I_d[i_l], I_d[i_u]);
+        if (psem == MAXENT_SEMANTICS) {
+          wprintf(L" = %f", I_d[i_l]);
+          if (P->Q[i].O_n > 0) print_vals_map_mapping(&S[0].maps[i_map++], argmax);
+        } else wprintf(L" = [%f, %f]", I_d[i_l], I_d[i_u]);
+        putwchar(L'\n');
       }
     }
     if (!skip_print) {

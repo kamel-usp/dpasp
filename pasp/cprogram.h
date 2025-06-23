@@ -110,6 +110,11 @@ typedef struct {
   uint8_t *E_s;
   size_t E_n;
   clingo_symbol_t *E_u; /* Potentially true auxiliary variables for partial semantics. */
+
+  clingo_symbol_t *O; /* Variables to be optimized (in MMAP). */
+  uint8_t *O_s;
+  size_t O_n;
+  /* TODO: Add MMAP support for partial semantics (O_u auxiliary variables). */
 } query_t;
 
 typedef struct {
