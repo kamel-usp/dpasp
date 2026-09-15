@@ -8,6 +8,8 @@
 calls(X) :- alarm, neighbor(X).
 neighbor(a). neighbor(b).
 
+#semantics stable.
+
 #query(alarm | burglary, earthquake)
 #query(alarm | not burglary, earthquake)
 #query(alarm | burglary, not earthquake)
