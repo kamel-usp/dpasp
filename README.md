@@ -18,7 +18,8 @@ can arise as outputs of neural network classifiers, and both the statistical mod
 dPASP has both a domain-specific language (DSL) and command-line interpreter (parser) for that language, which can be used as
 a standalone tool. Alternatively, dPASP can be accessed as Python library or more directly through its C backend.
 
-The easiest way to get started is by reading the tutorial [Learning dPASP Through Examples](https://kamel-usp.github.io/pages/learn_dpasp.html)
+The easiest way to get started is by reading the tutorial [Learning dPASP Through Examples](https://kamel-usp.github.io/pages/learn_dpasp.html).
+You can try it out using the [web interface](http://kamel.ime.usp.br:3000).
 
 ## Features
 
